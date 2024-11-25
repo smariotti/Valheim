@@ -1,0 +1,9 @@
+﻿{
+    "name": "DudeWheresMyPortal",
+    "description": "Simple BepInEx mod that automatically adds, removes Portal map pins as you manipulate your portals in game",
+    "version_number": "0.1.0",
+    "website_url": "https://github.com/smariotti/DWMP",
+    "dependencies": [
+        "denikson-BepInExPack_Valheim-5.4.2202"
+    ]
+}
