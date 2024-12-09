@@ -1,7 +1,7 @@
 ﻿{
     "name": "ITawtITaw",
     "description": "Simple BepInEx mod that marks the minimap with a pin when you see a given creature",
-    "version_number": "0.1.0",
+    "version_number": "0.1.2",
     "website_url": "https://github.com/smariotti/ITawtITaw",
     "dependencies": [
         "denikson-BepInExPack_Valheim-5.4.2202"

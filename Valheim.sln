@@ -7,6 +7,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ITawtITaw", "ITawtITaw\ITaw
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DWMP", "DWMP\DWMP.csproj", "{EE0CCB4C-4389-47C4-967D-F37B5DBE65B1}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ScytheEverything", "ScytheEverything\ScytheEverything.csproj", "{7A3A346C-6EF3-4A41-8FAB-24671FDCF8F7}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TubaWalk", "MusicalEncumbering\TubaWalk.csproj", "{EA282DA8-693D-4CF1-BF7A-8ECAC0827EAA}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +25,14 @@ Global
 		{EE0CCB4C-4389-47C4-967D-F37B5DBE65B1}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{EE0CCB4C-4389-47C4-967D-F37B5DBE65B1}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{EE0CCB4C-4389-47C4-967D-F37B5DBE65B1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7A3A346C-6EF3-4A41-8FAB-24671FDCF8F7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7A3A346C-6EF3-4A41-8FAB-24671FDCF8F7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7A3A346C-6EF3-4A41-8FAB-24671FDCF8F7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7A3A346C-6EF3-4A41-8FAB-24671FDCF8F7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EA282DA8-693D-4CF1-BF7A-8ECAC0827EAA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EA282DA8-693D-4CF1-BF7A-8ECAC0827EAA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EA282DA8-693D-4CF1-BF7A-8ECAC0827EAA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EA282DA8-693D-4CF1-BF7A-8ECAC0827EAA}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

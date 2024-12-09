@@ -19,7 +19,7 @@ namespace ITawtITaw
     {
         public const string PluginGUID = "com.oathorse.ITIT";
         public const string PluginName = "I Tawt I Taw";
-        public const string PluginVersion = "0.1.0";
+        public const string PluginVersion = "0.1.2";
         private readonly Harmony harmony = new Harmony(PluginGUID);
 
         static public Hashtable m_aiObjects = new Hashtable();

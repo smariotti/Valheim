@@ -1,0 +1,9 @@
+﻿{
+    "name": "ScytheEverything",
+    "description": "Simple BepInEx mod that lets you cause mayhem with the Scythe",
+    "version_number": "0.1.2",
+    "website_url": "https://github.com/smariotti/ScytheEverything",
+    "dependencies": [
+        "denikson-BepInExPack_Valheim-5.4.2202"
+    ]
+}
