@@ -7,8 +7,8 @@
     <ProjectGuid>{EA282DA8-693D-4CF1-BF7A-8ECAC0827EAA}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>MusicalEncumbering</RootNamespace>
-    <AssemblyName>MusicalEncumbering</AssemblyName>
+    <RootNamespace>TubaWalk</RootNamespace>
+    <AssemblyName>TubaWalk</AssemblyName>
     <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
