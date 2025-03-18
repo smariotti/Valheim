@@ -30,108 +30,200 @@ namespace InstaSmelt
             // Patch with Harmony
             harmony.PatchAll();
 
-            AddConsoleCommands();
         }
 
-        static public void AddConsoleCommands()
-        {
-            ConsoleCommand createPinOnTeleport = new ConsoleCommand("createpinonteleport", "Add a portal pin to the minimap for each portal you pass through", delegate (ConsoleEventArgs args)
+        //
+        // Trophy Saga Insta-Smelt
+        //
+        public static Dictionary<string, string> __m_oreNameToBarPrefabName = new Dictionary<string, string>()
             {
-                if (!Game.instance)
+                { "CopperOre",          "Copper" },
+                { "TinOre",             "Tin" },
+                { "IronScrap",          "Iron" },
+                { "SilverOre",          "Silver" },
+                { "BlackMetalScrap",    "BlackMetal" },
+                { "FlametalOreNew",     "FlametalNew" },
+                { "BronzeScrap",        "Bronze" },
+                { "CopperScrap",        "Copper" },
+            };
+
+        public static Dictionary<string, string> __m_oreNameToBarItemName = new Dictionary<string, string>()
+            {
+                { "CopperOre",          "$item_copper" },
+                { "TinOre",             "$item_tin" },
+                { "IronScrap",          "$item_iron" },
+                { "SilverOre",          "$item_silver" },
+                { "BlackMetalScrap",    "$item_blackmetal" },
+                { "FlametalOreNew",     "$item_flametal" },
+                { "BronzeScrap",        "$item_bronze" },
+                { "CopperScrap",        "$item_copper" },
+            };
+
+
+        public static void ConvertMetal(ref ItemDrop.ItemData itemData)
+        {
+            if (itemData == null)
+                return;
+
+            ZNetScene zNetScene = ZNetScene.instance;
+            if (zNetScene == null)
+            {
+                return;
+            }
+
+            //                Debug.LogWarning($"ConvertMetal(): Creating {itemData.ToString()} {itemData.m_dropPrefab.name}");
+
+            string cookedMetalName;
+            if (__m_oreNameToBarPrefabName.TryGetValue(itemData.m_dropPrefab.name, out cookedMetalName))
+            {
+                GameObject metalPrefab = zNetScene.GetPrefab(cookedMetalName);
+                if (metalPrefab == null)
                 {
-                    return true;
+                    return;
                 }
 
-                __m_createPinOnTeleport = !__m_createPinOnTeleport;
-
-                if (Chat.instance)
+                ItemDrop tempItemDrop = metalPrefab.GetComponent<ItemDrop>();
+                if (tempItemDrop != null)
                 {
-                    if (__m_createPinOnTeleport)
+                    int stackSize = itemData.m_stack;
+
+                    // Replace the ore/scrap itemdata with the cooked metal itemdata
+                    ItemDrop.ItemData tempItemData = tempItemDrop.m_itemData;
+
+                    itemData = tempItemData.Clone();
+                    itemData.m_stack = stackSize;
+                    itemData.m_dropPrefab = metalPrefab;
+                }
+            }
+        }
+
+        // Patch GetWeight and GetNonStackedWeight to calculate Ore weights as the bar weights
+        [HarmonyPatch(typeof(ItemDrop.ItemData), nameof(ItemDrop.ItemData.GetWeight))]
+        public class Humanoid_ItemDrop_ItemData_GetWeight_Patch
+        {
+            static bool Prefix(ItemDrop.ItemData __instance, ref float __result)
+            {
+                if (__instance == null)
+                    return true;
+
+                if (__instance.m_dropPrefab == null)
+                    return true;
+
+                string cookedMetalName;
+                if (__m_oreNameToBarPrefabName.TryGetValue(__instance.m_dropPrefab.name, out cookedMetalName))
+                {
+                    //                        Debug.LogWarning($"GetWeight(): Found {__instance.m_dropPrefab.name} => {cookedMetalName}");
+
+                    GameObject ingotPrefab = ZNetScene.instance.GetPrefab(cookedMetalName);
+                    ItemDrop.ItemData ingotItemData = ingotPrefab.GetComponent<ItemDrop>().m_itemData;
+                    if (ingotItemData != null)
                     {
-                        Chat.instance.AddString("CreatePinOnTeleport ENABLED!");
+                        __result = ingotItemData.m_shared.m_weight * __instance.m_stack;
                     }
-                    else
+
+                    return false;
+                }
+
+                return true;
+            }
+        }
+
+        [HarmonyPatch(typeof(ItemDrop.ItemData), nameof(ItemDrop.ItemData.GetNonStackedWeight))]
+        public class Humanoid_ItemDrop_ItemData_GetNonStackedWeight_Patch
+        {
+            static bool Prefix(ItemDrop.ItemData __instance, ref float __result)
+            {
+                if (__instance == null)
+                    return true;
+
+                if (__instance.m_dropPrefab == null)
+                    return true;
+
+                string cookedMetalName;
+                if (__m_oreNameToBarPrefabName.TryGetValue(__instance.m_dropPrefab.name, out cookedMetalName))
+                {
+                    //                        Debug.LogWarning($"GetNonStackedWeight(): Found {__instance.m_dropPrefab.name} => {cookedMetalName}");
+
+                    GameObject ingotPrefab = ZNetScene.instance.GetPrefab(cookedMetalName);
+                    ItemDrop.ItemData ingotItemData = ingotPrefab.GetComponent<ItemDrop>().m_itemData;
+                    if (ingotItemData != null)
                     {
-                        Chat.instance.AddString("CreatePinOnTeleport DISABLED!");
+                        __result = ingotItemData.m_shared.m_weight;
+                    }
+
+                    return false;
+                }
+
+                return true;
+            }
+        }
+
+
+        // This is called when items are picked up
+        //
+        // Insta-Smelt when moving items between inventories
+        [HarmonyPatch(typeof(Inventory), nameof(Inventory.AddItem), new[] { typeof(ItemDrop.ItemData) })]
+        public static class Inventory_AddItem_Patch
+        {
+            static void Prefix(Inventory __instance, ref ItemDrop.ItemData item, bool __result)
+            {
+                if (__instance != null && Player.m_localPlayer != null
+                    && __instance == Player.m_localPlayer.GetInventory())
+                {
+                    ConvertMetal(ref item);
+                }
+            }
+        }
+
+        // Trick "CanAddItem" into thinking the ores are bars if you have bars in your inventory already, this fixes an auto-pickup bug
+        [HarmonyPatch(typeof(Inventory), nameof(Inventory.CanAddItem), new[] { typeof(ItemDrop.ItemData), typeof(int) })]
+        public static class Inventory_CanAddItem_Patch
+        {
+            static bool Prefix(Inventory __instance, ref ItemDrop.ItemData item, int stack, ref bool __result)
+            {
+                if (__instance != null && Player.m_localPlayer != null
+                    && __instance == Player.m_localPlayer.GetInventory())
+                {
+                    if (item != null && item.m_dropPrefab != null)
+                    {
+                        string prefabName = item.m_dropPrefab.name;
+                        string itemName;
+
+                        if (__m_oreNameToBarItemName.TryGetValue(prefabName, out itemName))
+                        {
+                            if (stack <= 0)
+                            {
+                                stack = item.m_stack;
+                            }
+                            
+                            __result = __instance.FindFreeStackSpace(itemName, 0) + (__instance.GetWidth() * __instance.GetHeight() - __instance.GetAllItems().Count) * item.m_shared.m_maxStackSize >= stack;
+
+                            return false;
+                        }
                     }
                 }
 
                 return true;
-            });
-
-        }
-
-        static void AddPortalPin(Vector3 pos, string text="")
-        {
-
-            Minimap.PinData newPin = Minimap.instance.AddPin(pos, Minimap.PinType.Icon4, text, save: true, isChecked: false);
-        }
-
-        static void RemovePortalPin(Vector3 pos)
-        {
-            Minimap.instance.RemovePin(pos, 0.1f);
-        }
-
-        static void RenamePortalPin(Vector3 pos, string text)
-        {
-            RemovePortalPin(pos);
-            AddPortalPin(pos, text);
-        }
-
-        [HarmonyPatch(typeof(Player), nameof(Player.PlacePiece), new[] { typeof(Piece), typeof(Vector3), typeof(Quaternion), typeof(bool) })]
-        public static class Player_PlacePiece_Patch
-        {
-            public static void Postfix(Player __instance, Piece piece, Vector3 pos, Quaternion rot, bool doAttack)
-            {
-                if (piece != null && (piece.name == "portal_wood" || piece.name == "portal_stone"))
-                {
-//                    Debug.LogWarning($"Placed Portal name: {piece.name} Pos: {pos}");
-
-                    AddPortalPin(pos);
-                }
             }
         }
 
-        [HarmonyPatch(typeof(Piece), nameof(Piece.DropResources))]
-        public static class Piece_DropResources_Patch
+        // Called when an item is added to the player's inventory
+        [HarmonyPatch(typeof(Humanoid), nameof(Humanoid.Pickup))]
+        public class Humanoid_Pickup_Patch
         {
-            public static void Postfix(Piece __instance)
+            // Used in Trophy Saga to auto-convert metals on pickup
+            static void Prefix(Humanoid __instance, GameObject go, bool autoequip, bool autoPickupDelay, bool __result)
             {
-                Vector3 pos = __instance.transform.position;
-                TeleportWorld tpWorld = __instance.GetComponent<TeleportWorld>();
-                if (tpWorld != null)
+                // Before pickup occurs, see if it's auto-smeltable ore and convert it
+                if (__instance == null || __instance != Player.m_localPlayer)
                 {
-//                    Debug.LogWarning($"Piece.DropResources(): name: {__instance.name} Pos: {pos}");
-                    RemovePortalPin(pos);
+                    return;
                 }
-            }
-        }
 
-        [HarmonyPatch(typeof(TeleportWorld), nameof(TeleportWorld.SetText))]
-        public static class TeleportWorld_SetText_Patch
-        {
-            public static void Postfix(TeleportWorld __instance, string text)
-            {
-                if (__instance != null)
+                ItemDrop itemDrop = go.GetComponent<ItemDrop>();
+                if (itemDrop != null)
                 {
-//                    Debug.LogWarning($"TeleportWorld.SetText(): name: {__instance.name} Pos: {__instance.transform.position} text: '{text}' ");
-                    RenamePortalPin(__instance.transform.position, text);
-                }
-            }
-        }
-
-        [HarmonyPatch(typeof(TeleportWorld), nameof(TeleportWorld.Teleport))]
-        public static class TeleportWorld_Teleport_Patch
-        {
-            public static void Postfix(TeleportWorld __instance, Player player)
-            {
-                if (__instance != null)
-                {
-                    if (__m_createPinOnTeleport)
-                    {
- //                       Debug.LogWarning($"TeleportWorld.Teleport(): name: {__instance.GetText()} Pos: {__instance.transform.position}");
-                        RenamePortalPin(__instance.transform.position, __instance.GetText());
-                    }
+                    ConvertMetal(ref itemDrop.m_itemData);
                 }
             }
         }

@@ -7,8 +7,8 @@
     <ProjectGuid>{403D189D-5AD4-4BAA-9C08-BFF3AAF97D0D}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>DWMP</RootNamespace>
-    <AssemblyName>DWMP</AssemblyName>
+    <RootNamespace>InstaSmelt</RootNamespace>
+    <AssemblyName>InstaSmelt</AssemblyName>
     <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
