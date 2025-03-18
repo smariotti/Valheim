@@ -4,7 +4,7 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{EE0CCB4C-4389-47C4-967D-F37B5DBE65B1}</ProjectGuid>
+    <ProjectGuid>{403D189D-5AD4-4BAA-9C08-BFF3AAF97D0D}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>DWMP</RootNamespace>
@@ -53,17 +53,18 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="DWMP.cs" />
+    <Compile Include="InstaSmelt.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="Package\icon.png" />
-    <Content Include="Package\plugins\DWMP.dll" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="Package\DWMP_0.1.0.zip" />
     <None Include="Package\manifest.json" />
     <None Include="Package\README.md" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Package\plugins\" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>

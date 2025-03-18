@@ -19,7 +19,7 @@ namespace TubaWalk
     {
         public const string PluginGUID = "com.oathorse.Tuba";
         public const string PluginName = "Tuba Walk";
-        public const string PluginVersion = "0.1.2";
+        public const string PluginVersion = "0.1.3";
         private readonly Harmony harmony = new Harmony(PluginGUID);
 
         private AudioSource audioSource;

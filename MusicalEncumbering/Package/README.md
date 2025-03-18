@@ -7,6 +7,9 @@ Moving while encumbered now has the soundtrack that it deserves.
 Yeah, it is, but it's also kinda fun.
 
 ## Change Log
+v0.1.3
+- Fixed a bug where the tuba music wasn't found when using some mod managers
+
 v0.1.2
 - Fixed a bug where the tuba music wasn't found when using some mod managers
 

@@ -11,14 +11,14 @@ using UnityEngine;
 using static System.Net.Mime.MediaTypeNames;
 using static Terminal;
 
-namespace DWMP
+namespace InstaSmelt
 { 
     [BepInPlugin(PluginGUID, PluginName, PluginVersion)]
-    public class DWMP : BaseUnityPlugin
+    public class InstaSmelt : BaseUnityPlugin
     {
-        public const string PluginGUID = "com.oathorse.DWMP";
-        public const string PluginName = "Dude, Where's My Portal";
-        public const string PluginVersion = "0.1.3";
+        public const string PluginGUID = "com.oathorse.InstaSmelt";
+        public const string PluginName = "InstaSmelt";
+        public const string PluginVersion = "0.1.0";
         private readonly Harmony harmony = new Harmony(PluginGUID);
 
         List<Minimap.PinData> __m_pins = new List<Minimap.PinData>();
@@ -59,70 +59,7 @@ namespace DWMP
                 return true;
             });
 
-            //ConsoleCommand analyzeMap = new ConsoleCommand("analyzemap", "Do map analysis", delegate (ConsoleEventArgs args)
-            //{
-            //    if (!Game.instance)
-            //    {
-            //        return true;
-            //    }
-
-            //    AnalyzeMap();
-
-            //    return true;
-            //});
-
         }
-        //static void AnalyzeMap()
-        //{
-        //    float minX = -10500;
-        //    float maxX = 10500;
-        //    float xIncrement = 1000f;
-
-        //    float minY = -10500;
-        //    float maxY = 10500;
-        //    float yIncrement = 1000f;
-
-        //    //List<Heightmap> heightmaps = Heightmap.s_heightmaps;
-
-        //    //foreach (Heightmap allHeightmap in heightmaps)
-        //    //{
-        //    //    float x = allHeightmap.m_bounds.extents.x;
-        //    //    float y = allHeightmap.m_bounds.extents.y;
-        //    //    float z = allHeightmap.m_bounds.extents.z;
-
-        //    //    Debug.LogWarning($"Heightmap: {allHeightmap.name} {allHeightmap.m_bounds.extents}");
-        //    //}
-
-        //    if (Heightmap.s_heightmaps != null)
-        //    {
-        //        List<Heightmap> heightmaps = Heightmap.s_heightmaps;
-        //        foreach (Heightmap hmap in heightmaps)
-        //        {
-        //            Debug.LogWarning($"{hmap.name}");
-        //        }
-        //    }
-
-        //    for (float y = minY; y < maxY; y += yIncrement)
-        //    {
-        //        for (float x = minX; x < maxX; x += xIncrement)
-        //        {
-        //            Vector3 pos = new Vector3(x, 0, y);
-        //            Vector3 normal = new Vector3();
-        //            Heightmap.Biome biome;
-        //            Heightmap.BiomeArea biomeArea;
-        //            Heightmap hmap;
-
-        //            ZoneSystem.instance.GetGroundData(ref pos, out normal, out biome, out biomeArea, out hmap);
-
-        //            float height = 0;
-
-        //            if (hmap.GetWorldHeight(pos, out height))
-        //            {
-        //                AddPortalPin(pos, height.ToString());
-        //            }
-        //        }
-        //    }
-        //}
 
         static void AddPortalPin(Vector3 pos, string text="")
         {

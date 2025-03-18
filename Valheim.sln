@@ -11,6 +11,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ScytheEverything", "ScytheE
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TubaWalk", "MusicalEncumbering\TubaWalk.csproj", "{EA282DA8-693D-4CF1-BF7A-8ECAC0827EAA}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InstaSmelt", "InstaSmelt\InstaSmelt.csproj", "{403D189D-5AD4-4BAA-9C08-BFF3AAF97D0D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -33,6 +35,10 @@ Global
 		{EA282DA8-693D-4CF1-BF7A-8ECAC0827EAA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{EA282DA8-693D-4CF1-BF7A-8ECAC0827EAA}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{EA282DA8-693D-4CF1-BF7A-8ECAC0827EAA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{403D189D-5AD4-4BAA-9C08-BFF3AAF97D0D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{403D189D-5AD4-4BAA-9C08-BFF3AAF97D0D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{403D189D-5AD4-4BAA-9C08-BFF3AAF97D0D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{403D189D-5AD4-4BAA-9C08-BFF3AAF97D0D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
