@@ -140,6 +140,16 @@ This Trophy Hunt variant implements a good number of modifications to standard V
 
 
 ## Change Log
+v0.9.14
+- Updated to work with Call to Arms (Patch 0.220.4) currently on PTB
+
+v0.9.13
+- Updated to work with BepInEx 5.4.2332
+- Fixed bug with Fermenter (thanks XMal!)
+
+v0.9.12
+- LOST this change to allow discord authentical port override, oops!
+
 v0.9.11
 - Added `/togglescorebackground` Console command to enable/disable a black background behind the score for increased legibility.
 

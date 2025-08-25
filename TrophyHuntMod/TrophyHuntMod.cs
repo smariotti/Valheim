@@ -1,5 +1,6 @@
 ﻿using BepInEx;
 using HarmonyLib;
+using Steamworks;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -12,15 +13,32 @@ using UnityEngine.UI;
 using System.Threading.Tasks;
 using static CharacterDrop;
 using UnityEngine.EventSystems;
+using System.Xml.Linq;
+using static System.Net.Mime.MediaTypeNames;
+using static TrophyHuntMod.TrophyHuntMod;
+using static UnityEngine.EventSystems.EventTrigger;
+using System.Configuration;
+using System.Reflection;
+using System.Xml;
+using Valheim.UI;
+using UnityEngine.SocialPlatforms.Impl;
+using System.CodeDom;
+using UnityEngine.UIElements;
+using static UnityEngine.UI.GridLayoutGroup;
+using static Room;
 using static Skills;
 using System.Linq;
-using System.Xml.Serialization;
-using BepInEx.Configuration;
-using Newtonsoft.Json;
-using System.Net.Http;
-
 using static TrophyHuntMod.TrophyHuntMod.Player_OnSpawned_Patch;
 using static TrophyHuntMod.TrophyHuntMod.THMSaveData;
+using System.Xml.Serialization;
+using System.Reflection.Emit;
+using System.Net;
+using BepInEx.Configuration;
+using static Incinerator;
+using Newtonsoft.Json;
+using System.Security.Policy;
+using System.Net.Http;
+using System.Threading.Tasks;
 
 namespace TrophyHuntMod
 {
@@ -34,7 +52,11 @@ namespace TrophyHuntMod
 #else
         public const string PluginGUID = "com.oathorse.TrophyHuntMod";
         public const string PluginName = "TrophyHuntMod";
-        private const Boolean UPDATE_LEADERBOARD = true;
+
+
+        private const Boolean UPDATE_LEADERBOARD = false; // SET TO TRUE WHEN PTB IS LIVE
+
+
 #endif
         public const string PluginVersion = "0.9.13";
         private readonly Harmony harmony = new Harmony(PluginGUID);
@@ -179,6 +201,8 @@ namespace TrophyHuntMod
             new TrophyHuntData("TrophyAsksvin",                 "Asksvin",          Biome.Ashlands,     50,     50,     new List<string> { "$enemy_asksvin" }),
             new TrophyHuntData("TrophyBlob",                    "Blob",             Biome.Swamp,        20,     10,     new List<string> { "$enemy_blob",       "$enemy_blobelite" }),
             new TrophyHuntData("TrophyBoar",                    "Boar",             Biome.Meadows,      10,     15,     new List<string> { "$enemy_boar" }),
+            new TrophyHuntData("TrophyBjorn",                   "Bear",             Biome.Forest,       20,     10,      new List<string>  { "$enemy_bjorn" }),
+            new TrophyHuntData("TrophyBjornUndead",             "Vile",             Biome.Plains,       30,     15,      new List<string>  { "$enemy_unbjorn" }),
             new TrophyHuntData("TrophyBonemass",                "Bonemass",         Biome.Swamp,        100,    100,    new List<string> { "$enemy_bonemass" }),
             new TrophyHuntData("TrophyBonemawSerpent",          "Bonemaw",          Biome.Ashlands,     50,     33,     new List<string> { "$enemy_bonemawserpent" }),
             new TrophyHuntData("TrophyCharredArcher",           "Charred Archer",   Biome.Ashlands,     50,     5,      new List<string> { "$enemy_charred_archer" }),
@@ -197,6 +221,7 @@ namespace TrophyHuntMod
             new TrophyHuntData("TrophyFallenValkyrie",          "Fallen Valkyrie",  Biome.Ashlands,     50,     5,      new List<string> { "$enemy_fallenvalkyrie" }),
             new TrophyHuntData("TrophyFenring",                 "Fenring",          Biome.Mountains,    30,     10,     new List<string> { "$enemy_fenring" }),
             new TrophyHuntData("TrophyFrostTroll",              "Troll",            Biome.Forest,       20,     50,     new List<string> { "$enemy_troll" }),
+            new TrophyHuntData("TrophyGhost",                   "Ghost",            Biome.Forest,       20,     10,     new List<string> { "$enemy_ghost" }),
             new TrophyHuntData("TrophyGjall",                   "Gjall",            Biome.Mistlands,    40,     30,     new List<string> { "$enemy_gjall" }),
             new TrophyHuntData("TrophyGoblin",                  "Fuling",           Biome.Plains,       30,     10,     new List<string> { "$enemy_goblin" }),
             new TrophyHuntData("TrophyGoblinBrute",             "Fuling Berserker", Biome.Plains,       30,     5,      new List<string> { "$enemy_goblinbrute" }),
@@ -266,10 +291,10 @@ namespace TrophyHuntMod
         static public BiomeBonus[] __m_biomeBonuses = new BiomeBonus[]
         {
             new BiomeBonus(Biome.Meadows,   "Meadows",        20,      new List<string> { "TrophyBoar", "TrophyDeer", "TrophyNeck" }),
-            new BiomeBonus(Biome.Forest,    "Black Forest",   40,      new List<string> { "TrophyFrostTroll", "TrophyGreydwarf", "TrophyGreydwarfBrute", "TrophyGreydwarfShaman", "TrophySkeleton", "TrophySkeletonPoison" }),
+            new BiomeBonus(Biome.Forest,    "Black Forest",   40,      new List<string> { "TrophyBjorn", "TrophyFrostTroll", "TrophyGhost", "TrophyGreydwarf", "TrophyGreydwarfBrute", "TrophyGreydwarfShaman", "TrophySkeleton", "TrophySkeletonPoison" }),
             new BiomeBonus(Biome.Swamp,     "Swamp",          40,      new List<string> { "TrophyAbomination", "TrophyBlob", "TrophyDraugr", "TrophyDraugrElite", "TrophyLeech", "TrophySurtling", "TrophyWraith" }),
             new BiomeBonus(Biome.Mountains, "Mountains",      60,      new List<string> { "TrophyCultist", "TrophyFenring", "TrophyHatchling", "TrophySGolem", "TrophyUlv", "TrophyWolf" }),
-            new BiomeBonus(Biome.Plains,    "Plains",         60,      new List<string> { "TrophyDeathsquito", "TrophyGoblin", "TrophyGoblinBrute", "TrophyGoblinShaman", "TrophyGrowth", "TrophyLox" }),
+            new BiomeBonus(Biome.Plains,    "Plains",         60,      new List<string> { "TrophyBjornUndead", "TrophyDeathsquito", "TrophyGoblin", "TrophyGoblinBrute", "TrophyGoblinShaman", "TrophyGrowth", "TrophyLox" }),
             new BiomeBonus(Biome.Mistlands, "Mistlands",      80,      new List<string> { "TrophyDvergr", "TrophyGjall", "TrophyHare", "TrophySeeker", "TrophySeekerBrute", "TrophyTick" }),
             new BiomeBonus(Biome.Ashlands,  "Ashlands",       100,     new List<string> { "TrophyAsksvin", "TrophyBonemawSerpent", "TrophyCharredArcher", "TrophyCharredMage", "TrophyCharredMelee", "TrophyFallenValkyrie", "TrophyMorgen", "TrophyVolture" }),
         };
@@ -283,6 +308,17 @@ namespace TrophyHuntMod
         static GameObject __m_gameTimerTextElement = null;
         static GameObject __m_luckOMeterElement = null;
         static GameObject __m_standingsElement = null;
+
+        static TMP_FontAsset __m_globalFontObject = null;
+
+        static TextMeshProUGUI AddTextMeshProComponent(GameObject toThisObject)
+        {
+            TextMeshProUGUI textMeshComponent = toThisObject.AddComponent<TextMeshProUGUI>();
+            textMeshComponent.font = __m_globalFontObject;
+            textMeshComponent.material = __m_globalFontObject.material;
+
+            return textMeshComponent;
+        }
 
         // Trophy Icons
         static List<GameObject> __m_iconList = null;
@@ -426,7 +462,6 @@ namespace TrophyHuntMod
 
         // BepInEx Mod Config File Data
         static ConfigEntry<string> __m_configDiscordId;
-        static ConfigEntry<int> __m_configDiscordPort;
         static ConfigEntry<string> __m_configDiscordUser;
         static ConfigEntry<string> __m_configDiscordGlobalUser;
         static ConfigEntry<string> __m_configDiscordAvatar;
@@ -687,7 +722,6 @@ namespace TrophyHuntMod
             InitializeTrophyDropInfo();
 
             __m_configDiscordId = Config.Bind("General", "DiscordUserId", "", "When signed in with Discord, the UserID of the Discord user");
-            __m_configDiscordPort = Config.Bind("General", "DiscordAuthPort", 5000, "Port to use for Discord authenthication. 5000 is default, 5001, 5002 and 5003 also work");
             __m_configDiscordUser = Config.Bind("General", "DiscordUserName", "", "When signed in with Discord, the User Name of the Discord user");
             __m_configDiscordGlobalUser = Config.Bind("General", "DiscordGlobalUserName", "", "When signed in with Discord, the Global User Name of the Discord user");
             __m_configDiscordAvatar = Config.Bind("General", "DiscordAvatar", "", "When signed in with Discord, the Avatar id of the Discord user");
@@ -1579,6 +1613,7 @@ namespace TrophyHuntMod
 
                 string workingDirectory = Directory.GetCurrentDirectory();
                 Debug.Log($"Working Directory for Trophy Hunt Mod: {workingDirectory}");
+                Debug.Log($"Steam username: {SteamFriends.GetPersonaName()}");
 
                 // Store the current session data to help determine the player changing these
                 // things at the main menu
@@ -1612,7 +1647,7 @@ namespace TrophyHuntMod
 
                 if (GetGameMode() == TrophyGameMode.TrophyFiesta)
                 {
-//                    TrophyFiesta.Initialize();
+                    TrophyFiesta.Initialize();
                 }
 
                 __m_refreshLogsAndStandings = true;
@@ -1970,7 +2005,7 @@ namespace TrophyHuntMod
 
                 timerRectTransform.localScale = new Vector3(__m_userTextScale, __m_userTextScale, __m_userTextScale);
 
-                TMPro.TextMeshProUGUI tmText = timerElement.AddComponent<TMPro.TextMeshProUGUI>();
+                TMPro.TextMeshProUGUI tmText = AddTextMeshProComponent(timerElement);
 
                 tmText.text = $"<mspace=0.5em>00:00:00</mspace>";// {__m_gameTimer}";
                 tmText.fontSize = 24;
@@ -2024,7 +2059,7 @@ namespace TrophyHuntMod
                 rectTransform.anchoredPosition = new Vector2(-70, -105); // Set position
                 rectTransform.localScale = new Vector3(__m_userTextScale, __m_userTextScale, __m_userTextScale);
 
-                TMPro.TextMeshProUGUI tmText = relogsElement.AddComponent<TMPro.TextMeshProUGUI>();
+                TMPro.TextMeshProUGUI tmText = AddTextMeshProComponent(relogsElement);
 
                 tmText.text = $"{__m_logoutCount}";
                 tmText.fontSize = 24;
@@ -2116,7 +2151,7 @@ namespace TrophyHuntMod
                 deathsTextTransform.anchoredPosition = rectTransform.anchoredPosition;
                 deathsTextTransform.localScale = new Vector3(__m_userTextScale, __m_userTextScale, __m_userTextScale);
 
-                TMPro.TextMeshProUGUI tmText = deathsTextElement.AddComponent<TMPro.TextMeshProUGUI>();
+                TMPro.TextMeshProUGUI tmText = AddTextMeshProComponent(deathsTextElement);
                 tmText.text = $"{__m_deaths}";
                 tmText.fontSize = 24;
                 tmText.color = Color.yellow;
@@ -2165,7 +2200,7 @@ namespace TrophyHuntMod
 
                 int scoreValue = 9999;
 
-                TMPro.TextMeshProUGUI tmText = scoreTextElement.AddComponent<TMPro.TextMeshProUGUI>();
+                TMPro.TextMeshProUGUI tmText = AddTextMeshProComponent(scoreTextElement);
 
                 tmText.text = $"{scoreValue}";
                 tmText.fontSize = DEFAULT_SCORE_FONT_SIZE;
@@ -3171,7 +3206,7 @@ namespace TrophyHuntMod
                 rectTransform.sizeDelta = new Vector2(tooltipWindowSize.x - __m_scoreTooltipTextOffset.x, tooltipWindowSize.y - __m_scoreTooltipTextOffset.y);
 
                 // Add a TextMeshProUGUI component for displaying the tooltip text
-                __m_scoreTooltipText = __m_scoreTooltipObject.AddComponent<TextMeshProUGUI>();
+                __m_scoreTooltipText = AddTextMeshProComponent(__m_scoreTooltipObject);
                 __m_scoreTooltipText.fontSize = 14;
                 __m_scoreTooltipText.alignment = TextAlignmentOptions.TopLeft;
                 __m_scoreTooltipText.color = Color.yellow;
@@ -3293,7 +3328,7 @@ namespace TrophyHuntMod
                 }
 
                 Vector3 tooltipOffset = new Vector3(tooltipWindowSize.x / 2, tooltipWindowSize.y, 0);
-                Vector3 mousePosition = UnityEngine.Input.mousePosition;
+                Vector3 mousePosition = Input.mousePosition;
                 Vector3 desiredPosition = mousePosition + tooltipOffset;
 
                 // Clamp the tooltip window onscreen
@@ -3352,7 +3387,7 @@ namespace TrophyHuntMod
                 rectTransform.sizeDelta = new Vector2(__m_luckTooltipWindowSize.x - __m_luckTooltipTextOffset.x, __m_luckTooltipWindowSize.y - __m_luckTooltipTextOffset.y);
 
                 // Add a TextMeshProUGUI component for displaying the tooltip text
-                __m_luckTooltip = __m_luckTooltipObject.AddComponent<TextMeshProUGUI>();
+                __m_luckTooltip = AddTextMeshProComponent(__m_luckTooltipObject);
                 __m_luckTooltip.fontSize = 14;
                 __m_luckTooltip.alignment = TextAlignmentOptions.TopLeft;
                 __m_luckTooltip.color = Color.yellow;
@@ -3563,7 +3598,7 @@ namespace TrophyHuntMod
                 __m_luckTooltipObject.SetActive(true);
 
                 Vector3 tooltipOffset = new Vector3(__m_luckTooltipWindowSize.x / 2, __m_luckTooltipWindowSize.y, 0);
-                Vector3 mousePosition = UnityEngine.Input.mousePosition;
+                Vector3 mousePosition = Input.mousePosition;
                 Vector3 desiredPosition = mousePosition + tooltipOffset;
 
                 // Clamp the tooltip window onscreen
@@ -3621,7 +3656,7 @@ namespace TrophyHuntMod
                 rectTransform.sizeDelta = new Vector2(__m_standingsTooltipWindowSize.x - __m_standingsTooltipTextOffset.x, __m_standingsTooltipWindowSize.y - __m_standingsTooltipTextOffset.y);
 
                 // Add a TextMeshProUGUI component for displaying the tooltip text
-                __m_standingsTooltip = __m_standingsTooltipObject.AddComponent<TextMeshProUGUI>();
+                __m_standingsTooltip = AddTextMeshProComponent(__m_standingsTooltipObject);
                 __m_standingsTooltip.fontSize = 14;
                 __m_standingsTooltip.alignment = TextAlignmentOptions.TopLeft;
                 __m_standingsTooltip.color = Color.yellow;
@@ -3730,7 +3765,7 @@ namespace TrophyHuntMod
                 __m_standingsTooltip.ForceMeshUpdate(true, true);
 
                 Vector3 tooltipOffset = new Vector3(__m_standingsTooltipWindowSize.x / 2, __m_standingsTooltipWindowSize.y, 0);
-                Vector3 mousePosition = UnityEngine.Input.mousePosition;
+                Vector3 mousePosition = Input.mousePosition;
                 Vector3 desiredPosition = mousePosition + tooltipOffset;
 
                 // Clamp the tooltip window onscreen
@@ -3795,7 +3830,7 @@ namespace TrophyHuntMod
                 rectTransform.sizeDelta = new Vector2(tooltipWindowSize.x - __m_trophyTooltipTextOffset.x, tooltipWindowSize.y - __m_trophyTooltipTextOffset.y);
 
                 // Add a TextMeshProUGUI component for displaying the tooltip text
-                __m_trophyTooltip = __m_trophyTooltipObject.AddComponent<TextMeshProUGUI>();
+                __m_trophyTooltip = AddTextMeshProComponent(__m_trophyTooltipObject);
                 __m_trophyTooltip.fontSize = 14;
                 __m_trophyTooltip.alignment = TextAlignmentOptions.TopLeft;
                 __m_trophyTooltip.color = Color.yellow;
@@ -3964,7 +3999,7 @@ namespace TrophyHuntMod
                     tooltipSize = __m_trophyTooltipAllTrophyStatsWindowSize;
 
                 Vector3 tooltipOffset = new Vector3(tooltipSize.x / 2, tooltipSize.y, 0);
-                Vector3 mousePosition = UnityEngine.Input.mousePosition;
+                Vector3 mousePosition = Input.mousePosition;
                 Vector3 desiredPosition = mousePosition + tooltipOffset;
 
                 // Clamp the tooltip window onscreen
@@ -4363,6 +4398,8 @@ namespace TrophyHuntMod
                         Character character = __instance.GetComponent<Character>();
 
                         string characterName = character.m_name;
+
+                        Debug.LogError($"CharacterDrop_GenerateDropList_Patch: {characterName} has dropped items: {__result?.Count}");
 
                         // See if this is a trophy-dropper and handle any special trophy rules for the various game modes
                         //
@@ -4991,7 +5028,9 @@ namespace TrophyHuntMod
                 textRect.anchoredPosition = new Vector2(0, 0);
 
                 // Change the button's text
-                TextMeshProUGUI buttonText = textObject.AddComponent<TextMeshProUGUI>();
+                //TextMeshProUGUI buttonText = textObject.AddComponent<TextMeshProUGUI>();
+                TextMeshProUGUI buttonText = AddTextMeshProComponent(textObject);
+
                 buttonText.text = "<b>Toggle Game Mode<b>";
                 buttonText.fontSize = 18;
                 buttonText.color = Color.black;
@@ -5045,7 +5084,7 @@ namespace TrophyHuntMod
                 textRect.anchoredPosition = new Vector2(0, 0);
 
                 // Change the button's text
-                __m_discordLoginButtonText = textObject.AddComponent<TextMeshProUGUI>();
+                __m_discordLoginButtonText = AddTextMeshProComponent(textObject);
 
                 if (__m_loggedInWithDiscord)
                 {
@@ -5077,7 +5116,7 @@ namespace TrophyHuntMod
                 statusRectTransform.sizeDelta = new Vector2(140, 22);
 
                 // Change the button's text
-                __m_onlineStatusText = statusTextObject.AddComponent<TextMeshProUGUI>();
+                __m_onlineStatusText = AddTextMeshProComponent(statusTextObject);
                 __m_onlineStatusText.fontSize = 16;
                 __m_onlineStatusText.color = Color.white;
                 __m_onlineStatusText.alignment = TextAlignmentOptions.Center;
@@ -5099,7 +5138,7 @@ namespace TrophyHuntMod
                 usernameRectTransform.sizeDelta = new Vector2(250, 20);
 
                 // Change the button's text
-                __m_onlineUsernameText = usernameTextObject.AddComponent<TextMeshProUGUI>();
+                __m_onlineUsernameText = AddTextMeshProComponent(usernameTextObject);
                 __m_onlineUsernameText.fontSize = 16;
                 __m_onlineUsernameText.color = Color.white;
                 __m_onlineUsernameText.alignment = TextAlignmentOptions.Center;
@@ -5139,7 +5178,7 @@ namespace TrophyHuntMod
 
                         // Create a Texture2D from the downloaded data
                         Texture2D texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-//                        if (texture.LoadImage(texture, imageData, true))
+                        //                        if (texture.LoadImage(imageData, true))
                         {
                             // Create a sprite from the texture
                             Sprite sprite = Sprite.Create(
@@ -5175,8 +5214,8 @@ namespace TrophyHuntMod
                     __m_trophyHuntMod.Config.Save();
                 }
 
-                System.Diagnostics.Debug.WriteLine($"UpdateOnlineStatus {__m_loggedInWithDiscord}");
-                Debug.Log($"UpdateOnlineStatus: {__m_loggedInWithDiscord} updating");
+                //                System.Diagnostics.Debug.WriteLine($"UpdateOnlineStatus {__m_loggedInWithDiscord}");
+                //                Debug.Log($"UpdateOnlineStatus: {__m_loggedInWithDiscord} updating");
 
 
                 string onlineText = "n/a";
@@ -5217,9 +5256,9 @@ namespace TrophyHuntMod
                 if (!__m_loggedInWithDiscord)
                 {
                     string clientId = "1328474573334642728";
-                    string redirectUri = $"http://localhost:{__m_configDiscordPort.Value}/callback";
+                    string redirectUri = "http://localhost:5000/callback";
 
-                    __m_discordAuthentication.StartOAuthFlow(clientId, redirectUri, __m_configDiscordPort.Value, UpdateOnlineStatus);
+                    __m_discordAuthentication.StartOAuthFlow(clientId, redirectUri, UpdateOnlineStatus);
                 }
                 else
                 {
@@ -5724,6 +5763,10 @@ namespace TrophyHuntMod
                     GameObject mainMenu = GameObject.Find("Menu");
                     if (mainMenu != null)
                     {
+                        GameObject topicObject = GameObject.Find("Topic");
+                        TextMeshProUGUI topicText = topicObject?.GetComponent<TextMeshProUGUI>();
+                        __m_globalFontObject = topicText.font;
+
                         Transform logoTransform = mainMenu.transform.Find("Logo");
                         if (logoTransform != null)
                         {
@@ -5740,18 +5783,20 @@ namespace TrophyHuntMod
                             rectTransform.sizeDelta = new Vector2(-650, 185);
 
                             // Add a TextMeshProUGUI component
-                            __m_trophyHuntMainMenuText = textObject.AddComponent<TextMeshProUGUI>();
+                            __m_trophyHuntMainMenuText = AddTextMeshProComponent(textObject);
+                            __m_trophyHuntMainMenuText.font = __m_globalFontObject;
+                            __m_trophyHuntMainMenuText.fontMaterial = __m_globalFontObject.material;
+                            __m_trophyHuntMainMenuText.fontStyle = FontStyles.Bold;
+
                             __m_trophyHuntMainMenuText.text = GetTrophyHuntMainMenuText();
                             __m_trophyHuntMainMenuText.alignment = TextAlignmentOptions.Left;
                             // Enable outline
-                            __m_trophyHuntMainMenuText.fontMaterial.EnableKeyword("OUTLINE_ON");
+                            //                            __m_trophyHuntMainMenuText.fontMaterial.EnableKeyword("OUTLINE_ON");
                             __m_trophyHuntMainMenuText.lineSpacingAdjustment = -5;
                             // Set outline color and thickness
-                            __m_trophyHuntMainMenuText.outlineColor = Color.black;
-                            __m_trophyHuntMainMenuText.outlineWidth = 0.05f; // Adjust the thickness
+                            //                            __m_trophyHuntMainMenuText.outlineColor = Color.black;
+                            //                            __m_trophyHuntMainMenuText.outlineWidth = 0.05f; // Adjust the thickness
 
-                            __m_trophyHuntMainMenuText.font = Resources.Load<TMP_FontAsset>("Valheim-AveriaSerifLibre");
-                            __m_trophyHuntMainMenuText.fontStyle = FontStyles.Bold;
 
                             AddToggleGameModeButton(textObject.transform);
 

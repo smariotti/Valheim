@@ -94,6 +94,15 @@
     <Compile Include="TrophyHuntMod.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="Package\icon.png" />
+    <Content Include="Package\plugins\Newtonsoft.Json.dll" />
+    <Content Include="Package\plugins\TrophyHuntMod.dll" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Package\manifest.json" />
+    <None Include="Package\README.md" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>$(SolutionDir)\utils\pdb2mdb.exe $(TargetPath)
