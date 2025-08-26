@@ -90,6 +90,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="ConsoleCommands.cs" />
     <Compile Include="DiscordAuthentication.cs" />
     <Compile Include="TrophyHuntMod.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
@@ -107,10 +108,10 @@
   <PropertyGroup>
     <PostBuildEvent>$(SolutionDir)\utils\pdb2mdb.exe $(TargetPath)
 
-copy /Y $(SolutionDir)\Libs\Newtonsoft.Json.dll $(ProjectDir)\Package\plugins\
-copy /Y $(TargetDir)\$(TargetFileName) $(ProjectDir)\Package\plugins\
+xcopy /F /Y $(SolutionDir)\Libs\Newtonsoft.Json.dll $(ProjectDir)\Package\plugins\
+xcopy /F /Y $(TargetDir)\$(TargetFileName) $(ProjectDir)\Package\plugins\
 
-copy /Y $(SolutionDir)\Libs\Newtonsoft.Json.dll "C:\Program Files (x86)\Steam\steamapps\common\Valheim_Dev\BepInEx\Plugins"
-copy /Y $(TargetDir)\$(TargetFileName) "C:\Program Files (x86)\Steam\steamapps\common\Valheim_Dev\BepInEx\Plugins"</PostBuildEvent>
+xcopy /F /Y $(SolutionDir)\Libs\Newtonsoft.Json.dll "C:\Program Files (x86)\Steam\steamapps\common\Valheim_Dev\BepInEx\Plugins"
+xcopy /F /Y $(TargetDir)\$(TargetFileName) "C:\Program Files (x86)\Steam\steamapps\common\Valheim_Dev\BepInEx\Plugins"</PostBuildEvent>
   </PropertyGroup>
 </Project>

@@ -11,7 +11,6 @@ using Newtonsoft.Json;
 using TrophyHuntMod;
 using System.Runtime.CompilerServices;
 using UnityEngine;
-//using static UnityEngine.GUI;
 //using static PrivilegeManager;
 
 public class DiscordOAuthFlow
@@ -22,7 +21,6 @@ public class DiscordOAuthFlow
 
     string m_clientId = string.Empty;
     string m_redirectUri = string.Empty;
-    int m_authPort = 5000;
     string m_code = string.Empty;
     DiscordUserResponse m_userInfo = null;
 
@@ -35,12 +33,11 @@ public class DiscordOAuthFlow
 
     StatusCallback m_statusCallback = null;
 
-    public void StartOAuthFlow(string clientId, string redirectUri, int port, StatusCallback callback)
+    public void StartOAuthFlow(string clientId, string redirectUri, StatusCallback callback)
     {
         m_clientId = clientId;
         m_redirectUri = redirectUri;
-        m_statusCallback= callback;
-        m_authPort = port;
+        m_statusCallback = callback;
 
         if (VERBOSE) System.Diagnostics.Debug.WriteLine("Starting OAuth flow...");
         StartServer(redirectUri);
@@ -60,8 +57,6 @@ public class DiscordOAuthFlow
                          $"&response_type=token" +
                          $"&scope={scope}";
 
-        if (VERBOSE) System.Diagnostics.Debug.WriteLine($"authURL={authUrl}");
-
         // Opens the authorization URL in the default web browser
         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
         {
@@ -78,9 +73,9 @@ public class DiscordOAuthFlow
             httpListener.Stop();
         }
         else
-        { 
+        {
             httpListener = new HttpListener();
-            httpListener.Prefixes.Add($"http://localhost:{m_authPort}/");
+            httpListener.Prefixes.Add("http://localhost:5000/");
         }
 
         httpListener.Start();
@@ -162,20 +157,20 @@ public class DiscordOAuthFlow
 
     private string GetCallbackHtml()
     {
-        return $@"<!DOCTYPE html>
+        return @"<!DOCTYPE html>
 <html>
 <head>
     <title>Discord Auth</title>
     <script>
-        window.onload = function() {{
+        window.onload = function() {
             const params = new URLSearchParams(window.location.hash.substr(1));
             const accessToken = params.get('access_token');
-            if (accessToken) {{
-                window.location.href = 'http://localhost:{m_authPort}/callback?token=' + encodeURIComponent(accessToken);
-            }} else {{
+            if (accessToken) {
+                window.location.href = 'http://localhost:5000/callback?token=' + encodeURIComponent(accessToken);
+            } else {
                 document.body.innerHTML = '<h2>Error: No access token found.</h2>';
-            }}
-        }};
+            }
+        };
     </script>
 </head>
 <body>

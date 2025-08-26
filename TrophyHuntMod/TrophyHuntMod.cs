@@ -1,6 +1,5 @@
 ﻿using BepInEx;
 using HarmonyLib;
-using Steamworks;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -38,12 +37,11 @@ using static Incinerator;
 using Newtonsoft.Json;
 using System.Security.Policy;
 using System.Net.Http;
-using System.Threading.Tasks;
 
 namespace TrophyHuntMod
 {
     [BepInPlugin(PluginGUID, PluginName, PluginVersion)]
-    public class TrophyHuntMod : BaseUnityPlugin
+    public partial class TrophyHuntMod : BaseUnityPlugin
     {
 #if SAGA_STANDALONE
         public const string PluginGUID = "com.oathorse.SagaMode";
@@ -58,7 +56,7 @@ namespace TrophyHuntMod
 
 
 #endif
-        public const string PluginVersion = "0.9.13";
+        public const string PluginVersion = "0.9.14";
         private readonly Harmony harmony = new Harmony(PluginGUID);
 
         // Configuration variables
@@ -342,14 +340,11 @@ namespace TrophyHuntMod
 
         const long UPDATE_STANDINGS_INTERVAL = 30;  // Update standings every 30 seconds
 
-
+        // Trophy Display Settings
         static float __m_baseTrophyScale = 1.4f;
         static float __m_userIconScale = 1.0f;
         static float __m_userTextScale = 1.0f;
         static float __m_userTrophySpacing = 0.0f;
-
-        // TrophyHuntData list
-        //        static List<string> __m_trophiesInObjectDB = new List<string>();
 
         // Cache for detecting newly arrived trophies and flashing the new ones
         static List<string> __m_trophyCache = new List<string>();
@@ -792,459 +787,6 @@ namespace TrophyHuntMod
             __m_completedBiomeBonuses.Clear();
         }
 
-        // New Console Commands for TrophyHuntMod
-        #region Console Commands
-        public static void PrintToConsole(string message)
-        {
-            if (Console.m_instance) Console.m_instance.AddString(message);
-            if (Chat.m_instance) Chat.m_instance.AddString(message);
-            Debug.Log(message);
-        }
-
-        void AddConsoleCommands()
-        {
-            ConsoleCommand trophyHuntCommand = new ConsoleCommand("trophyhunt", "Prints trophy hunt data", delegate (ConsoleEventArgs args)
-            {
-                if (!Game.instance)
-                {
-                    PrintToConsole("'trophyhunt' console command can only be used in-game.");
-                    return true;
-                }
-
-                PrintToConsole($"[Trophy Hunt Scoring]");
-
-                PrintToConsole($"Trophies:");
-                int score = Player_OnSpawned_Patch.CalculateTrophyPoints(true);
-                PrintToConsole($"Trophy Score Total: {score}");
-                int deathScore = Player_OnSpawned_Patch.CalculateDeathPenalty();
-                int logoutScore = Player_OnSpawned_Patch.CalculateLogoutPenalty();
-                PrintToConsole($"Penalties:");
-                PrintToConsole($"  Deaths: {__m_deaths} Score: {deathScore}");
-                PrintToConsole($"  Logouts: {__m_logoutCount} Score: {logoutScore}");
-
-                int biomeBonus = 0;
-                if (GetGameMode() == TrophyGameMode.TrophyRush)
-                {
-                    Player_OnSpawned_Patch.CalculateBiomeBonusScore(Player.m_localPlayer);
-                    PrintToConsole($"Biome Bonus Total: {biomeBonus}");
-                }
-                score += deathScore;
-                score += logoutScore;
-                score += biomeBonus;
-                PrintToConsole($"Total Score: {score}");
-
-                return true;
-            });
-
-            //ConsoleCommand dumpFoodCommand = new ConsoleCommand("dumpfood", "Dump all consumable items", delegate (ConsoleEventArgs args)
-            //{
-            //        // Get the ObjectDB instance
-            //    ObjectDB objectDB = ObjectDB.instance;
-
-            //    if (objectDB == null)
-            //    {
-            //        Debug.LogError("ObjectDB is not initialized yet.");
-            //        return;
-            //    }
-
-            //    // Iterate through all items in the ObjectDB
-            //    foreach (GameObject prefab in objectDB.m_items)
-            //    {
-            //        if (prefab == null) continue;
-
-            //        // Check if the prefab has an ItemDrop component
-            //        ItemDrop itemDrop = prefab.GetComponent<ItemDrop>();
-            //        if (itemDrop == null) continue;
-
-            //        // Check if the item is of type Consumable
-            //        if (itemDrop.m_itemData.m_shared.m_itemType == ItemDrop.ItemData.ItemType.Consumable)
-            //        {
-            //            string prefabName = prefab.name;
-            //            string itemName = itemDrop.m_itemData.m_shared.m_name;
-            //            string displayName = Localization.instance.Localize(itemName);
-            //            float health = itemDrop.m_itemData.m_shared.m_food;
-            //            float stamina = itemDrop.m_itemData.m_shared.m_foodStamina;
-            //            float eitr = itemDrop.m_itemData.m_shared.m_foodEitr;
-            //            float regen = itemDrop.m_itemData.m_shared.m_foodRegen;
-
-
-            //            Debug.Log($"new ConsumableData({QWC(prefabName),-28}{QWC(itemName),-33}{QWC(displayName),-34}{QWC("Biome.Meadows"),-16}{0.ToString()+",",-5}{health.ToString() + ",",-5}{stamina.ToString() + ",",-5}{eitr.ToString() + ",",-5}{regen.ToString() + ",",-5})");
-            //        }
-            //    }
-
-            //    string QWC(string s)
-            //    {
-            //        return "\"" + s + "\",";
-            //    }
-            //});
-
-            ConsoleCommand dumpRecipes = new ConsoleCommand("dumprecipes", "Dump all recipes", delegate (ConsoleEventArgs args)
-            {
-                // Get the ObjectDB instance
-                ObjectDB objectDB = ObjectDB.instance;
-
-                if (objectDB == null)
-                {
-                    Debug.LogError("ObjectDB is not initialized yet.");
-                    return;
-                }
-
-                // Iterate through all items in the ObjectDB
-                foreach (Recipe recipe in objectDB.m_recipes)
-                {
-                    if (recipe == null) continue;
-
-                    if (recipe.m_item != null)
-                    {
-                        CraftingStation station = recipe.m_craftingStation;
-                        string stationName = "n/a";
-                        if (station)
-                        {
-                            stationName = station.name;
-                        }
-                        int level = recipe.m_minStationLevel;
-
-                        Debug.LogWarning($"{recipe.name} {recipe.m_item.m_itemData.m_shared.m_itemType}: {stationName} {level}");
-                        foreach (Piece.Requirement req in recipe.m_resources)
-                        {
-                            Debug.LogWarning($"  req: {req.m_resItem.name} {req.m_amount}");
-                        }
-                    }
-                }
-            });
-
-            ConsoleCommand showPathCommand = new ConsoleCommand("showpath", "Show the path the player took", delegate (ConsoleEventArgs args)
-            {
-                if (!Game.instance)
-                {
-                    PrintToConsole("'showpath' console command can only be used in-game.");
-                }
-
-                ShowPlayerPath(!__m_pathAddedToMinimap);
-            });
-
-            /*
-            ConsoleCommand instaSmelt = new ConsoleCommand("instasmelt", "Toggle Insta-Smelt", delegate (ConsoleEventArgs args)
-            {
-                if (!Game.instance)
-                {
-                    return;
-                }
-
-                __m_instaSmelt = !__m_instaSmelt;
-
-                PrintToConsole($"Instasmelt: {__m_instaSmelt}");
-
-            });
-            */
-
-            ConsoleCommand ignoreLogoutsCommand = new ConsoleCommand("ignorelogouts", "Don't subtract points for logouts", delegate (ConsoleEventArgs args)
-            {
-                if (!Game.instance)
-                {
-                    PrintToConsole("'/ignorelogouts' can only be used in gameplay.");
-                    return;
-                }
-
-                __m_ignoreLogouts = !__m_ignoreLogouts;
-
-                __m_invalidForTournamentPlay = true;
-
-                if (__m_scoreTextElement != null)
-                {
-                    if (__m_ignoreLogouts)
-                    {
-                        TMPro.TextMeshProUGUI tmText = __m_scoreTextElement.GetComponent<TMPro.TextMeshProUGUI>();
-
-                        tmText.color = Color.green;
-                    }
-                }
-
-                if (__m_relogsTextElement != null)
-                {
-                    if (__m_ignoreLogouts)
-                    {
-                        TMPro.TextMeshProUGUI tmText = __m_relogsTextElement.GetComponent<TMPro.TextMeshProUGUI>();
-
-                        tmText.color = Color.gray;
-                    }
-                }
-            });
-
-
-            ConsoleCommand showAllTrophyStats = new ConsoleCommand("showalltrophystats", "Toggle tracking ALL enemy deaths and trophies with JUST tracking player kills and trophies", delegate (ConsoleEventArgs args)
-            {
-                if (!Game.instance)
-                {
-                    PrintToConsole("'/showalltrophystats' can only be used in gameplay.");
-                    return;
-                }
-
-                ToggleShowAllTrophyStats();
-
-                __m_invalidForTournamentPlay = true;
-
-                if (__m_scoreTextElement != null)
-                {
-                    if (__m_showAllTrophyStats)
-                    {
-                        TMPro.TextMeshProUGUI tmText = __m_scoreTextElement.GetComponent<TMPro.TextMeshProUGUI>();
-
-                        tmText.color = Color.green;
-                    }
-                }
-
-                Player_OnSpawned_Patch.InitializeSagaDrops();
-            });
-
-            ConsoleCommand toggleScoreBGCommand = new ConsoleCommand("togglescorebackground", "Toggle black background underneath the score", delegate (ConsoleEventArgs args)
-            {
-                if (!Game.instance)
-                {
-                    PrintToConsole("'togglescorebackground' console command can only be used in-game.");
-                }
-
-
-                RectTransform textTransform = __m_scoreBGElement.GetComponent<RectTransform>();
-
-                __m_scoreBGElement.SetActive(!__m_scoreBGElement.activeSelf);
-            });
-
-
-            ConsoleCommand scoreScaleCommand = new ConsoleCommand("scorescale", "Scale the score text sizes (1.0 is default)", delegate (ConsoleEventArgs args)
-            {
-                if (!Game.instance)
-                {
-                    PrintToConsole("'scorescale' console command can only be used in-game.");
-                }
-
-                // First argument is user trophy scale
-                if (args.Length > 1)
-                {
-                    float userScale = float.Parse(args[1]);
-                    if (userScale == 0) userScale = 1;
-                    __m_userTextScale = userScale;
-
-                }
-                else
-                {
-                    // no arguments means reset
-                    __m_userTextScale = 1.0f;
-                }
-
-                RectTransform textTransform = __m_scoreTextElement.GetComponent<RectTransform>();
-                textTransform.localScale = new Vector3(__m_userTextScale, __m_userTextScale, __m_userTextScale);
-
-                // Readjust the UI elements' trophy sizes
-                //Player player = Player.m_localPlayer;
-                //if (player != null)
-                //{
-                //    TextMeshProUGUI textElement = __m_scoreTextElement.GetComponent<TextMeshProUGUI>();
-                //    if (textElement != null)
-                //    {
-                //        textElement.fontSize = DEFAULT_SCORE_FONT_SIZE * __m_userScoreScale;
-                //    }
-                //}
-            });
-
-            ConsoleCommand trophyScaleCommand = new ConsoleCommand("trophyscale", "Scale the trophy sizes (1.0 is default)", delegate (ConsoleEventArgs args)
-            {
-                if (!Game.instance)
-                {
-                    PrintToConsole("'trophyscale' console command can only be used in-game.");
-                }
-
-                // First argument is user trophy scale
-                if (args.Length > 1)
-                {
-                    float userScale = float.Parse(args[1]);
-                    if (userScale == 0) userScale = 1;
-                    __m_userIconScale = userScale;
-
-                    // second argument is base trophy scale (for debugging)
-                    if (args.Length > 2)
-                    {
-                        float baseScale = float.Parse(args[2]);
-                        if (baseScale == 0) baseScale = 1;
-                        __m_baseTrophyScale = baseScale;
-                    }
-                }
-                else
-                {
-                    // no arguments means reset
-                    __m_userIconScale = 1.0f;
-                    __m_baseTrophyScale = 1.0f;
-                }
-
-                // Readjust the UI elements' trophy sizes
-                Player player = Player.m_localPlayer;
-                if (player != null)
-                {
-                    List<string> discoveredTrophies = player.GetTrophies();
-                    foreach (TrophyHuntData td in __m_trophyHuntData)
-                    {
-                        string trophyName = td.m_name;
-
-                        GameObject iconGameObject = __m_iconList.Find(gameObject => gameObject.name == trophyName);
-
-                        if (iconGameObject != null)
-                        {
-                            UnityEngine.UI.Image image = iconGameObject.GetComponent<UnityEngine.UI.Image>();
-                            if (image != null)
-                            {
-                                RectTransform imageRect = iconGameObject.GetComponent<RectTransform>();
-
-                                if (imageRect != null)
-                                {
-                                    imageRect.localScale = new Vector3(__m_baseTrophyScale, __m_baseTrophyScale, __m_baseTrophyScale) * __m_userIconScale;
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-
-            ConsoleCommand trophySpacingCommand = new ConsoleCommand("trophyspacing", "Space the trophies out (negative and positive numbers work)", delegate (ConsoleEventArgs args)
-            {
-                if (!Game.instance)
-                {
-                    PrintToConsole("'trophyspacing' console command can only be used in-game.");
-                    return;
-                }
-
-                if (Player.m_localPlayer == null)
-                {
-                    return;
-                }
-
-                Player player = Player.m_localPlayer;
-
-                // First argument is user trophy scale
-                if (args.Length > 1)
-                {
-                    float userSpacing = float.Parse(args[1]);
-                    if (userSpacing == 0) userSpacing = 1;
-                    __m_userTrophySpacing = userSpacing;
-                }
-                else
-                {
-                    // no arguments means reset
-                    __m_userTrophySpacing = 0.0f;
-                }
-
-                Transform healthPanelTransform = Hud.instance.transform.Find("hudroot/healthpanel");
-                if (healthPanelTransform == null)
-                {
-                    Debug.LogError("Health panel transform not found.");
-
-                    return;
-                }
-
-                Player_OnSpawned_Patch.DeleteTrophyIconElements(__m_iconList);
-                Player_OnSpawned_Patch.CreateTrophyIconElements(healthPanelTransform, __m_trophyHuntData, __m_iconList);
-                Player_OnSpawned_Patch.EnableTrophyHuntIcons(player);
-            });
-
-            ConsoleCommand showTrophies = new ConsoleCommand("showtrophies", "Toggle Trophy Rush Mode on and off", delegate (ConsoleEventArgs args)
-            {
-                if (!Game.instance)
-                {
-                    PrintToConsole("'/showtrophies' console command can only be used during gameplay.");
-                    return;
-                }
-
-                __m_showingTrophies = !__m_showingTrophies;
-
-                ShowTrophies(__m_showingTrophies);
-            });
-
-            ConsoleCommand showOnlyDeaths = new ConsoleCommand("showonlydeaths", "Hide all of the UI except for the death counter", delegate (ConsoleEventArgs args)
-            {
-                if (!Game.instance)
-                {
-                    PrintToConsole("'/showonlydeaths' console command can only be used during gameplay.");
-                    return;
-                }
-
-                __m_showOnlyDeaths = !__m_showOnlyDeaths;
-
-                ShowOnlyDeaths(__m_showOnlyDeaths);
-            });
-
-            ConsoleCommand elderPowerCutsAllTrees = new ConsoleCommand("elderpowercutsalltrees", "All trees are choppable while elder power active", delegate (ConsoleEventArgs args)
-            {
-                __m_elderPowerCutsAllTrees = !__m_elderPowerCutsAllTrees;
-                PrintToConsole($"elder power cuts all trees: {__m_elderPowerCutsAllTrees}");
-
-                if (__m_elderPowerCutsAllTrees)
-                {
-                    __m_invalidForTournamentPlay = true;
-
-                    if (__m_scoreTextElement != null)
-                    {
-                        TMPro.TextMeshProUGUI tmText = __m_scoreTextElement.GetComponent<TMPro.TextMeshProUGUI>();
-
-                        tmText.color = Color.green;
-                    }
-                }
-            });
-
-            ConsoleCommand timerCommand = new ConsoleCommand("timer", "Control the Trophy Hunt Timer display (start/stop/reset/show/hide)", delegate (ConsoleEventArgs args)
-            {
-                if (!Game.instance)
-                {
-                    PrintToConsole("'timer' console command can only be used in-game.");
-                }
-
-                if (__m_gameTimerTextElement == null)
-                {
-                    return;
-                }
-
-                // First argument is user trophy scale
-                if (args.Length > 1)
-                {
-                    string timerCommand = args[1].Trim();
-                    switch (timerCommand)
-                    {
-                        case "start": Player_OnSpawned_Patch.TimerStart(); break;
-                        case "stop": Player_OnSpawned_Patch.TimerStop(); break;
-                        case "reset": Player_OnSpawned_Patch.TimerReset(); break;
-                        case "show": __m_gameTimerVisible = true; break;
-                        case "hide": __m_gameTimerVisible = false; break;
-                        case "set": Player_OnSpawned_Patch.TimerSet(args[2]); break;
-                        case "toggle": Player_OnSpawned_Patch.TimerToggle(); break;
-                    }
-                }
-                else
-                {
-                    // no arguments means show/hide
-                }
-            });
-
-            //ConsoleCommand notACheater = new ConsoleCommand("iamnotacheater", "Reset PlayerStats to disable the cheated flag", delegate (ConsoleEventArgs args)
-            //{
-            //    if (!Game.instance)
-            //    {
-            //        PrintToConsole("'timer' console command can only be used in-game.");
-            //    }
-            //    Game.instance.m_playerProfile.m_usedCheats = false;
-            //    Game.instance.m_playerProfile.m_playerStats[PlayerStatType.Cheats] = 0;
-            //});
-
-            ConsoleCommand boatSpeed = new ConsoleCommand("boatspeedmultiplier", "How fast do you want to go?", delegate (ConsoleEventArgs args)
-            {
-                if (!Game.instance)
-                {
-                    PrintToConsole("'boatspeedmultiplier' console command can only be used in-game.");
-                }
-                __m_sagaSailingSpeedMultiplier = int.Parse(args[1]);
-                UpdateModUI(Player.m_localPlayer);
-            });
-
-        }
-        #endregion
-
         public static bool __m_showingTrophies = true;
         public static bool __m_showOnlyDeaths = false;
 
@@ -1326,8 +868,8 @@ namespace TrophyHuntMod
             // If the game's running, fix the tooltip UI
             if (Game.instance)
             {
-                Player_OnSpawned_Patch.DeleteTrophyTooltip();
-                Player_OnSpawned_Patch.CreateTrophyTooltip();
+                DeleteTrophyTooltip();
+                CreateTrophyTooltip();
             }
 
             if (__m_trophyHuntMainMenuText != null)
@@ -1465,11 +1007,11 @@ namespace TrophyHuntMod
                 if (GetGameMode() != TrophyGameMode.CasualSaga)
                 {
 
-                    text += $"<align=\"left\">      * Logout Penalty: <color=red>{Player_OnSpawned_Patch.GetLogoutPointCost()}</color>\n";
-                    text += $"<align=\"left\">      * Death Penalty: <color=red>{Player_OnSpawned_Patch.GetDeathPointCost()}</color>\n";
+                    text += $"<align=\"left\">      * Logout Penalty: <color=red>{GetLogoutPointCost()}</color>\n";
+                    text += $"<align=\"left\">      * Death Penalty: <color=red>{GetDeathPointCost()}</color>\n";
                     if (hasAdditionalSlashDiePenalty)
                     {
-                        text += $"<align=\"left\">      * '/die' Penalty: <color=red>{Player_OnSpawned_Patch.GetDeathPointCost() + Player_OnSpawned_Patch.GetSlashDiePointCost()}</color>\n";
+                        text += $"<align=\"left\">      * '/die' Penalty: <color=red>{GetDeathPointCost() + GetSlashDiePointCost()}</color>\n";
                     }
                 }
                 if (GetGameMode() == TrophyGameMode.CulinarySaga)
@@ -1579,8 +1121,8 @@ namespace TrophyHuntMod
                     GetGameMode() == TrophyGameMode.TrophyFiesta ||
                     GetGameMode() == TrophyGameMode.CulinarySaga ||
                     GetGameMode() == TrophyGameMode.CasualSaga ||
-                     Game.instance.m_playerProfile.m_usedCheats == true ||
-                     Game.instance.m_playerProfile.m_playerStats[PlayerStatType.Cheats] > 0)
+                     Game.instance.GetPlayerProfile().m_usedCheats == true ||
+                     Game.instance.GetPlayerProfile().m_playerStats[PlayerStatType.Cheats] > 0)
                 {
                     __m_invalidForTournamentPlay = true;
                 }
@@ -1613,7 +1155,7 @@ namespace TrophyHuntMod
 
                 string workingDirectory = Directory.GetCurrentDirectory();
                 Debug.Log($"Working Directory for Trophy Hunt Mod: {workingDirectory}");
-                Debug.Log($"Steam username: {SteamFriends.GetPersonaName()}");
+                //                Debug.Log($"Steam username: {SteamFriends.GetPersonaName()}");
 
                 // Store the current session data to help determine the player changing these
                 // things at the main menu
@@ -1647,1183 +1189,1212 @@ namespace TrophyHuntMod
 
                 if (GetGameMode() == TrophyGameMode.TrophyFiesta)
                 {
-                    TrophyFiesta.Initialize();
+                    //                    TrophyFiesta.Initialize();
                 }
 
                 __m_refreshLogsAndStandings = true;
 
                 PostStandingsRequest();
             }
-
-            public static void RaiseAllPlayerSkills(float skillLevel)
+        }
+        public static void RaiseAllPlayerSkills(float skillLevel)
+        {
+            // Access the player's skills
+            if (!Player.m_localPlayer)
             {
-                // Access the player's skills
-                if (!Player.m_localPlayer)
+                return;
+            }
+
+            Skills skills = Player.m_localPlayer.GetSkills();
+
+            // Loop through all the skills and set them to 10
+            foreach (var skill in skills.m_skillData)
+            {
+                if (skill.Value.m_level < skillLevel)
+                {
+                    //                        Debug.Log($"Setting skill {skill.Key} from level {skill.Value.m_level} to level {skillLevel}");
+
+                    skill.Value.m_level = skillLevel;
+                }
+            }
+        }
+
+        // Patch the Learn method in the Skills class to detect when a skill is added
+        [HarmonyPatch(typeof(Skills), nameof(Skills.GetSkill))]
+        public class Skills_Learn_Patch
+        {
+            static void Postfix(Skills.Skill __instance, SkillType skillType, ref Skill __result)
+            {
+                if (!IsSagaMode())
                 {
                     return;
                 }
 
-                Skills skills = Player.m_localPlayer.GetSkills();
-
-                // Loop through all the skills and set them to 10
-                foreach (var skill in skills.m_skillData)
+                // Get the specific skill that was just learned or updated^
+                if (__result.m_level < TROPHY_SAGA_BASE_SKILL_LEVEL)
                 {
-                    if (skill.Value.m_level < skillLevel)
-                    {
-                        //                        Debug.Log($"Setting skill {skill.Key} from level {skill.Value.m_level} to level {skillLevel}");
+                    __result.m_level = TROPHY_SAGA_BASE_SKILL_LEVEL;
+                    __result.m_accumulator = 0f;
 
-                        skill.Value.m_level = skillLevel;
-                    }
+                    //                        Debug.Log($"Setting skill {__result.m_info.m_skill.ToString()} to {TROPHY_SAGA_BASE_SKILL_LEVEL}");
+                }
+            }
+        }
+
+        public static void InitializeTrackedDataForNewPlayer()
+        {
+            // Saga mode tracking, drop only one megingjord per session-player
+            if (IsSagaMode())
+            {
+                InitializeSagaDrops();
+
+                RaiseAllPlayerSkills(TROPHY_SAGA_BASE_SKILL_LEVEL);
+
+                if (GetGameMode() == TrophyGameMode.CulinarySaga)
+                {
+                    __m_cookedFoods.Clear();
                 }
             }
 
-            // Patch the Learn method in the Skills class to detect when a skill is added
-            [HarmonyPatch(typeof(Skills), nameof(Skills.GetSkill))]
-            public class Skills_Learn_Patch
+            // In-Game Timer 
+            __m_gameTimerElapsedSeconds = 0;
+
+            //                __m_gameTimerVisible = false;
+            TimerStart();
+
+            // Reset logout count
+            __m_logoutCount = 0;
+
+            // Reset logout ignoring for new character
+            __m_ignoreLogouts = false;
+
+            // Track how many times player has done "/die" command
+            __m_slashDieCount = 0;
+
+            // New players never start with show-all-stats
+            __m_showAllTrophyStats = false;
+
+            // Reset whether we've shown enemy deaths
+            __m_invalidForTournamentPlay = false;
+
+            // Clear the map screen pin player location data
+            __m_playerPathData.Clear();
+
+            // Clear the dropped trophies tracking data
+            InitializeTrophyDropInfo();
+
+            if (__m_playerEventLog != null)
             {
-                static void Postfix(Skills.Skill __instance, SkillType skillType, ref Skill __result)
+                __m_playerEventLog.Clear();
+            }
+            else
+            {
+                __m_playerEventLog = new List<PlayerEventLog>();
+            }
+
+        }
+
+        public static int CalculateCookingPoints(bool displayToLog = false)
+        {
+            int score = 0;
+            foreach (ConsumableData cd in __m_cookedFoodData)
+            {
+                if (__m_cookedFoods.Contains(cd.m_prefabName))
                 {
-                    if (!IsSagaMode())
+                    if (displayToLog)
                     {
-                        return;
+                        PrintToConsole($"  {cd.m_prefabName}: Score: {cd.m_points} Biome: {cd.m_biome.ToString()}");
                     }
 
-                    // Get the specific skill that was just learned or updated^
-                    if (__result.m_level < TROPHY_SAGA_BASE_SKILL_LEVEL)
-                    {
-                        __result.m_level = TROPHY_SAGA_BASE_SKILL_LEVEL;
-                        __result.m_accumulator = 0f;
-
-                        //                        Debug.Log($"Setting skill {__result.m_info.m_skill.ToString()} to {TROPHY_SAGA_BASE_SKILL_LEVEL}");
-                    }
+                    score += cd.m_points;
                 }
             }
 
-            public static void InitializeTrackedDataForNewPlayer()
-            {
-                // Saga mode tracking, drop only one megingjord per session-player
-                if (IsSagaMode())
-                {
-                    InitializeSagaDrops();
+            return score;
+        }
 
-                    RaiseAllPlayerSkills(TROPHY_SAGA_BASE_SKILL_LEVEL);
+        public static int CalculateTrophyPoints(bool displayToLog = false)
+        {
+            int score = 0;
+            foreach (TrophyHuntData thData in __m_trophyHuntData)
+            {
+                if (__m_trophyCache.Contains(thData.m_name))
+                {
+                    if (displayToLog)
+                    {
+                        PrintToConsole($"  {thData.m_name}: Score: {thData.GetCurGameModeTrophyScoreValue()} Biome: {thData.m_biome.ToString()}");
+                    }
+                    score += thData.GetCurGameModeTrophyScoreValue();
+                }
+            }
+
+            return score;
+        }
+
+        public static int GetDeathPointCost()
+        {
+            int deathCost = TROPHY_HUNT_DEATH_PENALTY;
+
+            if (GetGameMode() == TrophyGameMode.TrophyRush)
+                deathCost = TROPHY_RUSH_DEATH_PENALTY;
+            else if (GetGameMode() == TrophyGameMode.TrophySaga)
+                deathCost = TROPHY_SAGA_DEATH_PENALTY;
+            else if (GetGameMode() == TrophyGameMode.CulinarySaga)
+                deathCost = CULINARY_SAGA_DEATH_PENALTY;
+
+            return deathCost;
+        }
+
+        public static int GetSlashDiePointCost()
+        {
+            int additionalCost = 0;
+
+            if (GetGameMode() == TrophyGameMode.TrophyRush)
+                additionalCost = TROPHY_RUSH_SLASHDIE_PENALTY;
+
+            return additionalCost;
+        }
+
+        public static int CalculateDeathPenalty()
+        {
+            int deathScore = __m_deaths * GetDeathPointCost();
+
+            deathScore += __m_slashDieCount * GetSlashDiePointCost();
+
+            return deathScore;
+        }
+
+        public static int GetLogoutPointCost()
+        {
+            int logoutCost = TROPHY_HUNT_LOGOUT_PENALTY;
+
+            if (GetGameMode() == TrophyGameMode.TrophyRush)
+                logoutCost = TROPHY_RUSH_LOGOUT_PENALTY;
+            else if (GetGameMode() == TrophyGameMode.TrophySaga)
+                logoutCost = TROPHY_SAGA_LOGOUT_PENALTY;
+            else if (GetGameMode() == TrophyGameMode.CulinarySaga)
+                logoutCost = CULINARY_SAGA_LOGOUT_PENALTY;
+
+            return logoutCost;
+        }
+
+        public static int CalculateLogoutPenalty()
+        {
+            int logoutScore = __m_logoutCount * GetLogoutPointCost();
+
+            return logoutScore;
+        }
+
+        static void BuildUIElements()
+        {
+            if (Hud.instance == null || Hud.instance.m_rootObject == null)
+            {
+                Debug.LogError("TrophyHuntMod: Hud.instance.m_rootObject is NOT valid");
+
+                return;
+            }
+
+            if (__m_deathsTextElement == null && __m_scoreTextElement == null)
+            {
+                Transform healthPanelTransform = Hud.instance.transform.Find("hudroot/healthpanel");
+                if (healthPanelTransform == null)
+                {
+                    Debug.LogError("Health panel transform not found.");
+
+                    return;
+                }
+
+                if (__m_scoreTextElement == null)
+                {
+                    __m_scoreTextElement = CreateScoreTextElement(healthPanelTransform);
+                }
+
+                __m_iconList = new List<GameObject>();
+
+                if (GetGameMode() != TrophyGameMode.CasualSaga)
+                {
+                    if (__m_deathsTextElement == null)
+                    {
+                        __m_deathsTextElement = CreateDeathsElement(healthPanelTransform);
+                    }
+
+                    if (__m_relogsTextElement == null)
+                    {
+                        __m_relogsTextElement = CreateRelogsElements(healthPanelTransform);
+                    }
+
+                    if (__m_gameTimerTextElement == null)
+                    {
+                        __m_gameTimerTextElement = CreateTimerElements(healthPanelTransform);
+                    }
 
                     if (GetGameMode() == TrophyGameMode.CulinarySaga)
                     {
-                        __m_cookedFoods.Clear();
+                        CreateCookingIconElements(healthPanelTransform, __m_cookedFoodData, __m_iconList);
+
+                        CreateTrophyTooltip();
+                    }
+                    else
+                    {
+                        CreateTrophyIconElements(healthPanelTransform, __m_trophyHuntData, __m_iconList);
+
+                        // Create the hover text object
+                        CreateTrophyTooltip();
+
+                        CreateLuckTooltip();
+
+                        CreateStandingsTooltip();
+
+                        __m_luckOMeterElement = CreateLuckOMeterElements(healthPanelTransform);
+
+                        __m_standingsElement = CreateStandingsElements(healthPanelTransform);
+                        __m_standingsElement.SetActive(false);
                     }
                 }
 
-                // In-Game Timer 
-                __m_gameTimerElapsedSeconds = 0;
-
-                //                __m_gameTimerVisible = false;
-                TimerStart();
-
-                // Reset logout count
-                __m_logoutCount = 0;
-
-                // Reset logout ignoring for new character
-                __m_ignoreLogouts = false;
-
-                // Track how many times player has done "/die" command
-                __m_slashDieCount = 0;
-
-                // New players never start with show-all-stats
-                __m_showAllTrophyStats = false;
-
-                // Reset whether we've shown enemy deaths
-                __m_invalidForTournamentPlay = false;
-
-                // Clear the map screen pin player location data
-                __m_playerPathData.Clear();
-
-                // Clear the dropped trophies tracking data
-                InitializeTrophyDropInfo();
-
-                if (__m_playerEventLog != null)
-                {
-                    __m_playerEventLog.Clear();
-                }
-                else
-                {
-                    __m_playerEventLog = new List<PlayerEventLog>();
-                }
-
+                CreateScoreTooltip();
             }
+        }
 
-            public static int CalculateCookingPoints(bool displayToLog = false)
+        static IEnumerator TimerUpdate()
+        {
+            while (__m_gameTimerActive)
             {
-                int score = 0;
-                foreach (ConsumableData cd in __m_cookedFoodData)
+                // Don't update seconds at main menu
+                if (Game.instance)
                 {
-                    if (__m_cookedFoods.Contains(cd.m_prefabName))
+                    if (__m_gameTimerTextElement != null)
                     {
-                        if (displayToLog)
+
+                        TMPro.TextMeshProUGUI tmText = __m_gameTimerTextElement.GetComponent<TMPro.TextMeshProUGUI>();
+
+                        long timerValue = __m_gameTimerElapsedSeconds;
+                        if (__m_gameTimerCountdown)
                         {
-                            PrintToConsole($"  {cd.m_prefabName}: Score: {cd.m_points} Biome: {cd.m_biome.ToString()}");
+                            timerValue = NUM_SECONDS_IN_FOUR_HOURS - timerValue;
+
                         }
+                        TimeSpan elapsed = TimeSpan.FromSeconds(timerValue);
 
-                        score += cd.m_points;
-                    }
-                }
-
-                return score;
-            }
-
-            public static int CalculateTrophyPoints(bool displayToLog = false)
-            {
-                int score = 0;
-                foreach (TrophyHuntData thData in __m_trophyHuntData)
-                {
-                    if (__m_trophyCache.Contains(thData.m_name))
-                    {
-                        if (displayToLog)
+                        if (__m_gameTimerVisible)
                         {
-                            PrintToConsole($"  {thData.m_name}: Score: {thData.GetCurGameModeTrophyScoreValue()} Biome: {thData.m_biome.ToString()}");
-                        }
-                        score += thData.GetCurGameModeTrophyScoreValue();
-                    }
-                }
+                            tmText.text = $"<mspace=0.5em>{elapsed.ToString()}</mspace>";
 
-                return score;
-            }
-
-            public static int GetDeathPointCost()
-            {
-                int deathCost = TROPHY_HUNT_DEATH_PENALTY;
-
-                if (GetGameMode() == TrophyGameMode.TrophyRush)
-                    deathCost = TROPHY_RUSH_DEATH_PENALTY;
-                else if (GetGameMode() == TrophyGameMode.TrophySaga)
-                    deathCost = TROPHY_SAGA_DEATH_PENALTY;
-                else if (GetGameMode() == TrophyGameMode.CulinarySaga)
-                    deathCost = CULINARY_SAGA_DEATH_PENALTY;
-
-                return deathCost;
-            }
-
-            public static int GetSlashDiePointCost()
-            {
-                int additionalCost = 0;
-
-                if (GetGameMode() == TrophyGameMode.TrophyRush)
-                    additionalCost = TROPHY_RUSH_SLASHDIE_PENALTY;
-
-                return additionalCost;
-            }
-
-            public static int CalculateDeathPenalty()
-            {
-                int deathScore = __m_deaths * GetDeathPointCost();
-
-                deathScore += __m_slashDieCount * GetSlashDiePointCost();
-
-                return deathScore;
-            }
-
-            public static int GetLogoutPointCost()
-            {
-                int logoutCost = TROPHY_HUNT_LOGOUT_PENALTY;
-
-                if (GetGameMode() == TrophyGameMode.TrophyRush)
-                    logoutCost = TROPHY_RUSH_LOGOUT_PENALTY;
-                else if (GetGameMode() == TrophyGameMode.TrophySaga)
-                    logoutCost = TROPHY_SAGA_LOGOUT_PENALTY;
-                else if (GetGameMode() == TrophyGameMode.CulinarySaga)
-                    logoutCost = CULINARY_SAGA_LOGOUT_PENALTY;
-
-                return logoutCost;
-            }
-
-            public static int CalculateLogoutPenalty()
-            {
-                int logoutScore = __m_logoutCount * GetLogoutPointCost();
-
-                return logoutScore;
-            }
-
-            static void BuildUIElements()
-            {
-                if (Hud.instance == null || Hud.instance.m_rootObject == null)
-                {
-                    Debug.LogError("TrophyHuntMod: Hud.instance.m_rootObject is NOT valid");
-
-                    return;
-                }
-
-                if (__m_deathsTextElement == null && __m_scoreTextElement == null)
-                {
-                    Transform healthPanelTransform = Hud.instance.transform.Find("hudroot/healthpanel");
-                    if (healthPanelTransform == null)
-                    {
-                        Debug.LogError("Health panel transform not found.");
-
-                        return;
-                    }
-
-                    if (__m_scoreTextElement == null)
-                    {
-                        __m_scoreTextElement = CreateScoreTextElement(healthPanelTransform);
-                    }
-
-                    __m_iconList = new List<GameObject>();
-
-                    if (GetGameMode() != TrophyGameMode.CasualSaga)
-                    {
-                        if (__m_deathsTextElement == null)
-                        {
-                            __m_deathsTextElement = CreateDeathsElement(healthPanelTransform);
-                        }
-
-                        if (__m_relogsTextElement == null)
-                        {
-                            __m_relogsTextElement = CreateRelogsElements(healthPanelTransform);
-                        }
-
-                        if (__m_gameTimerTextElement == null)
-                        {
-                            __m_gameTimerTextElement = CreateTimerElements(healthPanelTransform);
-                        }
-
-                        if (GetGameMode() == TrophyGameMode.CulinarySaga)
-                        {
-                            CreateCookingIconElements(healthPanelTransform, __m_cookedFoodData, __m_iconList);
-
-                            CreateTrophyTooltip();
-                        }
-                        else
-                        {
-                            CreateTrophyIconElements(healthPanelTransform, __m_trophyHuntData, __m_iconList);
-
-                            // Create the hover text object
-                            CreateTrophyTooltip();
-
-                            CreateLuckTooltip();
-
-                            CreateStandingsTooltip();
-
-                            __m_luckOMeterElement = CreateLuckOMeterElements(healthPanelTransform);
-
-                            __m_standingsElement = CreateStandingsElements(healthPanelTransform);
-                            __m_standingsElement.SetActive(false);
-                        }
-                    }
-
-                    CreateScoreTooltip();
-                }
-            }
-
-            static IEnumerator TimerUpdate()
-            {
-                while (__m_gameTimerActive)
-                {
-                    // Don't update seconds at main menu
-                    if (Game.instance)
-                    {
-                        if (__m_gameTimerTextElement != null)
-                        {
-
-                            TMPro.TextMeshProUGUI tmText = __m_gameTimerTextElement.GetComponent<TMPro.TextMeshProUGUI>();
-
-                            long timerValue = __m_gameTimerElapsedSeconds;
-                            if (__m_gameTimerCountdown)
+                            if (!__m_gameTimerCountdown)
                             {
-                                timerValue = NUM_SECONDS_IN_FOUR_HOURS - timerValue;
-
-                            }
-                            TimeSpan elapsed = TimeSpan.FromSeconds(timerValue);
-
-                            if (__m_gameTimerVisible)
-                            {
-                                tmText.text = $"<mspace=0.5em>{elapsed.ToString()}</mspace>";
-
-                                if (!__m_gameTimerCountdown)
-                                {
-                                    tmText.color = Color.yellow;
-                                    tmText.outlineColor = Color.black;
-                                }
-                                else
-                                {
-                                    tmText.color = new Color(1f, 0.6f, 0.6f);
-                                    tmText.outlineColor = Color.black;
-                                }
+                                tmText.color = Color.yellow;
+                                tmText.outlineColor = Color.black;
                             }
                             else
                             {
-                                tmText.text = "";
+                                tmText.color = new Color(1f, 0.6f, 0.6f);
+                                tmText.outlineColor = Color.black;
                             }
                         }
-
-                        if (__m_gameTimerElapsedSeconds % UPDATE_STANDINGS_INTERVAL == 0)
+                        else
                         {
-                            PostStandingsRequest();
-                        }
-
-                        __m_gameTimerElapsedSeconds++;
-                    }
-                    yield return new WaitForSeconds(1f);
-                }
-            }
-            static public void TimerStart()
-            {
-                if (!__m_gameTimerActive)
-                {
-                    __m_gameTimerActive = true;
-
-                    __m_trophyHuntMod.StartCoroutine(TimerUpdate());
-                }
-            }
-            static public void TimerStop()
-            {
-                __m_gameTimerActive = false;
-            }
-            static public void TimerReset()
-            {
-                __m_gameTimerElapsedSeconds = 0;
-            }
-            static public void TimerSet(string timeStr)
-            {
-                TimeSpan requestedTime = TimeSpan.Parse(timeStr);
-
-                __m_gameTimerElapsedSeconds = (long)requestedTime.TotalSeconds;
-            }
-
-            static public void TimerToggle()
-            {
-                __m_gameTimerCountdown = !__m_gameTimerCountdown;
-            }
-
-            static GameObject CreateTimerElements(Transform parentTransform)
-            {
-                GameObject timerElement = new GameObject("Timer");
-                timerElement.transform.SetParent(parentTransform);
-
-                RectTransform timerRectTransform = timerElement.AddComponent<RectTransform>();
-                timerRectTransform.sizeDelta = new Vector2(120, 25);
-                timerRectTransform.anchoredPosition = new Vector2(-45, 85);
-
-                timerRectTransform.localScale = new Vector3(__m_userTextScale, __m_userTextScale, __m_userTextScale);
-
-                TMPro.TextMeshProUGUI tmText = AddTextMeshProComponent(timerElement);
-
-                tmText.text = $"<mspace=0.5em>00:00:00</mspace>";// {__m_gameTimer}";
-                tmText.fontSize = 24;
-                tmText.color = Color.yellow;
-                tmText.alignment = TextAlignmentOptions.Center;
-                tmText.raycastTarget = false;
-                tmText.fontMaterial.EnableKeyword("OUTLINE_ON");
-                tmText.outlineColor = Color.black;
-                tmText.fontStyle = FontStyles.Bold;
-                tmText.outlineWidth = 0.125f; // Adjust the thickness
-
-                // HACK TEMP
-                // Text Element
-                //GameObject timerBGElement = new GameObject("Timer BG Element");
-                //timerBGElement.transform.SetParent(timerElement.transform);
-
-                //RectTransform bgRectTransform = timerBGElement.AddComponent<RectTransform>();
-                //bgRectTransform.sizeDelta = timerRectTransform.sizeDelta;
-                //bgRectTransform.anchoredPosition = new Vector2(0, 0);
-                //bgRectTransform.localScale = timerRectTransform.localScale;
-
-                //UnityEngine.UI.Image image = timerBGElement.AddComponent<UnityEngine.UI.Image>();
-                //image.color = new Color(0, 0, 0, 0.75f);
-
-                return timerElement;
-            }
-
-            static GameObject CreateRelogsElements(Transform parentTransform)
-            {
-                Sprite logSprite = GetTrophySprite("RoundLog");
-
-                __m_relogsIconElement = new GameObject("RelogsIcon");
-                __m_relogsIconElement.transform.SetParent(parentTransform);
-
-                RectTransform rectTransform = __m_relogsIconElement.AddComponent<RectTransform>();
-                rectTransform.sizeDelta = new Vector2(40, 40);
-                rectTransform.anchoredPosition = new Vector2(-70, -105);
-                rectTransform.localScale = new Vector3(__m_userIconScale, __m_userIconScale, __m_userIconScale);
-
-                UnityEngine.UI.Image image = __m_relogsIconElement.AddComponent<UnityEngine.UI.Image>();
-                image.sprite = logSprite;
-                image.color = Color.white;
-
-                // Text Element
-                GameObject relogsElement = new GameObject("RelogsElement");
-                relogsElement.transform.SetParent(parentTransform);
-
-                // Add RectTransform component for positioning
-                rectTransform = relogsElement.AddComponent<RectTransform>();
-                rectTransform.sizeDelta = new Vector2(60, 20); // Set size
-                rectTransform.anchoredPosition = new Vector2(-70, -105); // Set position
-                rectTransform.localScale = new Vector3(__m_userTextScale, __m_userTextScale, __m_userTextScale);
-
-                TMPro.TextMeshProUGUI tmText = AddTextMeshProComponent(relogsElement);
-
-                tmText.text = $"{__m_logoutCount}";
-                tmText.fontSize = 24;
-                tmText.color = Color.yellow;
-                tmText.alignment = TextAlignmentOptions.Center;
-                tmText.raycastTarget = false;
-                tmText.fontMaterial.EnableKeyword("OUTLINE_ON");
-                tmText.outlineColor = Color.black;
-                tmText.outlineWidth = 0.1f; // Adjust the thickness
-
-                if (__m_ignoreLogouts)
-                {
-                    tmText.color = Color.gray;
-                }
-
-                return relogsElement;
-            }
-
-            static GameObject CreateLuckOMeterElements(Transform parentTransform)
-            {
-                Sprite luckSprite = GetTrophySprite("HelmetMidsummerCrown");
-
-                GameObject luckElement = new GameObject("LuckImage");
-                luckElement.transform.SetParent(parentTransform);
-
-                RectTransform rectTransform = luckElement.AddComponent<RectTransform>();
-                rectTransform.sizeDelta = new Vector2(40, 40);
-                rectTransform.anchoredPosition = new Vector2(-70, -20);
-                rectTransform.localScale = new Vector3(__m_userIconScale, __m_userIconScale, __m_userIconScale);
-
-                UnityEngine.UI.Image image = luckElement.AddComponent<UnityEngine.UI.Image>();
-                image.sprite = luckSprite;
-                image.color = Color.white;
-                image.raycastTarget = true;
-
-                AddTooltipTriggersToLuckObject(luckElement);
-
-                return luckElement;
-            }
-
-            static GameObject CreateStandingsElements(Transform parentTransform)
-            {
-                Sprite standingsSprite = __m_trophySprite;
-
-                GameObject standingsElement = new GameObject("StandingsImage");
-                standingsElement.transform.SetParent(parentTransform);
-
-                RectTransform rectTransform = standingsElement.AddComponent<RectTransform>();
-                rectTransform.sizeDelta = new Vector2(40, 40);
-                rectTransform.anchoredPosition = new Vector2(-70, 20);
-                rectTransform.localScale = new Vector3(__m_userIconScale, __m_userIconScale, __m_userIconScale);
-
-                UnityEngine.UI.Image image = standingsElement.AddComponent<UnityEngine.UI.Image>();
-                image.sprite = standingsSprite;
-                image.color = Color.yellow;
-                image.raycastTarget = true;
-
-                AddTooltipTriggersToStandingsObject(standingsElement);
-
-                return standingsElement;
-            }
-
-            static GameObject CreateDeathsElement(Transform parentTransform)
-            {
-                // use the charred skull sprite for our Death count indicator in the UI
-                Sprite skullSprite = GetTrophySprite("Charredskull");
-
-                // Create the skullElement for deaths
-                GameObject skullElement = new GameObject("DeathsIcon");
-                skullElement.transform.SetParent(parentTransform);
-
-                // Add RectTransform component for positioning
-                RectTransform rectTransform = skullElement.AddComponent<RectTransform>();
-                rectTransform.sizeDelta = new Vector2(50, 50);
-                rectTransform.anchoredPosition = new Vector2(-70, -65); // Set position
-                rectTransform.localScale = new Vector3(__m_userIconScale, __m_userIconScale, __m_userIconScale);
-
-                // Add an Image component
-                UnityEngine.UI.Image image = skullElement.AddComponent<UnityEngine.UI.Image>();
-                image.sprite = skullSprite;
-                image.color = Color.white;
-                image.raycastTarget = false;
-
-                GameObject deathsTextElement = new GameObject("DeathsText");
-                deathsTextElement.transform.SetParent(parentTransform);
-
-                RectTransform deathsTextTransform = deathsTextElement.AddComponent<RectTransform>();
-                deathsTextTransform.sizeDelta = new Vector2(40, 40);
-                deathsTextTransform.anchoredPosition = rectTransform.anchoredPosition;
-                deathsTextTransform.localScale = new Vector3(__m_userTextScale, __m_userTextScale, __m_userTextScale);
-
-                TMPro.TextMeshProUGUI tmText = AddTextMeshProComponent(deathsTextElement);
-                tmText.text = $"{__m_deaths}";
-                tmText.fontSize = 24;
-                tmText.color = Color.yellow;
-                tmText.alignment = TextAlignmentOptions.Center;
-                tmText.raycastTarget = false;
-                tmText.fontMaterial.EnableKeyword("OUTLINE_ON");
-                tmText.outlineColor = Color.black;
-                tmText.outlineWidth = 0.1f; // Adjust the thickness
-
-                return deathsTextElement;
-            }
-
-            static GameObject CreateScoreTextElement(Transform parentTransform)
-            {
-                __m_scoreBGElement = new GameObject("ScoreBG");
-                __m_scoreBGElement.transform.SetParent(parentTransform);
-
-                Vector2 scorePos = new Vector2(-65, -140);
-                Vector2 scoreSize = new Vector2(70, 42);
-
-                RectTransform bgTransform = __m_scoreBGElement.AddComponent<RectTransform>();
-                Vector2 scorePosBg = new Vector2(-70, -143);
-                Vector2 scoreSizeBg = new Vector2(70, 42);
-                bgTransform.sizeDelta = scoreSizeBg;
-                bgTransform.anchoredPosition = scorePosBg;
-                bgTransform.localScale = new Vector3(__m_userTextScale, __m_userTextScale, __m_userTextScale);
-
-                __m_scoreBGElement.SetActive(false);
-
-                //// Add an Image component for the background
-                UnityEngine.UI.Image backgroundImage = __m_scoreBGElement.AddComponent<UnityEngine.UI.Image>();
-                backgroundImage.color = new Color(0, 0, 0, 1f); // Semi-transparent black background
-
-                // Create a new GameObject for the text
-                GameObject scoreTextElement = new GameObject("ScoreText");
-
-                // Set the parent to the HUD canvas
-                scoreTextElement.transform.SetParent(parentTransform);
-
-
-                // Add RectTransform component for positioning
-                RectTransform rectTransform = scoreTextElement.AddComponent<RectTransform>();
-                rectTransform.sizeDelta = scoreSize;
-                rectTransform.anchoredPosition = scorePos;
-                rectTransform.localScale = new Vector3(__m_userTextScale, __m_userTextScale, __m_userTextScale);
-
-                int scoreValue = 9999;
-
-                TMPro.TextMeshProUGUI tmText = AddTextMeshProComponent(scoreTextElement);
-
-                tmText.text = $"{scoreValue}";
-                tmText.fontSize = DEFAULT_SCORE_FONT_SIZE;
-                //                tmText.fontStyle = FontStyles.Bold;
-                tmText.color = Color.yellow;
-                tmText.alignment = TextAlignmentOptions.Center;
-                tmText.raycastTarget = true;
-                tmText.fontMaterial.EnableKeyword("OUTLINE_ON");
-                tmText.outlineColor = Color.black;
-                tmText.outlineWidth = 0.125f; // Adjust the thickness
-                                              //                tmText.enableAutoSizing = true;
-
-                AddTooltipTriggersToScoreObject(scoreTextElement);
-
-                if (!__m_onlyModRunning)
-                {
-                    tmText.color = Color.cyan;
-                }
-
-                if (__m_showAllTrophyStats || __m_invalidForTournamentPlay)
-                {
-                    tmText.color = Color.green;
-                }
-
-                return scoreTextElement;
-            }
-            static GameObject CreateTrophyIconElement(Transform parentTransform, Sprite iconSprite, string iconName, Biome iconBiome, int index)
-            {
-
-                int iconSize = 33;
-                int iconBorderSize = -1;
-                int xOffset = -20;
-                int yOffset = -140;
-
-                int biomeIndex = (int)iconBiome;
-                Color backgroundColor = __m_biomeColors[biomeIndex];
-
-                // Create a new GameObject for the icon
-                GameObject iconElement = new GameObject(iconName);
-                iconElement.transform.SetParent(parentTransform);
-
-                // Add RectTransform component for positioning Sprite
-                RectTransform iconRectTransform = iconElement.AddComponent<RectTransform>();
-                iconRectTransform.sizeDelta = new Vector2(iconSize, iconSize); // Set size
-                iconRectTransform.anchoredPosition = new Vector2(xOffset + index * (iconSize + iconBorderSize + __m_userTrophySpacing), yOffset); // Set position
-                iconRectTransform.localScale = new Vector3(__m_baseTrophyScale, __m_baseTrophyScale, __m_baseTrophyScale) * __m_userIconScale;
-
-                // Add an Image component for Sprite
-                UnityEngine.UI.Image iconImage = iconElement.AddComponent<UnityEngine.UI.Image>();
-                iconImage.sprite = iconSprite;
-                iconImage.color = new Color(0.0f, 0.2f, 0.1f, 0.95f);
-                iconImage.raycastTarget = true;
-
-                //                if (__m_trophyRushEnabled)
-                if (GetGameMode() == TrophyGameMode.TrophyRush)
-                {
-                    iconImage.color = new Color(0.5f, 0.0f, 0.0f);
-                }
-                else if (GetGameMode() == TrophyGameMode.TrophySaga)
-                {
-                    iconImage.color = new Color(0f, 0f, 0.5f);
-                }
-
-                AddTooltipTriggersToTrophyIcon(iconElement);
-
-                return iconElement;
-            }
-
-            public static void DeleteTrophyIconElements(List<GameObject> iconList)
-            {
-                foreach (GameObject trophyIconObject in iconList)
-                {
-                    GameObject.Destroy(trophyIconObject);
-                }
-
-                iconList.Clear();
-            }
-
-            public static void CreateTrophyIconElements(Transform parentTransform, TrophyHuntData[] trophies, List<GameObject> iconList)
-            {
-                foreach (TrophyHuntData trophy in trophies)
-                {
-                    Sprite trophySprite = GetTrophySprite(trophy.m_name);
-                    if (trophySprite == null)
-                    {
-                        //ACK
-                        Debug.LogError($"Unable to find trophy sprite for {trophy.m_name}");
-                        continue;
-                    }
-
-                    GameObject iconElement = CreateTrophyIconElement(parentTransform, trophySprite, trophy.m_name, trophy.m_biome, iconList.Count);
-                    iconElement.name = trophy.m_name;
-
-                    iconList.Add(iconElement);
-                }
-
-                if (GetGameMode() == TrophyGameMode.TrophyFiesta)
-                {
-                    __m_fiestaFlashing = true;
-                    __m_trophyHuntMod.StartCoroutine(FlashTrophyFiesta());
-                }
-            }
-
-            static Sprite GetTrophySprite(string trophyPrefabName)
-            {
-                // Ensure the ObjectDB is loaded
-                if (ObjectDB.instance == null)
-                {
-                    Debug.LogError("ObjectDB is not loaded.");
-                    return null;
-                }
-
-                // Find the prefab for the specified trophy
-                GameObject trophyPrefab = ObjectDB.instance.GetItemPrefab(trophyPrefabName);
-                if (trophyPrefab == null)
-                {
-                    Debug.LogError($"Trophy prefab '{trophyPrefabName}' not found.");
-                    return null;
-                }
-
-                // Extract the ItemDrop component and get the item's icon
-                ItemDrop itemDrop = trophyPrefab.GetComponent<ItemDrop>();
-                if (itemDrop == null)
-                {
-                    Debug.LogError($"ItemDrop component not found on prefab '{trophyPrefabName}'.");
-                    return null;
-                }
-
-                return itemDrop.m_itemData.m_shared.m_icons[0];
-            }
-
-            static void EnableTrophyHuntIcon(string trophyName)
-            {
-                // Find the UI element and bold it
-                if (__m_iconList == null)
-                {
-                    Debug.LogError("__m_iconList is null in EnableTrophyHuntIcon()");
-
-                    return;
-                }
-
-                GameObject iconGameObject = __m_iconList.Find(gameObject => gameObject.name == trophyName);
-
-                if (iconGameObject != null)
-                {
-                    UnityEngine.UI.Image image = iconGameObject.GetComponent<UnityEngine.UI.Image>();
-                    if (image != null)
-                    {
-                        image.color = Color.white;
-                    }
-                }
-                else
-                {
-                    Debug.LogError($"Unable to find {trophyName} in __m_iconList");
-                }
-            }
-            static GameObject CreateCookingIconElement(Transform parentTransform, Sprite iconSprite, string iconName, Biome iconBiome, int index)
-            {
-
-                int iconSize = 33;
-                int iconBorderSize = -1;
-                int xOffset = -20;
-                int yOffset = -140;
-
-                int biomeIndex = (int)iconBiome;
-                Color backgroundColor = __m_biomeColors[biomeIndex];
-
-                // Create a new GameObject for the icon
-                GameObject iconElement = new GameObject(iconName);
-                iconElement.transform.SetParent(parentTransform);
-
-                // Add RectTransform component for positioning Sprite
-                RectTransform iconRectTransform = iconElement.AddComponent<RectTransform>();
-                iconRectTransform.sizeDelta = new Vector2(iconSize, iconSize); // Set size
-                iconRectTransform.anchoredPosition = new Vector2(xOffset + index * (iconSize + iconBorderSize + __m_userTrophySpacing), yOffset); // Set position
-                iconRectTransform.localScale = new Vector3(__m_baseTrophyScale, __m_baseTrophyScale, __m_baseTrophyScale) * __m_userIconScale;
-
-                // Add an Image component for Sprite
-                UnityEngine.UI.Image iconImage = iconElement.AddComponent<UnityEngine.UI.Image>();
-                iconImage.sprite = iconSprite;
-                iconImage.color = new Color(0.2f, 0.2f, 0.7f, 0.7f);
-                iconImage.raycastTarget = true;
-
-                AddTooltipTriggersToTrophyIcon(iconElement);
-
-                return iconElement;
-            }
-
-            static void CreateCookingIconElements(Transform parentTransform, ConsumableData[] cookedFoodData, List<GameObject> iconList)
-            {
-                foreach (ConsumableData food in cookedFoodData)
-                {
-                    string foodPrefabName = food.m_prefabName;
-
-                    Sprite foodSprite = GetTrophySprite(foodPrefabName);
-                    if (foodSprite == null)
-                    {
-                        //ACK
-                        Debug.LogError($"Unable to find cooked food sprite for {foodPrefabName}");
-                        continue;
-                    }
-
-                    GameObject iconElement = CreateCookingIconElement(parentTransform, foodSprite, foodPrefabName, food.m_biome, iconList.Count);
-                    iconElement.name = foodPrefabName;
-
-                    iconList.Add(iconElement);
-                }
-            }
-            static int CalculateCookingScore(Player player)
-            {
-                int score = 0;
-                foreach (string foodName in __m_cookedFoods)
-                {
-                    ConsumableData cookedFoodData = Array.Find(__m_cookedFoodData, element => element.m_prefabName == foodName);
-
-                    if (cookedFoodData != null && cookedFoodData.m_prefabName == foodName)
-                    {
-                        // Add the value to our score
-                        score += cookedFoodData.m_points;
-                    }
-                }
-
-                return score;
-            }
-
-            static int CalculateTrophyScore(Player player)
-            {
-                int score = 0;
-                foreach (string trophyName in player.GetTrophies())
-                {
-                    TrophyHuntData trophyHuntData = Array.Find(__m_trophyHuntData, element => element.m_name == trophyName);
-
-                    if (trophyHuntData.m_name == trophyName)
-                    {
-                        // Add the value to our score
-                        score += trophyHuntData.GetCurGameModeTrophyScoreValue();
-                    }
-                }
-
-                return score;
-            }
-
-            static bool CalculateBiomeBonusStats(Biome biome, out int numCollected, out int numTotal, out int biomeScore)
-            {
-                BiomeBonus biomeBonus = Array.Find(__m_biomeBonuses, element => element.m_biome == biome);
-
-                // Throws an exception accessing biomeBonus if not initialized (not found)
-                try
-                {
-                    numCollected = 0;
-                    numTotal = biomeBonus.m_trophies.Count;
-                    biomeScore = biomeBonus.m_bonus;
-
-                    foreach (string trophyName in biomeBonus.m_trophies)
-                    {
-                        if (__m_trophyCache.Contains(trophyName))
-                        {
-                            numCollected++;
+                            tmText.text = "";
                         }
                     }
-                }
-                catch (Exception ex)
-                {
-                    numCollected = 0;
-                    numTotal = 0;
-                    biomeScore = 0;
 
-                    return false;
-                }
-
-                return true;
-            }
-
-            public static int CalculateBiomeBonusScore(Player player)
-            {
-                int bonusScore = 0;
-
-                foreach (BiomeBonus biomeBonus in __m_biomeBonuses)
-                {
-                    int numCollected = 0;
-                    int numTotal = 0;
-                    int biomeScore = 0;
-
-                    CalculateBiomeBonusStats(biomeBonus.m_biome, out numCollected, out numTotal, out biomeScore);
-
-                    if (numCollected == numTotal)
+                    if (__m_gameTimerElapsedSeconds % UPDATE_STANDINGS_INTERVAL == 0)
                     {
-                        bonusScore += biomeScore;
+                        PostStandingsRequest();
                     }
-                }
 
-                return bonusScore;
+                    __m_gameTimerElapsedSeconds++;
+                }
+                yield return new WaitForSeconds(1f);
+            }
+        }
+        static public void TimerStart()
+        {
+            if (!__m_gameTimerActive)
+            {
+                __m_gameTimerActive = true;
+
+                __m_trophyHuntMod.StartCoroutine(TimerUpdate());
+            }
+        }
+        static public void TimerStop()
+        {
+            __m_gameTimerActive = false;
+        }
+        static public void TimerReset()
+        {
+            __m_gameTimerElapsedSeconds = 0;
+        }
+        static public void TimerSet(string timeStr)
+        {
+            TimeSpan requestedTime = TimeSpan.Parse(timeStr);
+
+            __m_gameTimerElapsedSeconds = (long)requestedTime.TotalSeconds;
+        }
+
+        static public void TimerToggle()
+        {
+            __m_gameTimerCountdown = !__m_gameTimerCountdown;
+        }
+
+        static GameObject CreateTimerElements(Transform parentTransform)
+        {
+            GameObject timerElement = new GameObject("Timer");
+            timerElement.transform.SetParent(parentTransform);
+
+            RectTransform timerRectTransform = timerElement.AddComponent<RectTransform>();
+            timerRectTransform.sizeDelta = new Vector2(120, 25);
+            timerRectTransform.anchoredPosition = new Vector2(-45, 85);
+
+            timerRectTransform.localScale = new Vector3(__m_userTextScale, __m_userTextScale, __m_userTextScale);
+
+            TMPro.TextMeshProUGUI tmText = AddTextMeshProComponent(timerElement);
+
+            tmText.text = $"<mspace=0.5em>00:00:00</mspace>";// {__m_gameTimer}";
+            tmText.fontSize = 24;
+            tmText.color = Color.yellow;
+            tmText.alignment = TextAlignmentOptions.Center;
+            tmText.raycastTarget = false;
+            tmText.fontMaterial.EnableKeyword("OUTLINE_ON");
+            tmText.outlineColor = Color.black;
+            tmText.fontStyle = FontStyles.Bold;
+            tmText.outlineWidth = 0.125f; // Adjust the thickness
+
+            // HACK TEMP
+            // Text Element
+            //GameObject timerBGElement = new GameObject("Timer BG Element");
+            //timerBGElement.transform.SetParent(timerElement.transform);
+
+            //RectTransform bgRectTransform = timerBGElement.AddComponent<RectTransform>();
+            //bgRectTransform.sizeDelta = timerRectTransform.sizeDelta;
+            //bgRectTransform.anchoredPosition = new Vector2(0, 0);
+            //bgRectTransform.localScale = timerRectTransform.localScale;
+
+            //UnityEngine.UI.Image image = timerBGElement.AddComponent<UnityEngine.UI.Image>();
+            //image.color = new Color(0, 0, 0, 0.75f);
+
+            return timerElement;
+        }
+
+        static GameObject CreateRelogsElements(Transform parentTransform)
+        {
+            Sprite logSprite = GetTrophySprite("RoundLog");
+
+            __m_relogsIconElement = new GameObject("RelogsIcon");
+            __m_relogsIconElement.transform.SetParent(parentTransform);
+
+            RectTransform rectTransform = __m_relogsIconElement.AddComponent<RectTransform>();
+            rectTransform.sizeDelta = new Vector2(40, 40);
+            rectTransform.anchoredPosition = new Vector2(-70, -105);
+            rectTransform.localScale = new Vector3(__m_userIconScale, __m_userIconScale, __m_userIconScale);
+
+            UnityEngine.UI.Image image = __m_relogsIconElement.AddComponent<UnityEngine.UI.Image>();
+            image.sprite = logSprite;
+            image.color = Color.white;
+
+            // Text Element
+            GameObject relogsElement = new GameObject("RelogsElement");
+            relogsElement.transform.SetParent(parentTransform);
+
+            // Add RectTransform component for positioning
+            rectTransform = relogsElement.AddComponent<RectTransform>();
+            rectTransform.sizeDelta = new Vector2(60, 20); // Set size
+            rectTransform.anchoredPosition = new Vector2(-70, -105); // Set position
+            rectTransform.localScale = new Vector3(__m_userTextScale, __m_userTextScale, __m_userTextScale);
+
+            TMPro.TextMeshProUGUI tmText = AddTextMeshProComponent(relogsElement);
+
+            tmText.text = $"{__m_logoutCount}";
+            tmText.fontSize = 24;
+            tmText.color = Color.yellow;
+            tmText.alignment = TextAlignmentOptions.Center;
+            tmText.raycastTarget = false;
+            tmText.fontMaterial.EnableKeyword("OUTLINE_ON");
+            tmText.outlineColor = Color.black;
+            tmText.outlineWidth = 0.1f; // Adjust the thickness
+
+            if (__m_ignoreLogouts)
+            {
+                tmText.color = Color.gray;
             }
 
-            // Returns TRUE if the trophy completes the set for a biome and adds that biome to the list of completed ones
-            public static bool UpdateBiomeBonusTrophies(string trophyName)
+            return relogsElement;
+        }
+
+        static GameObject CreateLuckOMeterElements(Transform parentTransform)
+        {
+            Sprite luckSprite = GetTrophySprite("HelmetMidsummerCrown");
+
+            GameObject luckElement = new GameObject("LuckImage");
+            luckElement.transform.SetParent(parentTransform);
+
+            RectTransform rectTransform = luckElement.AddComponent<RectTransform>();
+            rectTransform.sizeDelta = new Vector2(40, 40);
+            rectTransform.anchoredPosition = new Vector2(-70, -20);
+            rectTransform.localScale = new Vector3(__m_userIconScale, __m_userIconScale, __m_userIconScale);
+
+            UnityEngine.UI.Image image = luckElement.AddComponent<UnityEngine.UI.Image>();
+            image.sprite = luckSprite;
+            image.color = Color.white;
+            image.raycastTarget = true;
+
+            AddTooltipTriggersToLuckObject(luckElement);
+
+            return luckElement;
+        }
+
+        static GameObject CreateStandingsElements(Transform parentTransform)
+        {
+            Sprite standingsSprite = __m_trophySprite;
+
+            GameObject standingsElement = new GameObject("StandingsImage");
+            standingsElement.transform.SetParent(parentTransform);
+
+            RectTransform rectTransform = standingsElement.AddComponent<RectTransform>();
+            rectTransform.sizeDelta = new Vector2(40, 40);
+            rectTransform.anchoredPosition = new Vector2(-70, 20);
+            rectTransform.localScale = new Vector3(__m_userIconScale, __m_userIconScale, __m_userIconScale);
+
+            UnityEngine.UI.Image image = standingsElement.AddComponent<UnityEngine.UI.Image>();
+            image.sprite = standingsSprite;
+            image.color = Color.yellow;
+            image.raycastTarget = true;
+
+            AddTooltipTriggersToStandingsObject(standingsElement);
+
+            return standingsElement;
+        }
+
+        static GameObject CreateDeathsElement(Transform parentTransform)
+        {
+            // use the charred skull sprite for our Death count indicator in the UI
+            Sprite skullSprite = GetTrophySprite("Charredskull");
+
+            // Create the skullElement for deaths
+            GameObject skullElement = new GameObject("DeathsIcon");
+            skullElement.transform.SetParent(parentTransform);
+
+            // Add RectTransform component for positioning
+            RectTransform rectTransform = skullElement.AddComponent<RectTransform>();
+            rectTransform.sizeDelta = new Vector2(50, 50);
+            rectTransform.anchoredPosition = new Vector2(-70, -65); // Set position
+            rectTransform.localScale = new Vector3(__m_userIconScale, __m_userIconScale, __m_userIconScale);
+
+            // Add an Image component
+            UnityEngine.UI.Image image = skullElement.AddComponent<UnityEngine.UI.Image>();
+            image.sprite = skullSprite;
+            image.color = Color.white;
+            image.raycastTarget = false;
+
+            GameObject deathsTextElement = new GameObject("DeathsText");
+            deathsTextElement.transform.SetParent(parentTransform);
+
+            RectTransform deathsTextTransform = deathsTextElement.AddComponent<RectTransform>();
+            deathsTextTransform.sizeDelta = new Vector2(40, 40);
+            deathsTextTransform.anchoredPosition = rectTransform.anchoredPosition;
+            deathsTextTransform.localScale = new Vector3(__m_userTextScale, __m_userTextScale, __m_userTextScale);
+
+            TMPro.TextMeshProUGUI tmText = AddTextMeshProComponent(deathsTextElement);
+            tmText.text = $"{__m_deaths}";
+            tmText.fontSize = 24;
+            tmText.color = Color.yellow;
+            tmText.alignment = TextAlignmentOptions.Center;
+            tmText.raycastTarget = false;
+            tmText.fontMaterial.EnableKeyword("OUTLINE_ON");
+            tmText.outlineColor = Color.black;
+            tmText.outlineWidth = 0.1f; // Adjust the thickness
+
+            return deathsTextElement;
+        }
+
+        static GameObject CreateScoreTextElement(Transform parentTransform)
+        {
+            __m_scoreBGElement = new GameObject("ScoreBG");
+            __m_scoreBGElement.transform.SetParent(parentTransform);
+
+            Vector2 scorePos = new Vector2(-65, -140);
+            Vector2 scoreSize = new Vector2(70, 42);
+
+            RectTransform bgTransform = __m_scoreBGElement.AddComponent<RectTransform>();
+            Vector2 scorePosBg = new Vector2(-70, -143);
+            Vector2 scoreSizeBg = new Vector2(70, 42);
+            bgTransform.sizeDelta = scoreSizeBg;
+            bgTransform.anchoredPosition = scorePosBg;
+            bgTransform.localScale = new Vector3(__m_userTextScale, __m_userTextScale, __m_userTextScale);
+
+            __m_scoreBGElement.SetActive(false);
+
+            //// Add an Image component for the background
+            UnityEngine.UI.Image backgroundImage = __m_scoreBGElement.AddComponent<UnityEngine.UI.Image>();
+            backgroundImage.color = new Color(0, 0, 0, 1f); // Semi-transparent black background
+
+            // Create a new GameObject for the text
+            GameObject scoreTextElement = new GameObject("ScoreText");
+
+            // Set the parent to the HUD canvas
+            scoreTextElement.transform.SetParent(parentTransform);
+
+
+            // Add RectTransform component for positioning
+            RectTransform rectTransform = scoreTextElement.AddComponent<RectTransform>();
+            rectTransform.sizeDelta = scoreSize;
+            rectTransform.anchoredPosition = scorePos;
+            rectTransform.localScale = new Vector3(__m_userTextScale, __m_userTextScale, __m_userTextScale);
+
+            int scoreValue = 9999;
+
+            TMPro.TextMeshProUGUI tmText = AddTextMeshProComponent(scoreTextElement);
+
+            tmText.text = $"{scoreValue}";
+            tmText.fontSize = DEFAULT_SCORE_FONT_SIZE;
+            //                tmText.fontStyle = FontStyles.Bold;
+            tmText.color = Color.yellow;
+            tmText.alignment = TextAlignmentOptions.Center;
+            tmText.raycastTarget = true;
+            tmText.fontMaterial.EnableKeyword("OUTLINE_ON");
+            tmText.outlineColor = Color.black;
+            tmText.outlineWidth = 0.125f; // Adjust the thickness
+                                          //                tmText.enableAutoSizing = true;
+
+            AddTooltipTriggersToScoreObject(scoreTextElement);
+
+            if (!__m_onlyModRunning)
+            {
+                tmText.color = Color.cyan;
+            }
+
+            if (__m_showAllTrophyStats || __m_invalidForTournamentPlay)
+            {
+                tmText.color = Color.green;
+            }
+
+            return scoreTextElement;
+        }
+        static GameObject CreateTrophyIconElement(Transform parentTransform, Sprite iconSprite, string iconName, Biome iconBiome, int index)
+        {
+
+            int iconSize = 33;
+            int iconBorderSize = -1;
+            int xOffset = -20;
+            int yOffset = -140;
+
+            int biomeIndex = (int)iconBiome;
+            Color backgroundColor = __m_biomeColors[biomeIndex];
+
+            // Create a new GameObject for the icon
+            GameObject iconElement = new GameObject(iconName);
+            iconElement.transform.SetParent(parentTransform);
+
+            // Add RectTransform component for positioning Sprite
+            RectTransform iconRectTransform = iconElement.AddComponent<RectTransform>();
+            iconRectTransform.sizeDelta = new Vector2(iconSize, iconSize); // Set size
+            iconRectTransform.anchoredPosition = new Vector2(xOffset + index * (iconSize + iconBorderSize + __m_userTrophySpacing), yOffset); // Set position
+            iconRectTransform.localScale = new Vector3(__m_baseTrophyScale, __m_baseTrophyScale, __m_baseTrophyScale) * __m_userIconScale;
+
+            // Add an Image component for Sprite
+            UnityEngine.UI.Image iconImage = iconElement.AddComponent<UnityEngine.UI.Image>();
+            iconImage.sprite = iconSprite;
+            iconImage.color = new Color(0.0f, 0.2f, 0.1f, 0.95f);
+            iconImage.raycastTarget = true;
+
+            //                if (__m_trophyRushEnabled)
+            if (GetGameMode() == TrophyGameMode.TrophyRush)
+            {
+                iconImage.color = new Color(0.5f, 0.0f, 0.0f);
+            }
+            else if (GetGameMode() == TrophyGameMode.TrophySaga)
+            {
+                iconImage.color = new Color(0f, 0f, 0.5f);
+            }
+
+            AddTooltipTriggersToTrophyIcon(iconElement);
+
+            return iconElement;
+        }
+
+        public static void DeleteTrophyIconElements(List<GameObject> iconList)
+        {
+            foreach (GameObject trophyIconObject in iconList)
+            {
+                GameObject.Destroy(trophyIconObject);
+            }
+
+            iconList.Clear();
+        }
+
+        public static void CreateTrophyIconElements(Transform parentTransform, TrophyHuntData[] trophies, List<GameObject> iconList)
+        {
+            foreach (TrophyHuntData trophy in trophies)
+            {
+                Sprite trophySprite = GetTrophySprite(trophy.m_name);
+                if (trophySprite == null)
+                {
+                    //ACK
+                    Debug.LogError($"Unable to find trophy sprite for {trophy.m_name}");
+                    continue;
+                }
+
+                GameObject iconElement = CreateTrophyIconElement(parentTransform, trophySprite, trophy.m_name, trophy.m_biome, iconList.Count);
+                iconElement.name = trophy.m_name;
+
+                iconList.Add(iconElement);
+            }
+
+            if (GetGameMode() == TrophyGameMode.TrophyFiesta)
+            {
+                __m_fiestaFlashing = true;
+                __m_trophyHuntMod.StartCoroutine(FlashTrophyFiesta());
+            }
+        }
+
+        static Sprite GetTrophySprite(string trophyPrefabName)
+        {
+            // Ensure the ObjectDB is loaded
+            if (ObjectDB.instance == null)
+            {
+                Debug.LogError("ObjectDB is not loaded.");
+                return null;
+            }
+
+            // Find the prefab for the specified trophy
+            GameObject trophyPrefab = ObjectDB.instance.GetItemPrefab(trophyPrefabName);
+            if (trophyPrefab == null)
+            {
+                Debug.LogError($"Trophy prefab '{trophyPrefabName}' not found.");
+                return null;
+            }
+
+            // Extract the ItemDrop component and get the item's icon
+            ItemDrop itemDrop = trophyPrefab.GetComponent<ItemDrop>();
+            if (itemDrop == null)
+            {
+                Debug.LogError($"ItemDrop component not found on prefab '{trophyPrefabName}'.");
+                return null;
+            }
+
+            return itemDrop.m_itemData.m_shared.m_icons[0];
+        }
+
+        static void EnableTrophyHuntIcon(string trophyName)
+        {
+            // Find the UI element and bold it
+            if (__m_iconList == null)
+            {
+                Debug.LogError("__m_iconList is null in EnableTrophyHuntIcon()");
+
+                return;
+            }
+
+            GameObject iconGameObject = __m_iconList.Find(gameObject => gameObject.name == trophyName);
+
+            if (iconGameObject != null)
+            {
+                UnityEngine.UI.Image image = iconGameObject.GetComponent<UnityEngine.UI.Image>();
+                if (image != null)
+                {
+                    image.color = Color.white;
+                }
+            }
+            else
+            {
+                Debug.LogError($"Unable to find {trophyName} in __m_iconList");
+            }
+        }
+        static GameObject CreateCookingIconElement(Transform parentTransform, Sprite iconSprite, string iconName, Biome iconBiome, int index)
+        {
+
+            int iconSize = 33;
+            int iconBorderSize = -1;
+            int xOffset = -20;
+            int yOffset = -140;
+
+            int biomeIndex = (int)iconBiome;
+            Color backgroundColor = __m_biomeColors[biomeIndex];
+
+            // Create a new GameObject for the icon
+            GameObject iconElement = new GameObject(iconName);
+            iconElement.transform.SetParent(parentTransform);
+
+            // Add RectTransform component for positioning Sprite
+            RectTransform iconRectTransform = iconElement.AddComponent<RectTransform>();
+            iconRectTransform.sizeDelta = new Vector2(iconSize, iconSize); // Set size
+            iconRectTransform.anchoredPosition = new Vector2(xOffset + index * (iconSize + iconBorderSize + __m_userTrophySpacing), yOffset); // Set position
+            iconRectTransform.localScale = new Vector3(__m_baseTrophyScale, __m_baseTrophyScale, __m_baseTrophyScale) * __m_userIconScale;
+
+            // Add an Image component for Sprite
+            UnityEngine.UI.Image iconImage = iconElement.AddComponent<UnityEngine.UI.Image>();
+            iconImage.sprite = iconSprite;
+            iconImage.color = new Color(0.2f, 0.2f, 0.7f, 0.7f);
+            iconImage.raycastTarget = true;
+
+            AddTooltipTriggersToTrophyIcon(iconElement);
+
+            return iconElement;
+        }
+
+        static void CreateCookingIconElements(Transform parentTransform, ConsumableData[] cookedFoodData, List<GameObject> iconList)
+        {
+            foreach (ConsumableData food in cookedFoodData)
+            {
+                string foodPrefabName = food.m_prefabName;
+
+                Sprite foodSprite = GetTrophySprite(foodPrefabName);
+                if (foodSprite == null)
+                {
+                    //ACK
+                    Debug.LogError($"Unable to find cooked food sprite for {foodPrefabName}");
+                    continue;
+                }
+
+                GameObject iconElement = CreateCookingIconElement(parentTransform, foodSprite, foodPrefabName, food.m_biome, iconList.Count);
+                iconElement.name = foodPrefabName;
+
+                iconList.Add(iconElement);
+            }
+        }
+        static int CalculateCookingScore(Player player)
+        {
+            int score = 0;
+            foreach (string foodName in __m_cookedFoods)
+            {
+                ConsumableData cookedFoodData = Array.Find(__m_cookedFoodData, element => element.m_prefabName == foodName);
+
+                if (cookedFoodData != null && cookedFoodData.m_prefabName == foodName)
+                {
+                    // Add the value to our score
+                    score += cookedFoodData.m_points;
+                }
+            }
+
+            return score;
+        }
+
+        static int CalculateTrophyScore(Player player)
+        {
+            int score = 0;
+            foreach (string trophyName in player.GetTrophies())
             {
                 TrophyHuntData trophyHuntData = Array.Find(__m_trophyHuntData, element => element.m_name == trophyName);
 
+                if (trophyHuntData.m_name == trophyName)
+                {
+                    // Add the value to our score
+                    score += trophyHuntData.GetCurGameModeTrophyScoreValue();
+                }
+            }
+
+            return score;
+        }
+
+        static bool CalculateBiomeBonusStats(Biome biome, out int numCollected, out int numTotal, out int biomeScore)
+        {
+            BiomeBonus biomeBonus = Array.Find(__m_biomeBonuses, element => element.m_biome == biome);
+
+            // Throws an exception accessing biomeBonus if not initialized (not found)
+            try
+            {
+                numCollected = 0;
+                numTotal = biomeBonus.m_trophies.Count;
+                biomeScore = biomeBonus.m_bonus;
+
+                foreach (string trophyName in biomeBonus.m_trophies)
+                {
+                    if (__m_trophyCache.Contains(trophyName))
+                    {
+                        numCollected++;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                numCollected = 0;
+                numTotal = 0;
+                biomeScore = 0;
+
+                return false;
+            }
+
+            return true;
+        }
+
+        public static int CalculateBiomeBonusScore(Player player)
+        {
+            int bonusScore = 0;
+
+            foreach (BiomeBonus biomeBonus in __m_biomeBonuses)
+            {
                 int numCollected = 0;
                 int numTotal = 0;
                 int biomeScore = 0;
 
-                if (!CalculateBiomeBonusStats(trophyHuntData.m_biome, out numCollected, out numTotal, out biomeScore))
+                CalculateBiomeBonusStats(biomeBonus.m_biome, out numCollected, out numTotal, out biomeScore);
+
+                if (numCollected == numTotal)
                 {
-                    return false;
+                    bonusScore += biomeScore;
                 }
+            }
 
-                if (numCollected == numTotal && !__m_completedBiomeBonuses.Contains(trophyHuntData.m_biome))
-                {
-                    PrintToConsole($"Biome Completed! {trophyHuntData.m_biome.ToString()}");
+            return bonusScore;
+        }
 
-                    __m_completedBiomeBonuses.Add(trophyHuntData.m_biome);
+        // Returns TRUE if the trophy completes the set for a biome and adds that biome to the list of completed ones
+        public static bool UpdateBiomeBonusTrophies(string trophyName)
+        {
+            TrophyHuntData trophyHuntData = Array.Find(__m_trophyHuntData, element => element.m_name == trophyName);
 
-                    return true;
-                }
+            int numCollected = 0;
+            int numTotal = 0;
+            int biomeScore = 0;
 
+            if (!CalculateBiomeBonusStats(trophyHuntData.m_biome, out numCollected, out numTotal, out biomeScore))
+            {
                 return false;
             }
-            public static void EnableTrophyHuntIcons(Player player)
+
+            if (numCollected == numTotal && !__m_completedBiomeBonuses.Contains(trophyHuntData.m_biome))
             {
-                // Enable found trophies
-                foreach (string trophyName in player.GetTrophies())
-                {
-                    EnableTrophyHuntIcon(trophyName);
-                }
+                PrintToConsole($"Biome Completed! {trophyHuntData.m_biome.ToString()}");
+
+                __m_completedBiomeBonuses.Add(trophyHuntData.m_biome);
+
+                return true;
             }
 
-            public static void EnableBiomes(Player player)
+            return false;
+        }
+        public static void EnableTrophyHuntIcons(Player player)
+        {
+            // Enable found trophies
+            foreach (string trophyName in player.GetTrophies())
             {
-                // Enable found trophies
-                foreach (string trophyName in player.GetTrophies())
-                {
-                    EnableTrophyHuntIcon(trophyName);
-                }
+                EnableTrophyHuntIcon(trophyName);
+            }
+        }
+
+        public static void EnableBiomes(Player player)
+        {
+            // Enable found trophies
+            foreach (string trophyName in player.GetTrophies())
+            {
+                EnableTrophyHuntIcon(trophyName);
+            }
+        }
+
+        public static void EnableCookingIcons(Player player)
+        {
+            foreach (string foodName in __m_cookedFoods)
+            {
+                EnableTrophyHuntIcon(foodName);
+            }
+        }
+
+        public static void UpdateModUI(Player player)
+        {
+            // If there's no Hud yet, don't do anything here
+            if (Hud.instance == null)
+            {
+                Debug.LogError("Hud.instance is null");
+                return;
             }
 
-            public static void EnableCookingIcons(Player player)
+            if (Hud.instance.m_rootObject == null)
             {
-                foreach (string foodName in __m_cookedFoods)
-                {
-                    EnableTrophyHuntIcon(foodName);
-                }
+                Debug.LogError("Hud.instance.m_rootObject is null");
+                return;
             }
 
-            public static void UpdateModUI(Player player)
+            // If there's no player yet, or no trophy list, don't do anything here
+            if (player == null)
             {
-                // If there's no Hud yet, don't do anything here
-                if (Hud.instance == null)
+                Debug.LogError("Player.m_localPlayer is null");
+                return;
+            }
+
+            if (player.m_trophies == null)
+            {
+                Debug.LogError("Player.m_localPlayer.m_trophies is null");
+                return;
+            }
+
+            int score = 0;
+            if (GetGameMode() == TrophyGameMode.CulinarySaga)
+            {
+                EnableCookingIcons(player);
+
+                score = CalculateCookingScore(player);
+            }
+            else if (GetGameMode() != TrophyGameMode.CasualSaga)
+            {
+                EnableTrophyHuntIcons(player);
+
+                EnableBiomes(player);
+
+                score = CalculateTrophyScore(player);
+            }
+
+            // Update the deaths text and subtract deaths from score
+            //
+            PlayerProfile profile = Game.instance.GetPlayerProfile();
+            if (profile != null)
+            {
+                PlayerProfile.PlayerStats stats = profile.m_playerStats;
+                if (stats != null)
                 {
-                    Debug.LogError("Hud.instance is null");
-                    return;
-                }
+                    __m_deaths = (int)stats[PlayerStatType.Deaths];
 
-                if (Hud.instance.m_rootObject == null)
-                {
-                    Debug.LogError("Hud.instance.m_rootObject is null");
-                    return;
-                }
+                    //                        Debug.LogWarning($"Subtracting score for {__m_deaths} deaths.");
 
-                // If there's no player yet, or no trophy list, don't do anything here
-                if (player == null)
-                {
-                    Debug.LogError("Player.m_localPlayer is null");
-                    return;
-                }
+                    score += CalculateDeathPenalty();
 
-                if (player.m_trophies == null)
-                {
-                    Debug.LogError("Player.m_localPlayer.m_trophies is null");
-                    return;
-                }
-
-                int score = 0;
-                if (GetGameMode() == TrophyGameMode.CulinarySaga)
-                {
-                    EnableCookingIcons(player);
-
-                    score = CalculateCookingScore(player);
-                }
-                else if (GetGameMode() != TrophyGameMode.CasualSaga)
-                {
-                    EnableTrophyHuntIcons(player);
-
-                    EnableBiomes(player);
-
-                    score = CalculateTrophyScore(player);
-                }
-
-                // Update the deaths text and subtract deaths from score
-                //
-                PlayerProfile profile = Game.instance.GetPlayerProfile();
-                if (profile != null)
-                {
-                    PlayerProfile.PlayerStats stats = profile.m_playerStats;
-                    if (stats != null)
+                    if (__m_deathsTextElement)
                     {
-                        __m_deaths = (int)stats[PlayerStatType.Deaths];
-
-                        //                        Debug.LogWarning($"Subtracting score for {__m_deaths} deaths.");
-
-                        score += CalculateDeathPenalty();
-
-                        if (__m_deathsTextElement)
+                        // Update the UI element
+                        TMPro.TextMeshProUGUI deathsText = __m_deathsTextElement.GetComponent<TMPro.TextMeshProUGUI>();
+                        if (deathsText != null)
                         {
-                            // Update the UI element
-                            TMPro.TextMeshProUGUI deathsText = __m_deathsTextElement.GetComponent<TMPro.TextMeshProUGUI>();
-                            if (deathsText != null)
-                            {
-                                deathsText.SetText(__m_deaths.ToString());
-                            }
+                            deathsText.SetText(__m_deaths.ToString());
                         }
                     }
                 }
+            }
 
-                // Subtract points for logouts
-                //                Debug.LogWarning($"Subtracting score for {__m_logoutCount} logouts.");
-                if (!__m_ignoreLogouts)
+            // Subtract points for logouts
+            //                Debug.LogWarning($"Subtracting score for {__m_logoutCount} logouts.");
+            if (!__m_ignoreLogouts)
+            {
+                score += CalculateLogoutPenalty();
+            }
+
+            if (GetGameMode() == TrophyGameMode.TrophyRush)
+            {
+                score += CalculateBiomeBonusScore(player);
+            }
+
+            // Update the Score string
+            if (__m_scoreTextElement)
+            {
+                if (GetGameMode() == TrophyGameMode.CasualSaga)
                 {
-                    score += CalculateLogoutPenalty();
+                    __m_scoreTextElement.GetComponent<TMPro.TextMeshProUGUI>().text = "Saga";
                 }
-
-                if (GetGameMode() == TrophyGameMode.TrophyRush)
+                else
                 {
-                    score += CalculateBiomeBonusScore(player);
+                    __m_scoreTextElement.GetComponent<TMPro.TextMeshProUGUI>().text = score.ToString();
                 }
+            }
 
-                // Update the Score string
-                if (__m_scoreTextElement)
+            // Update the Logouts string
+            if (__m_relogsTextElement)
+            {
+                __m_relogsTextElement.GetComponent<TMPro.TextMeshProUGUI>().text = __m_logoutCount.ToString();
+            }
+
+
+            __m_playerCurrentScore = score;
+
+            if (UPDATE_LEADERBOARD)
+            {
+                // Send the score to the web page
+                if (GetGameMode() != TrophyGameMode.CasualSaga)
                 {
-                    if (GetGameMode() == TrophyGameMode.CasualSaga)
+                    //SendScoreToLeaderboard(score);
+                    PostTrackHunt();
+                }
+            }
+        }
+
+        static IEnumerator FlashImage(UnityEngine.UI.Image targetImage, RectTransform imageRect)
+        {
+            float flashDuration = 0.809f;
+            int numFlashes = 6;
+
+            Vector2 originalAnchoredPosition = imageRect.anchoredPosition;
+            Vector3 originalScale = imageRect.localScale;
+
+            for (int i = 0; i < numFlashes; i++)
+            {
+                for (float t = 0.0f; t < flashDuration; t += Time.deltaTime)
+                {
+                    float interpValue = Math.Min(1.0f, t / flashDuration);
+
+                    int flash = (int)(interpValue * 5.0f);
+                    if (flash % 2 == 0)
                     {
-                        __m_scoreTextElement.GetComponent<TMPro.TextMeshProUGUI>().text = "Saga";
+                        targetImage.color = Color.white;
                     }
                     else
                     {
-                        __m_scoreTextElement.GetComponent<TMPro.TextMeshProUGUI>().text = score.ToString();
-                    }
-                }
-
-                // Update the Logouts string
-                if (__m_relogsTextElement)
-                {
-                    __m_relogsTextElement.GetComponent<TMPro.TextMeshProUGUI>().text = __m_logoutCount.ToString();
-                }
-
-
-                __m_playerCurrentScore = score;
-
-                if (UPDATE_LEADERBOARD)
-                {
-                    // Send the score to the web page
-                    if (GetGameMode() != TrophyGameMode.CasualSaga)
-                    {
-                        //SendScoreToLeaderboard(score);
-                        PostTrackHunt();
-                    }
-                }
-            }
-
-            static IEnumerator FlashImage(UnityEngine.UI.Image targetImage, RectTransform imageRect)
-            {
-                float flashDuration = 0.809f;
-                int numFlashes = 6;
-
-                Vector2 originalAnchoredPosition = imageRect.anchoredPosition;
-                Vector3 originalScale = imageRect.localScale;
-
-                for (int i = 0; i < numFlashes; i++)
-                {
-                    for (float t = 0.0f; t < flashDuration; t += Time.deltaTime)
-                    {
-                        float interpValue = Math.Min(1.0f, t / flashDuration);
-
-                        int flash = (int)(interpValue * 5.0f);
-                        if (flash % 2 == 0)
-                        {
-                            targetImage.color = Color.white;
-                        }
-                        else
-                        {
-                            targetImage.color = Color.green;
-                        }
-
-                        float flashScale = 1 + (1.5f * interpValue);
-                        imageRect.localScale = new Vector3(__m_baseTrophyScale, __m_baseTrophyScale, __m_baseTrophyScale) * flashScale * __m_userIconScale;
-                        imageRect.anchoredPosition = originalAnchoredPosition + (new Vector2(0, 150.0f) * (float)Math.Sin((float)interpValue / 2f));
-
-                        yield return null;
+                        targetImage.color = Color.green;
                     }
 
-                    imageRect.anchoredPosition = originalAnchoredPosition;
-                }
-
-                targetImage.color = Color.white;
-                imageRect.localScale = originalScale;
-                imageRect.anchoredPosition = originalAnchoredPosition;
-            }
-
-            static IEnumerator FlashImage2(UnityEngine.UI.Image targetImage, RectTransform imageRect)
-            {
-                float flashDuration = 0.5f;
-                int numFlashes = 4;
-
-                Vector2 originalAnchoredPosition = imageRect.anchoredPosition;
-                Vector3 originalScale = imageRect.localScale;
-
-                float curAccel = 0.0f;
-                float curVelocity = 0.0f;
-                float curPosition = 0.0f;
-                float timeElapsed = 0.0f;
-
-                for (int i = 0; i < numFlashes; i++)
-                {
-                    // Apply impulse
-                    curAccel = 10.0f; // m/sec
-                    curVelocity = 0.0f;
-                    curPosition = 0.0f;
-                    timeElapsed = 0.0f;
-
-                    while (curVelocity > 0.1f)
-                    {
-                        float dt = Time.deltaTime;
-
-                        // Do integration
-                        curAccel += -10.0f * dt;
-                        curVelocity = curVelocity + curAccel * dt;
-                        curPosition = curPosition + curVelocity * dt;
-
-                        float flashScale = 1 + (timeElapsed / flashDuration);
-
-                        imageRect.localScale = new Vector3(__m_baseTrophyScale, __m_baseTrophyScale, __m_baseTrophyScale) * flashScale * __m_userIconScale;
-                        imageRect.anchoredPosition = originalAnchoredPosition + (new Vector2(0, 200.0f) * curPosition);
-
-                        yield return null;
-                    }
-                }
-
-                targetImage.color = Color.white;
-                imageRect.localScale = originalScale;
-                imageRect.anchoredPosition = originalAnchoredPosition;
-            }
-
-            static IEnumerator FlashBiomeImage(UnityEngine.UI.Image targetImage, RectTransform imageRect)
-            {
-                float flashDuration = 6f;
-
-                Quaternion originalRotation = imageRect.rotation;
-
-                for (float t = 0.0f; t < flashDuration; t += Time.deltaTime)
-                {
-                    imageRect.localEulerAngles += new Vector3(0f, 0f, t);
+                    float flashScale = 1 + (1.5f * interpValue);
+                    imageRect.localScale = new Vector3(__m_baseTrophyScale, __m_baseTrophyScale, __m_baseTrophyScale) * flashScale * __m_userIconScale;
+                    imageRect.anchoredPosition = originalAnchoredPosition + (new Vector2(0, 150.0f) * (float)Math.Sin((float)interpValue / 2f));
 
                     yield return null;
                 }
 
-                imageRect.rotation = originalRotation;
+                imageRect.anchoredPosition = originalAnchoredPosition;
             }
 
+            targetImage.color = Color.white;
+            imageRect.localScale = originalScale;
+            imageRect.anchoredPosition = originalAnchoredPosition;
+        }
 
-            static IEnumerator FlashTrophyFiesta()
+        static IEnumerator FlashImage2(UnityEngine.UI.Image targetImage, RectTransform imageRect)
+        {
+            float flashDuration = 0.5f;
+            int numFlashes = 4;
+
+            Vector2 originalAnchoredPosition = imageRect.anchoredPosition;
+            Vector3 originalScale = imageRect.localScale;
+
+            float curAccel = 0.0f;
+            float curVelocity = 0.0f;
+            float curPosition = 0.0f;
+            float timeElapsed = 0.0f;
+
+            for (int i = 0; i < numFlashes; i++)
             {
-                int startingColorIndex = 0;
-                float elapsedTime = 0f;
-                float flashInterval = 0.6f;
+                // Apply impulse
+                curAccel = 10.0f; // m/sec
+                curVelocity = 0.0f;
+                curPosition = 0.0f;
+                timeElapsed = 0.0f;
 
-                while (__m_fiestaFlashing)
+                while (curVelocity > 0.1f)
                 {
-                    elapsedTime += Time.deltaTime;
-                    if (elapsedTime > flashInterval)
+                    float dt = Time.deltaTime;
+
+                    // Do integration
+                    curAccel += -10.0f * dt;
+                    curVelocity = curVelocity + curAccel * dt;
+                    curPosition = curPosition + curVelocity * dt;
+
+                    float flashScale = 1 + (timeElapsed / flashDuration);
+
+                    imageRect.localScale = new Vector3(__m_baseTrophyScale, __m_baseTrophyScale, __m_baseTrophyScale) * flashScale * __m_userIconScale;
+                    imageRect.anchoredPosition = originalAnchoredPosition + (new Vector2(0, 200.0f) * curPosition);
+
+                    yield return null;
+                }
+            }
+
+            targetImage.color = Color.white;
+            imageRect.localScale = originalScale;
+            imageRect.anchoredPosition = originalAnchoredPosition;
+        }
+
+        static IEnumerator FlashBiomeImage(UnityEngine.UI.Image targetImage, RectTransform imageRect)
+        {
+            float flashDuration = 6f;
+
+            Quaternion originalRotation = imageRect.rotation;
+
+            for (float t = 0.0f; t < flashDuration; t += Time.deltaTime)
+            {
+                imageRect.localEulerAngles += new Vector3(0f, 0f, t);
+
+                yield return null;
+            }
+
+            imageRect.rotation = originalRotation;
+        }
+
+
+        static IEnumerator FlashTrophyFiesta()
+        {
+            int startingColorIndex = 0;
+            float elapsedTime = 0f;
+            float flashInterval = 0.6f;
+
+            while (__m_fiestaFlashing)
+            {
+                elapsedTime += Time.deltaTime;
+                if (elapsedTime > flashInterval)
+                {
+                    elapsedTime = 0f;
+
+                    int iconIndex = 0;
+                    foreach (GameObject go in __m_iconList)
                     {
-                        elapsedTime = 0f;
-
-                        int iconIndex = 0;
-                        foreach (GameObject go in __m_iconList)
+                        if (go != null)
                         {
-                            if (go != null)
+                            UnityEngine.UI.Image image = go.GetComponent<UnityEngine.UI.Image>();
+
+                            if (image != null)
                             {
-                                UnityEngine.UI.Image image = go.GetComponent<UnityEngine.UI.Image>();
+                                int colorIndex = (startingColorIndex + iconIndex) % __m_fiestaColors.Length;
 
-                                if (image != null)
+                                if (image.color != Color.white)
                                 {
-                                    int colorIndex = (startingColorIndex + iconIndex) % __m_fiestaColors.Length;
-
-                                    if (image.color != Color.white)
-                                    {
-                                        Color color = __m_fiestaColors[colorIndex];
-                                        color.a = 0.5f;
-                                        image.color = color;
-                                    }
+                                    Color color = __m_fiestaColors[colorIndex];
+                                    color.a = 0.5f;
+                                    image.color = color;
                                 }
                             }
-
-                            iconIndex++;
                         }
 
-                        if (++startingColorIndex >= __m_fiestaColors.Length)
-                        {
-                            startingColorIndex = 0;
-                        }
+                        iconIndex++;
                     }
 
-                    yield return null;
+                    if (++startingColorIndex >= __m_fiestaColors.Length)
+                    {
+                        startingColorIndex = 0;
+                    }
                 }
 
-                //foreach (GameObject go in __m_iconList)
-                //{
-                //    if (go != null)
-                //    {
-                //        UnityEngine.UI.Image image = go.GetComponent<UnityEngine.UI.Image>();
-
-                //        if (image != null)
-                //        {
-                //            image.color = Color.white;
-                //        }
-                //    }
-                //}
+                yield return null;
             }
 
-            static void FlashTrophy(string trophyName)
-            {
-                GameObject iconGameObject = __m_iconList.Find(gameObject => gameObject.name == trophyName);
+            //foreach (GameObject go in __m_iconList)
+            //{
+            //    if (go != null)
+            //    {
+            //        UnityEngine.UI.Image image = go.GetComponent<UnityEngine.UI.Image>();
 
+            //        if (image != null)
+            //        {
+            //            image.color = Color.white;
+            //        }
+            //    }
+            //}
+        }
+
+        static void FlashTrophy(string trophyName)
+        {
+            GameObject iconGameObject = __m_iconList.Find(gameObject => gameObject.name == trophyName);
+
+            if (iconGameObject != null)
+            {
+                UnityEngine.UI.Image image = iconGameObject.GetComponent<UnityEngine.UI.Image>();
+                if (image != null)
+                {
+                    RectTransform imageRect = iconGameObject.GetComponent<RectTransform>();
+
+                    if (imageRect != null)
+                    {
+                        // Flash it with a CoRoutine
+                        __m_trophyHuntMod.StartCoroutine(FlashImage(image, imageRect));
+                    }
+                }
+            }
+            else
+            {
+                Debug.LogError($"Unable to find {trophyName} in __m_iconList");
+            }
+        }
+
+        static void FlashBiomeTrophies(string trophyName)
+        {
+            TrophyHuntData trophyHuntData = Array.Find(__m_trophyHuntData, element => element.m_name == trophyName);
+
+            BiomeBonus biomeBonus = Array.Find(__m_biomeBonuses, element => element.m_biome == trophyHuntData.m_biome);
+
+            foreach (string biomeTrophyName in biomeBonus.m_trophies)
+            {
+                GameObject iconGameObject = __m_iconList.Find(gameObject => gameObject.name == biomeTrophyName);
                 if (iconGameObject != null)
                 {
                     UnityEngine.UI.Image image = iconGameObject.GetComponent<UnityEngine.UI.Image>();
@@ -2834,335 +2405,306 @@ namespace TrophyHuntMod
                         if (imageRect != null)
                         {
                             // Flash it with a CoRoutine
-                            __m_trophyHuntMod.StartCoroutine(FlashImage(image, imageRect));
+                            __m_trophyHuntMod.StartCoroutine(FlashBiomeImage(image, imageRect));
                         }
                     }
                 }
-                else
-                {
-                    Debug.LogError($"Unable to find {trophyName} in __m_iconList");
-                }
             }
+        }
 
-            static void FlashBiomeTrophies(string trophyName)
+
+        [HarmonyPatch(typeof(Player), nameof(Player.AddTrophy), new[] { typeof(ItemDrop.ItemData) })]
+        public static class Player_AddTrophy_Patch
+        {
+            public static void Postfix(Player __instance, ItemDrop.ItemData item)
             {
-                TrophyHuntData trophyHuntData = Array.Find(__m_trophyHuntData, element => element.m_name == trophyName);
+                var player = __instance;
 
-                BiomeBonus biomeBonus = Array.Find(__m_biomeBonuses, element => element.m_biome == trophyHuntData.m_biome);
-
-                foreach (string biomeTrophyName in biomeBonus.m_trophies)
+                if (player != null && item != null)
                 {
-                    GameObject iconGameObject = __m_iconList.Find(gameObject => gameObject.name == biomeTrophyName);
-                    if (iconGameObject != null)
-                    {
-                        UnityEngine.UI.Image image = iconGameObject.GetComponent<UnityEngine.UI.Image>();
-                        if (image != null)
-                        {
-                            RectTransform imageRect = iconGameObject.GetComponent<RectTransform>();
+                    var name = item.m_dropPrefab.name;
 
-                            if (imageRect != null)
+                    // Check to see if this one's in the cache, if not, it's new to us
+                    if (__m_trophyCache.Find(trophyName => trophyName == name) != name)
+                    {
+                        // Haven't collected this one before, flash the UI for it
+                        FlashTrophy(name);
+
+                        // Update Trophy cache
+                        __m_trophyCache = player.GetTrophies();
+
+                        if (GetGameMode() == TrophyGameMode.TrophyRush)
+                        {
+                            // Did we complete a biome bonus with this trophy?
+                            if (UpdateBiomeBonusTrophies(name))
                             {
-                                // Flash it with a CoRoutine
-                                __m_trophyHuntMod.StartCoroutine(FlashBiomeImage(image, imageRect));
+                                MessageHud.instance.ShowBiomeFoundMsg("Biome Bonus", playStinger: true);
+
+                                FlashBiomeTrophies(name);
                             }
                         }
-                    }
-                }
-            }
-
-
-            [HarmonyPatch(typeof(Player), nameof(Player.AddTrophy), new[] { typeof(ItemDrop.ItemData) })]
-            public static class Player_AddTrophy_Patch
-            {
-                public static void Postfix(Player __instance, ItemDrop.ItemData item)
-                {
-                    var player = __instance;
-
-                    if (player != null && item != null)
-                    {
-                        var name = item.m_dropPrefab.name;
-
-                        // Check to see if this one's in the cache, if not, it's new to us
-                        if (__m_trophyCache.Find(trophyName => trophyName == name) != name)
+                        else if (GetGameMode() == TrophyGameMode.TrophySaga)
                         {
-                            // Haven't collected this one before, flash the UI for it
-                            FlashTrophy(name);
-
-                            // Update Trophy cache
-                            __m_trophyCache = player.GetTrophies();
-
-                            if (GetGameMode() == TrophyGameMode.TrophyRush)
+                            if (__m_trophyCache.Count == __m_trophyHuntData.Length)
                             {
-                                // Did we complete a biome bonus with this trophy?
-                                if (UpdateBiomeBonusTrophies(name))
-                                {
-                                    MessageHud.instance.ShowBiomeFoundMsg("Biome Bonus", playStinger: true);
-
-                                    FlashBiomeTrophies(name);
-                                }
+                                MessageHud.instance.ShowBiomeFoundMsg("Odin is Pleased", playStinger: true);
                             }
-                            else if (GetGameMode() == TrophyGameMode.TrophySaga)
-                            {
-                                if (__m_trophyCache.Count == __m_trophyHuntData.Length)
-                                {
-                                    MessageHud.instance.ShowBiomeFoundMsg("Odin is Pleased", playStinger: true);
-                                }
-                            }
-
-                            UpdateModUI(player);
-
-                            AddPlayerEvent(PlayerEventType.Trophy, name, player.transform.position);
-                        }
-                    }
-                }
-            }
-
-            // Player Path Collection
-            #region Player Path Collection
-
-            public static void StartCollectingPlayerPath()
-            {
-                if (!__m_collectingPlayerPath)
-                {
-                    //                    Debug.Log("Starting Player Path collection");
-
-                    //                   AddPlayerPathUI();
-
-                    __m_previousPlayerPos = Player.m_localPlayer.transform.position;
-
-                    __m_collectingPlayerPath = true;
-
-                    __m_trophyHuntMod.StartCoroutine(CollectPlayerPath());
-                }
-            }
-
-            public static void StopCollectingPlayerPath()
-            {
-                //                Debug.Log("Stopping Player Path collection");
-
-                if (__m_collectingPlayerPath)
-                {
-                    __m_trophyHuntMod.StopCoroutine(CollectPlayerPath());
-
-                    __m_collectingPlayerPath = false;
-                }
-            }
-
-            public static IEnumerator CollectPlayerPath()
-            {
-                if (Player.m_localPlayer != null)
-                {
-                    while (__m_collectingPlayerPath && Player.m_localPlayer != null)
-                    {
-                        Vector3 curPlayerPos = Player.m_localPlayer.transform.position;
-                        if (Vector3.Distance(curPlayerPos, __m_previousPlayerPos) > __m_minPathPlayerMoveDistance)
-                        {
-                            __m_playerPathData.Add(curPlayerPos);
-                            __m_previousPlayerPos = curPlayerPos;
-
-                            //                            Debug.Log($"Collected player position at {curPlayerPos.ToString()}");
                         }
 
-                        yield return new WaitForSeconds(__m_playerPathCollectionInterval);
+                        UpdateModUI(player);
+
+                        AddPlayerEvent(PlayerEventType.Trophy, name, player.transform.position);
                     }
                 }
             }
-            #endregion
+        }
 
-            // Leaderboard
-            #region Leaderboard
+        // Player Path Collection
+        #region Player Path Collection
 
-            [System.Serializable]
-            public class LeaderboardDataEx
+        public static void StartCollectingPlayerPath()
+        {
+            if (!__m_collectingPlayerPath)
             {
-                public string event_name;
-                public string event_data;
+                //                    Debug.Log("Starting Player Path collection");
+
+                //                   AddPlayerPathUI();
+
+                __m_previousPlayerPos = Player.m_localPlayer.transform.position;
+
+                __m_collectingPlayerPath = true;
+
+                __m_trophyHuntMod.StartCoroutine(CollectPlayerPath());
             }
+        }
 
-            [System.Serializable]
-            public class LeaderboardData
+        public static void StopCollectingPlayerPath()
+        {
+            //                Debug.Log("Stopping Player Path collection");
+
+            if (__m_collectingPlayerPath)
             {
-                public string player_name;
-                //                public string player_id;
-                public int current_score;
-                public string session_id;
-                public string player_location;
-                public string trophies;
-                public int deaths;
-                public int logouts;
-                public string gamemode;
-                //                public LeaderboardDataEx[] extra = new LeaderboardDataEx[] { };
+                __m_trophyHuntMod.StopCoroutine(CollectPlayerPath());
+
+                __m_collectingPlayerPath = false;
             }
+        }
 
-            private static void SendScoreToLeaderboard(int score)
+        public static IEnumerator CollectPlayerPath()
+        {
+            if (Player.m_localPlayer != null)
             {
-                if (!__m_loggedInWithDiscord)
+                while (__m_collectingPlayerPath && Player.m_localPlayer != null)
                 {
-                    return;
-                }
-
-                if (__m_invalidForTournamentPlay)
-                {
-                    Debug.Log("Invalid for Tournament Play, not sending score to Tracker.");
-
-                    return;
-                }
-
-                string discordUser = __m_configDiscordUser.Value;
-                string discordId = __m_configDiscordId.Value;
-
-                string seed = WorldGenerator.instance.m_world.m_seedName;
-                string sessionId = seed.ToString();
-                string playerPos = Player.m_localPlayer.transform.position.ToString();
-                string trophyList = string.Join(", ", __m_trophyCache);
-
-                // Example data to send to the leaderboard
-                var leaderboardData = new LeaderboardData
-                {
-                    player_name = discordId,
-                    //                    player_id = discordId,
-                    current_score = score,
-                    session_id = sessionId,
-                    player_location = playerPos,
-                    trophies = trophyList,
-                    deaths = __m_deaths,
-                    logouts = __m_logoutCount,
-                    gamemode = GetGameMode().ToString(),
-                    //                    extra = new LeaderboardDataEx()
-                };
-                //LeaderboardDataEx extra = new LeaderboardDataEx();
-
-                //extra.event_name = "trophy_get";
-                //extra.event_data = "TrophyBoar";
-
-                //                leaderboardData.extra.AddItem(extra);
-
-                // Start the coroutine to post the data
-                __m_trophyHuntMod.StartCoroutine(PostLeaderboardDataCoroutine(LEADERBOARD_URL, leaderboardData));
-            }
-
-            // HACK: use API key to communicate with server instead of viciously bypassing security.
-            // Valheim configured Unity to require secure connections
-            //
-            //private class BypassCertificateHandler : CertificateHandler
-            //{
-            //    protected override bool ValidateCertificate(byte[] certificateData)
-            //    {
-            //        return true; // Always return true to bypass validation
-            //    }
-            //}
-
-            private static IEnumerator PostLeaderboardDataCoroutine(string url, LeaderboardData data)
-            {
-                // Convert the data to JSON
-                string jsonData = JsonUtility.ToJson(data);
-
-                //                Debug.Log(jsonData);
-
-                // Create a UnityWebRequest for the POST operation
-                var request = new UnityWebRequest(url, "POST");
-                byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(jsonData);
-                request.uploadHandler = new UploadHandlerRaw(bodyRaw);
-                request.downloadHandler = new DownloadHandlerBuffer();
-                request.SetRequestHeader("Content-Type", "application/json");
-
-                //request.certificateHandler = new BypassCertificateHandler();
-
-                // Send the request and wait for a response
-                yield return request.SendWebRequest();
-
-                // Handle the response
-                if (request.result == UnityWebRequest.Result.Success)
-                {
-                    //                    Debug.Log("Leaderboard POST successful! Response: " + request.downloadHandler.text);
-                }
-                else
-                {
-                    Debug.LogError("Leaderboard POST failed: " + request.error);
-                }
-
-                //                Debug.Log("Leaderboard Response: " + request.error);
-                //                Debug.Log(request.downloadHandler.text);
-            }
-
-            #endregion Leaderboard
-
-            // Logout Tracking
-            #region Logout Handling
-
-            static float GetTotalOnFootDistance(Game game)
-            {
-                if (game == null)
-                {
-                    Debug.LogError($"No Game object found in GetTotalOnFootDistance");
-
-                    return 0.0f;
-                }
-
-                PlayerProfile profile = game.GetPlayerProfile();
-                if (profile != null)
-                {
-                    PlayerProfile.PlayerStats stats = profile.m_playerStats;
-                    if (stats != null)
+                    Vector3 curPlayerPos = Player.m_localPlayer.transform.position;
+                    if (Vector3.Distance(curPlayerPos, __m_previousPlayerPos) > __m_minPathPlayerMoveDistance)
                     {
-                        float onFootDistance = stats[PlayerStatType.DistanceWalk] + stats[PlayerStatType.DistanceRun];
+                        __m_playerPathData.Add(curPlayerPos);
+                        __m_previousPlayerPos = curPlayerPos;
 
-                        return onFootDistance;
+                        //                            Debug.Log($"Collected player position at {curPlayerPos.ToString()}");
                     }
+
+                    yield return new WaitForSeconds(__m_playerPathCollectionInterval);
                 }
+            }
+        }
+        #endregion
+
+        // Leaderboard
+        #region Leaderboard
+
+        [System.Serializable]
+        public class LeaderboardDataEx
+        {
+            public string event_name;
+            public string event_data;
+        }
+
+        [System.Serializable]
+        public class LeaderboardData
+        {
+            public string player_name;
+            //                public string player_id;
+            public int current_score;
+            public string session_id;
+            public string player_location;
+            public string trophies;
+            public int deaths;
+            public int logouts;
+            public string gamemode;
+            //                public LeaderboardDataEx[] extra = new LeaderboardDataEx[] { };
+        }
+
+        private static void SendScoreToLeaderboard(int score)
+        {
+            if (!__m_loggedInWithDiscord)
+            {
+                return;
+            }
+
+            if (__m_invalidForTournamentPlay)
+            {
+                Debug.Log("Invalid for Tournament Play, not sending score to Tracker.");
+
+                return;
+            }
+
+            string discordUser = __m_configDiscordUser.Value;
+            string discordId = __m_configDiscordId.Value;
+
+            string seed = WorldGenerator.instance.m_world.m_seedName;
+            string sessionId = seed.ToString();
+            string playerPos = Player.m_localPlayer.transform.position.ToString();
+            string trophyList = string.Join(", ", __m_trophyCache);
+
+            // Example data to send to the leaderboard
+            var leaderboardData = new LeaderboardData
+            {
+                player_name = discordId,
+                //                    player_id = discordId,
+                current_score = score,
+                session_id = sessionId,
+                player_location = playerPos,
+                trophies = trophyList,
+                deaths = __m_deaths,
+                logouts = __m_logoutCount,
+                gamemode = GetGameMode().ToString(),
+                //                    extra = new LeaderboardDataEx()
+            };
+            //LeaderboardDataEx extra = new LeaderboardDataEx();
+
+            //extra.event_name = "trophy_get";
+            //extra.event_data = "TrophyBoar";
+
+            //                leaderboardData.extra.AddItem(extra);
+
+            // Start the coroutine to post the data
+            __m_trophyHuntMod.StartCoroutine(PostLeaderboardDataCoroutine(LEADERBOARD_URL, leaderboardData));
+        }
+
+        // HACK: use API key to communicate with server instead of viciously bypassing security.
+        // Valheim configured Unity to require secure connections
+        //
+        //private class BypassCertificateHandler : CertificateHandler
+        //{
+        //    protected override bool ValidateCertificate(byte[] certificateData)
+        //    {
+        //        return true; // Always return true to bypass validation
+        //    }
+        //}
+
+        private static IEnumerator PostLeaderboardDataCoroutine(string url, LeaderboardData data)
+        {
+            // Convert the data to JSON
+            string jsonData = JsonUtility.ToJson(data);
+
+            //                Debug.Log(jsonData);
+
+            // Create a UnityWebRequest for the POST operation
+            var request = new UnityWebRequest(url, "POST");
+            byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(jsonData);
+            request.uploadHandler = new UploadHandlerRaw(bodyRaw);
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.SetRequestHeader("Content-Type", "application/json");
+
+            //request.certificateHandler = new BypassCertificateHandler();
+
+            // Send the request and wait for a response
+            yield return request.SendWebRequest();
+
+            // Handle the response
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+                //                    Debug.Log("Leaderboard POST successful! Response: " + request.downloadHandler.text);
+            }
+            else
+            {
+                Debug.LogError("Leaderboard POST failed: " + request.error);
+            }
+
+            //                Debug.Log("Leaderboard Response: " + request.error);
+            //                Debug.Log(request.downloadHandler.text);
+        }
+
+        #endregion Leaderboard
+
+        // Logout Tracking
+        #region Logout Handling
+
+        static float GetTotalOnFootDistance(Game game)
+        {
+            if (game == null)
+            {
+                Debug.LogError($"No Game object found in GetTotalOnFootDistance");
 
                 return 0.0f;
             }
 
-            // public void Logout(bool save = true, bool changeToStartScene = true)
-            [HarmonyPatch(typeof(Game), nameof(Game.Logout), new[] { typeof(bool), typeof(bool) })]
-            public static class Game_Logout_Patch
+            PlayerProfile profile = game.GetPlayerProfile();
+            if (profile != null)
             {
-                public static void Postfix(Game __instance, bool save, bool changeToStartScene)
+                PlayerProfile.PlayerStats stats = profile.m_playerStats;
+                if (stats != null)
                 {
-                    if (Player.m_localPlayer == null)
-                    {
-                        return;
-                    }
+                    float onFootDistance = stats[PlayerStatType.DistanceWalk] + stats[PlayerStatType.DistanceRun];
 
-                    float onFootDistance = GetTotalOnFootDistance(__instance);
-                    //                    Debug.LogError($"Total on-foot distance moved: {onFootDistance}");
-
-                    // If you've never logged out, and your total run/walk distance is less than the max grace distance, no penalty
-                    if (__m_logoutCount < 1 && onFootDistance < LOGOUT_PENALTY_GRACE_DISTANCE)
-                    {
-                        // ignore this logout
-                        return;
-                    }
-
-                    if (!__m_ignoreLogouts)
-                    {
-                        __m_logoutCount++;
-
-                        AddPlayerEvent(PlayerEventType.Misc, "PenaltyLogout", Player.m_localPlayer.transform.position);
-
-                        //                        Debug.LogError($"Game.Logout() logoutCount = {__m_logoutCount}");
-
-                        if (Game.instance != null)
-                        {
-                            Game.instance.SavePlayerProfile(true);
-                        }
-                    }
+                    return onFootDistance;
                 }
             }
 
-            #endregion
+            return 0.0f;
+        }
 
-            #region Tooltips
+        // public void Logout(bool save = true, bool changeToStartScene = true)
+        [HarmonyPatch(typeof(Game), nameof(Game.Logout), new[] { typeof(bool), typeof(bool) })]
+        public static class Game_Logout_Patch
+        {
+            public static void Postfix(Game __instance, bool save, bool changeToStartScene)
+            {
+                if (Player.m_localPlayer == null)
+                {
+                    return;
+                }
 
-            // Score Tooltip
-            static GameObject __m_scoreTooltipObject = null;
-            static GameObject __m_scoreTooltipBackground = null;
-            static TextMeshProUGUI __m_scoreTooltipText;
-            static Vector2 __m_trophyHuntScoreTooltipWindowSize = new Vector2(240, 215);
-            static Vector2 __m_scoreTooltipTextOffset = new Vector2(5, 2);
+                float onFootDistance = GetTotalOnFootDistance(__instance);
+                //                    Debug.LogError($"Total on-foot distance moved: {onFootDistance}");
 
-            static Dictionary<TrophyGameMode, Vector2> __toolTipSizes = new Dictionary<TrophyGameMode, Vector2>()
+                // If you've never logged out, and your total run/walk distance is less than the max grace distance, no penalty
+                if (__m_logoutCount < 1 && onFootDistance < LOGOUT_PENALTY_GRACE_DISTANCE)
+                {
+                    // ignore this logout
+                    return;
+                }
+
+                if (!__m_ignoreLogouts)
+                {
+                    __m_logoutCount++;
+
+                    AddPlayerEvent(PlayerEventType.Misc, "PenaltyLogout", Player.m_localPlayer.transform.position);
+
+                    //                        Debug.LogError($"Game.Logout() logoutCount = {__m_logoutCount}");
+
+                    if (Game.instance != null)
+                    {
+                        Game.instance.SavePlayerProfile(true);
+                    }
+                }
+            }
+        }
+
+        #endregion
+
+        #region Tooltips
+
+        // Score Tooltip
+        static GameObject __m_scoreTooltipObject = null;
+        static GameObject __m_scoreTooltipBackground = null;
+        static TextMeshProUGUI __m_scoreTooltipText;
+        static Vector2 __m_trophyHuntScoreTooltipWindowSize = new Vector2(240, 215);
+        static Vector2 __m_scoreTooltipTextOffset = new Vector2(5, 2);
+
+        static Dictionary<TrophyGameMode, Vector2> __toolTipSizes = new Dictionary<TrophyGameMode, Vector2>()
             {
                 { TrophyGameMode.TrophyHunt, new Vector2(240, 215) },
                 { TrophyGameMode.TrophyRush, new Vector2(290, 380) },
@@ -3172,944 +2714,944 @@ namespace TrophyHuntMod
                 { TrophyGameMode.TrophyFiesta, new Vector2(240, 215) }
             };
 
-            public static void CreateScoreTooltip()
+        public static void CreateScoreTooltip()
+        {
+            // Tooltip Background
+            __m_scoreTooltipBackground = new GameObject("Score Tooltip Background");
+
+            Vector2 tooltipWindowSize = __m_trophyHuntScoreTooltipWindowSize;
+
+            if (__toolTipSizes.ContainsKey(GetGameMode()))
             {
-                // Tooltip Background
-                __m_scoreTooltipBackground = new GameObject("Score Tooltip Background");
-
-                Vector2 tooltipWindowSize = __m_trophyHuntScoreTooltipWindowSize;
-
-                if (__toolTipSizes.ContainsKey(GetGameMode()))
-                {
-                    tooltipWindowSize = __toolTipSizes[GetGameMode()];
-                }
-
-                // Set the parent to the HUD
-                Transform hudrootTransform = Hud.instance.transform;
-                __m_scoreTooltipBackground.transform.SetParent(hudrootTransform, false);
-
-                RectTransform bgTransform = __m_scoreTooltipBackground.AddComponent<RectTransform>();
-                bgTransform.sizeDelta = tooltipWindowSize;
-
-                // Add an Image component for the background
-                UnityEngine.UI.Image backgroundImage = __m_scoreTooltipBackground.AddComponent<UnityEngine.UI.Image>();
-                backgroundImage.color = new Color(0, 0, 0, 0.95f); // Semi-transparent black background
-
-                __m_scoreTooltipBackground.SetActive(false);
-
-                // Create a new GameObject for the tooltip
-                __m_scoreTooltipObject = new GameObject("Score Tooltip Text");
-                __m_scoreTooltipObject.transform.SetParent(__m_scoreTooltipBackground.transform, false);
-
-                // Add a RectTransform component for positioning
-                RectTransform rectTransform = __m_scoreTooltipObject.AddComponent<RectTransform>();
-                rectTransform.sizeDelta = new Vector2(tooltipWindowSize.x - __m_scoreTooltipTextOffset.x, tooltipWindowSize.y - __m_scoreTooltipTextOffset.y);
-
-                // Add a TextMeshProUGUI component for displaying the tooltip text
-                __m_scoreTooltipText = AddTextMeshProComponent(__m_scoreTooltipObject);
-                __m_scoreTooltipText.fontSize = 14;
-                __m_scoreTooltipText.alignment = TextAlignmentOptions.TopLeft;
-                __m_scoreTooltipText.color = Color.yellow;
-
-                // Initially hide the tooltip
-                __m_scoreTooltipObject.SetActive(false);
+                tooltipWindowSize = __toolTipSizes[GetGameMode()];
             }
 
-            public static void AddTooltipTriggersToScoreObject(GameObject uiObject)
+            // Set the parent to the HUD
+            Transform hudrootTransform = Hud.instance.transform;
+            __m_scoreTooltipBackground.transform.SetParent(hudrootTransform, false);
+
+            RectTransform bgTransform = __m_scoreTooltipBackground.AddComponent<RectTransform>();
+            bgTransform.sizeDelta = tooltipWindowSize;
+
+            // Add an Image component for the background
+            UnityEngine.UI.Image backgroundImage = __m_scoreTooltipBackground.AddComponent<UnityEngine.UI.Image>();
+            backgroundImage.color = new Color(0, 0, 0, 0.95f); // Semi-transparent black background
+
+            __m_scoreTooltipBackground.SetActive(false);
+
+            // Create a new GameObject for the tooltip
+            __m_scoreTooltipObject = new GameObject("Score Tooltip Text");
+            __m_scoreTooltipObject.transform.SetParent(__m_scoreTooltipBackground.transform, false);
+
+            // Add a RectTransform component for positioning
+            RectTransform rectTransform = __m_scoreTooltipObject.AddComponent<RectTransform>();
+            rectTransform.sizeDelta = new Vector2(tooltipWindowSize.x - __m_scoreTooltipTextOffset.x, tooltipWindowSize.y - __m_scoreTooltipTextOffset.y);
+
+            // Add a TextMeshProUGUI component for displaying the tooltip text
+            __m_scoreTooltipText = AddTextMeshProComponent(__m_scoreTooltipObject);
+            __m_scoreTooltipText.fontSize = 14;
+            __m_scoreTooltipText.alignment = TextAlignmentOptions.TopLeft;
+            __m_scoreTooltipText.color = Color.yellow;
+
+            // Initially hide the tooltip
+            __m_scoreTooltipObject.SetActive(false);
+        }
+
+        public static void AddTooltipTriggersToScoreObject(GameObject uiObject)
+        {
+            // Add EventTrigger component if not already present
+            EventTrigger trigger = uiObject.GetComponent<EventTrigger>();
+            if (trigger != null)
             {
-                // Add EventTrigger component if not already present
-                EventTrigger trigger = uiObject.GetComponent<EventTrigger>();
-                if (trigger != null)
-                {
-                    return;
-                }
-
-                trigger = uiObject.AddComponent<EventTrigger>();
-
-                // Mouse Enter event (pointer enters the icon area)
-                EventTrigger.Entry entryEnter = new EventTrigger.Entry();
-                entryEnter.eventID = EventTriggerType.PointerEnter;
-                entryEnter.callback.AddListener((eventData) => ShowScoreTooltip(uiObject));
-                trigger.triggers.Add(entryEnter);
-
-                // Mouse Exit event (pointer exits the icon area)
-                EventTrigger.Entry entryExit = new EventTrigger.Entry();
-                entryExit.eventID = EventTriggerType.PointerExit;
-                entryExit.callback.AddListener((eventData) => HideScoreTooltip());
-                trigger.triggers.Add(entryExit);
+                return;
             }
 
-            public static string BuildScoreTooltipText(GameObject uiObject)
+            trigger = uiObject.AddComponent<EventTrigger>();
+
+            // Mouse Enter event (pointer enters the icon area)
+            EventTrigger.Entry entryEnter = new EventTrigger.Entry();
+            entryEnter.eventID = EventTriggerType.PointerEnter;
+            entryEnter.callback.AddListener((eventData) => ShowScoreTooltip(uiObject));
+            trigger.triggers.Add(entryEnter);
+
+            // Mouse Exit event (pointer exits the icon area)
+            EventTrigger.Entry entryExit = new EventTrigger.Entry();
+            entryExit.eventID = EventTriggerType.PointerExit;
+            entryExit.callback.AddListener((eventData) => HideScoreTooltip());
+            trigger.triggers.Add(entryExit);
+        }
+
+        public static string BuildScoreTooltipText(GameObject uiObject)
+        {
+            string text = "<n/a>";
+
+            string gameModeText = GetGameModeNameText();
+
+            text = $"<size=20><b><color=#FFB75B>{gameModeText}</color><b></size>\n";
+
+            if (GetGameMode() == TrophyGameMode.CasualSaga)
             {
-                string text = "<n/a>";
-
-                string gameModeText = GetGameModeNameText();
-
-                text = $"<size=20><b><color=#FFB75B>{gameModeText}</color><b></size>\n";
-
-                if (GetGameMode() == TrophyGameMode.CasualSaga)
+                text += "<color=white>" + GetSagaRulesText() + "</color>";
+            }
+            else
+            {
+                int trophyCount = __m_trophyCache.Count;
+                int earnedPoints = 0;
+                if (GetGameMode() == TrophyGameMode.CulinarySaga)
                 {
-                    text += "<color=white>" + GetSagaRulesText() + "</color>";
+                    earnedPoints = CalculateCookingPoints();
                 }
                 else
                 {
-                    int trophyCount = __m_trophyCache.Count;
-                    int earnedPoints = 0;
-                    if (GetGameMode() == TrophyGameMode.CulinarySaga)
-                    {
-                        earnedPoints = CalculateCookingPoints();
-                    }
-                    else
-                    {
-                        earnedPoints = CalculateTrophyPoints();
-                    }
+                    earnedPoints = CalculateTrophyPoints();
+                }
 
-                    int penaltyPoints = CalculateLogoutPenalty() + CalculateDeathPenalty();
+                int penaltyPoints = CalculateLogoutPenalty() + CalculateDeathPenalty();
 
-                    text += $"<size=14><color=white>\n";
-                    if (GetGameMode() == TrophyGameMode.CulinarySaga)
-                    {
-                        text += $"  Dishes Prepared:\n    Num: <color=orange>{__m_cookedFoods.Count}</color> <color=yellow>({earnedPoints} Points)</color>\n";
-                    }
-                    else
-                    {
-                        text += $"  Trophies:\n    Num: <color=orange>{trophyCount}</color> <color=yellow>({CalculateTrophyPoints().ToString()} Points)</color>\n";
-                    }
+                text += $"<size=14><color=white>\n";
+                if (GetGameMode() == TrophyGameMode.CulinarySaga)
+                {
+                    text += $"  Dishes Prepared:\n    Num: <color=orange>{__m_cookedFoods.Count}</color> <color=yellow>({earnedPoints} Points)</color>\n";
+                }
+                else
+                {
+                    text += $"  Trophies:\n    Num: <color=orange>{trophyCount}</color> <color=yellow>({CalculateTrophyPoints().ToString()} Points)</color>\n";
+                }
 
-                    text += $"  Logouts: (Penalty: <color=red>{GetLogoutPointCost()}</color>)\n    Num: <color=orange>{__m_logoutCount}</color> <color=yellow>({CalculateLogoutPenalty().ToString()} Points)</color>\n";
-                    text += $"  Deaths: (Penalty: <color=red>{GetDeathPointCost()}</color>)\n    Num: <color=orange>{__m_deaths}</color> <color=yellow>({CalculateDeathPenalty().ToString()} Points)</color>\n";
-                    if (GetGameMode() == TrophyGameMode.TrophyRush)
+                text += $"  Logouts: (Penalty: <color=red>{GetLogoutPointCost()}</color>)\n    Num: <color=orange>{__m_logoutCount}</color> <color=yellow>({CalculateLogoutPenalty().ToString()} Points)</color>\n";
+                text += $"  Deaths: (Penalty: <color=red>{GetDeathPointCost()}</color>)\n    Num: <color=orange>{__m_deaths}</color> <color=yellow>({CalculateDeathPenalty().ToString()} Points)</color>\n";
+                if (GetGameMode() == TrophyGameMode.TrophyRush)
+                {
+                    text += $"  /die's: (Penalty: <color=red>{TROPHY_RUSH_SLASHDIE_PENALTY}</color>)\n    Num: <color=orange>{__m_slashDieCount}</color> <color=yellow>({__m_slashDieCount * TROPHY_RUSH_SLASHDIE_PENALTY} Points)</color>\n";
+                    penaltyPoints += __m_slashDieCount * TROPHY_RUSH_SLASHDIE_PENALTY;
+                    text += $"  Biome Bonuses:\n";
+                    foreach (BiomeBonus biomeBonus in __m_biomeBonuses)
                     {
-                        text += $"  /die's: (Penalty: <color=red>{TROPHY_RUSH_SLASHDIE_PENALTY}</color>)\n    Num: <color=orange>{__m_slashDieCount}</color> <color=yellow>({__m_slashDieCount * TROPHY_RUSH_SLASHDIE_PENALTY} Points)</color>\n";
-                        penaltyPoints += __m_slashDieCount * TROPHY_RUSH_SLASHDIE_PENALTY;
-                        text += $"  Biome Bonuses:\n";
-                        foreach (BiomeBonus biomeBonus in __m_biomeBonuses)
+                        int numCollected, numTotal, biomeScore;
+
+                        CalculateBiomeBonusStats(biomeBonus.m_biome, out numCollected, out numTotal, out biomeScore);
+
+                        int bonusScore = 0;
+                        if (numCollected == numTotal)
                         {
-                            int numCollected, numTotal, biomeScore;
-
-                            CalculateBiomeBonusStats(biomeBonus.m_biome, out numCollected, out numTotal, out biomeScore);
-
-                            int bonusScore = 0;
-                            if (numCollected == numTotal)
-                            {
-                                bonusScore = biomeScore;
-                            }
-                            text += $"    {biomeBonus.m_biomeName} (+{biomeBonus.m_bonus}): <color=orange>{numCollected}/{numTotal}</color> <color=yellow>(+{bonusScore} Points)</color>\n";
-
-                            earnedPoints += bonusScore;
+                            bonusScore = biomeScore;
                         }
+                        text += $"    {biomeBonus.m_biomeName} (+{biomeBonus.m_bonus}): <color=orange>{numCollected}/{numTotal}</color> <color=yellow>(+{bonusScore} Points)</color>\n";
+
+                        earnedPoints += bonusScore;
                     }
-
-                    text += $"\n<size=17>  Earned Points: <color=orange>{earnedPoints}</color>\n  Penalties: <color=orange>{penaltyPoints}</color></size>\n";
                 }
 
-                text += $"</color></size>";
-
-                return text;
+                text += $"\n<size=17>  Earned Points: <color=orange>{earnedPoints}</color>\n  Penalties: <color=orange>{penaltyPoints}</color></size>\n";
             }
 
+            text += $"</color></size>";
 
-            public static void ShowScoreTooltip(GameObject uiObject)
+            return text;
+        }
+
+
+        public static void ShowScoreTooltip(GameObject uiObject)
+        {
+            if (uiObject == null)
+                return;
+
+            string text = BuildScoreTooltipText(uiObject);
+
+            __m_scoreTooltipText.text = text;
+
+            __m_scoreTooltipBackground.SetActive(true);
+            __m_scoreTooltipObject.SetActive(true);
+
+            Vector2 tooltipWindowSize = __m_trophyHuntScoreTooltipWindowSize;
+            if (__toolTipSizes.ContainsKey(GetGameMode()))
             {
-                if (uiObject == null)
-                    return;
-
-                string text = BuildScoreTooltipText(uiObject);
-
-                __m_scoreTooltipText.text = text;
-
-                __m_scoreTooltipBackground.SetActive(true);
-                __m_scoreTooltipObject.SetActive(true);
-
-                Vector2 tooltipWindowSize = __m_trophyHuntScoreTooltipWindowSize;
-                if (__toolTipSizes.ContainsKey(GetGameMode()))
-                {
-                    tooltipWindowSize = __toolTipSizes[GetGameMode()];
-                }
-
-                Vector3 tooltipOffset = new Vector3(tooltipWindowSize.x / 2, tooltipWindowSize.y, 0);
-                Vector3 mousePosition = Input.mousePosition;
-                Vector3 desiredPosition = mousePosition + tooltipOffset;
-
-                // Clamp the tooltip window onscreen
-                if (desiredPosition.x < 200) desiredPosition.x = 200;
-                if (desiredPosition.y < 200) desiredPosition.y = 200;
-                if (desiredPosition.x > Screen.width - tooltipWindowSize.x)
-                    desiredPosition.x = Screen.width - tooltipWindowSize.x;
-                if (desiredPosition.y > Screen.height - tooltipWindowSize.y)
-                    desiredPosition.y = Screen.height - tooltipWindowSize.y;
-
-                //                Debug.LogWarning($"Luck Tooltip x={desiredPosition.x} y={desiredPosition.y}");
-
-                __m_scoreTooltipBackground.transform.position = desiredPosition;
-                __m_scoreTooltipObject.transform.position = new Vector3(desiredPosition.x + __m_scoreTooltipTextOffset.x, desiredPosition.y - __m_scoreTooltipTextOffset.y, 0f);
+                tooltipWindowSize = __toolTipSizes[GetGameMode()];
             }
 
-            public static void HideScoreTooltip()
+            Vector3 tooltipOffset = new Vector3(tooltipWindowSize.x / 2, tooltipWindowSize.y, 0);
+            Vector3 mousePosition = Input.mousePosition;
+            Vector3 desiredPosition = mousePosition + tooltipOffset;
+
+            // Clamp the tooltip window onscreen
+            if (desiredPosition.x < 200) desiredPosition.x = 200;
+            if (desiredPosition.y < 200) desiredPosition.y = 200;
+            if (desiredPosition.x > Screen.width - tooltipWindowSize.x)
+                desiredPosition.x = Screen.width - tooltipWindowSize.x;
+            if (desiredPosition.y > Screen.height - tooltipWindowSize.y)
+                desiredPosition.y = Screen.height - tooltipWindowSize.y;
+
+            //                Debug.LogWarning($"Luck Tooltip x={desiredPosition.x} y={desiredPosition.y}");
+
+            __m_scoreTooltipBackground.transform.position = desiredPosition;
+            __m_scoreTooltipObject.transform.position = new Vector3(desiredPosition.x + __m_scoreTooltipTextOffset.x, desiredPosition.y - __m_scoreTooltipTextOffset.y, 0f);
+        }
+
+        public static void HideScoreTooltip()
+        {
+            __m_scoreTooltipBackground.SetActive(false);
+            __m_scoreTooltipObject.SetActive(false);
+        }
+
+
+        // Luck Tooltips
+
+        static GameObject __m_luckTooltipObject = null;
+        static GameObject __m_luckTooltipBackground = null;
+        static TextMeshProUGUI __m_luckTooltip;
+        static Vector2 __m_luckTooltipWindowSize = new Vector2(220, 135);
+        static Vector2 __m_luckTooltipTextOffset = new Vector2(5, 2);
+
+        public static void CreateLuckTooltip()
+        {
+            // Tooltip Background
+            __m_luckTooltipBackground = new GameObject("Luck Tooltip Background");
+
+            // Set %the parent to the HUD
+            Transform hudrootTransform = Hud.instance.transform;
+            __m_luckTooltipBackground.transform.SetParent(hudrootTransform, false);
+
+            RectTransform bgTransform = __m_luckTooltipBackground.AddComponent<RectTransform>();
+            bgTransform.sizeDelta = __m_luckTooltipWindowSize;
+
+            // Add an Image component for the background
+            UnityEngine.UI.Image backgroundImage = __m_luckTooltipBackground.AddComponent<UnityEngine.UI.Image>();
+            backgroundImage.color = new Color(0, 0, 0, 0.85f); // Semi-transparent black background
+
+            __m_luckTooltipBackground.SetActive(false);
+
+            // Create a new GameObject for the tooltip
+            __m_luckTooltipObject = new GameObject("Luck Tooltip Text");
+            __m_luckTooltipObject.transform.SetParent(__m_luckTooltipBackground.transform, false);
+
+            // Add a RectTransform component for positioning
+            RectTransform rectTransform = __m_luckTooltipObject.AddComponent<RectTransform>();
+            rectTransform.sizeDelta = new Vector2(__m_luckTooltipWindowSize.x - __m_luckTooltipTextOffset.x, __m_luckTooltipWindowSize.y - __m_luckTooltipTextOffset.y);
+
+            // Add a TextMeshProUGUI component for displaying the tooltip text
+            __m_luckTooltip = AddTextMeshProComponent(__m_luckTooltipObject);
+            __m_luckTooltip.fontSize = 14;
+            __m_luckTooltip.alignment = TextAlignmentOptions.TopLeft;
+            __m_luckTooltip.color = Color.yellow;
+
+            // Initially hide the tooltip
+            __m_luckTooltipObject.SetActive(false);
+        }
+
+        public static void AddTooltipTriggersToLuckObject(GameObject uiObject)
+        {
+            // Add EventTrigger component if not already present
+            EventTrigger trigger = uiObject.GetComponent<EventTrigger>();
+            if (trigger != null)
             {
-                __m_scoreTooltipBackground.SetActive(false);
-                __m_scoreTooltipObject.SetActive(false);
+                return;
             }
 
+            trigger = uiObject.AddComponent<EventTrigger>();
 
-            // Luck Tooltips
+            // Mouse Enter event (pointer enters the icon area)
+            EventTrigger.Entry entryEnter = new EventTrigger.Entry();
+            entryEnter.eventID = EventTriggerType.PointerEnter;
+            entryEnter.callback.AddListener((eventData) => ShowLuckTooltip(uiObject));
+            trigger.triggers.Add(entryEnter);
 
-            static GameObject __m_luckTooltipObject = null;
-            static GameObject __m_luckTooltipBackground = null;
-            static TextMeshProUGUI __m_luckTooltip;
-            static Vector2 __m_luckTooltipWindowSize = new Vector2(220, 135);
-            static Vector2 __m_luckTooltipTextOffset = new Vector2(5, 2);
+            // Mouse Exit event (pointer exits the icon area)
+            EventTrigger.Entry entryExit = new EventTrigger.Entry();
+            entryExit.eventID = EventTriggerType.PointerExit;
+            entryExit.callback.AddListener((eventData) => HideLuckTooltip());
+            trigger.triggers.Add(entryExit);
+        }
 
-            public static void CreateLuckTooltip()
+        public struct LuckRating
+        {
+            public LuckRating(float percent, string luckString, string colorStr)
             {
-                // Tooltip Background
-                __m_luckTooltipBackground = new GameObject("Luck Tooltip Background");
-
-                // Set %the parent to the HUD
-                Transform hudrootTransform = Hud.instance.transform;
-                __m_luckTooltipBackground.transform.SetParent(hudrootTransform, false);
-
-                RectTransform bgTransform = __m_luckTooltipBackground.AddComponent<RectTransform>();
-                bgTransform.sizeDelta = __m_luckTooltipWindowSize;
-
-                // Add an Image component for the background
-                UnityEngine.UI.Image backgroundImage = __m_luckTooltipBackground.AddComponent<UnityEngine.UI.Image>();
-                backgroundImage.color = new Color(0, 0, 0, 0.85f); // Semi-transparent black background
-
-                __m_luckTooltipBackground.SetActive(false);
-
-                // Create a new GameObject for the tooltip
-                __m_luckTooltipObject = new GameObject("Luck Tooltip Text");
-                __m_luckTooltipObject.transform.SetParent(__m_luckTooltipBackground.transform, false);
-
-                // Add a RectTransform component for positioning
-                RectTransform rectTransform = __m_luckTooltipObject.AddComponent<RectTransform>();
-                rectTransform.sizeDelta = new Vector2(__m_luckTooltipWindowSize.x - __m_luckTooltipTextOffset.x, __m_luckTooltipWindowSize.y - __m_luckTooltipTextOffset.y);
-
-                // Add a TextMeshProUGUI component for displaying the tooltip text
-                __m_luckTooltip = AddTextMeshProComponent(__m_luckTooltipObject);
-                __m_luckTooltip.fontSize = 14;
-                __m_luckTooltip.alignment = TextAlignmentOptions.TopLeft;
-                __m_luckTooltip.color = Color.yellow;
-
-                // Initially hide the tooltip
-                __m_luckTooltipObject.SetActive(false);
+                m_percent = percent;
+                m_luckString = luckString;
+                m_colorString = colorStr;
             }
+            public float m_percent = 0;
+            public string m_luckString = "<n/a>";
+            public string m_colorString = "white";
+        }
 
-            public static void AddTooltipTriggersToLuckObject(GameObject uiObject)
+        public static LuckRating[] __m_luckRatingTable = new LuckRating[]
             {
-                // Add EventTrigger component if not already present
-                EventTrigger trigger = uiObject.GetComponent<EventTrigger>();
-                if (trigger != null)
-                {
-                    return;
-                }
-
-                trigger = uiObject.AddComponent<EventTrigger>();
-
-                // Mouse Enter event (pointer enters the icon area)
-                EventTrigger.Entry entryEnter = new EventTrigger.Entry();
-                entryEnter.eventID = EventTriggerType.PointerEnter;
-                entryEnter.callback.AddListener((eventData) => ShowLuckTooltip(uiObject));
-                trigger.triggers.Add(entryEnter);
-
-                // Mouse Exit event (pointer exits the icon area)
-                EventTrigger.Entry entryExit = new EventTrigger.Entry();
-                entryExit.eventID = EventTriggerType.PointerExit;
-                entryExit.callback.AddListener((eventData) => HideLuckTooltip());
-                trigger.triggers.Add(entryExit);
-            }
-
-            public struct LuckRating
-            {
-                public LuckRating(float percent, string luckString, string colorStr)
-                {
-                    m_percent = percent;
-                    m_luckString = luckString;
-                    m_colorString = colorStr;
-                }
-                public float m_percent = 0;
-                public string m_luckString = "<n/a>";
-                public string m_colorString = "white";
-            }
-
-            public static LuckRating[] __m_luckRatingTable = new LuckRating[]
-                {
                     new LuckRating (70.0f,      "Bad",          "#BF6000"),
                     new LuckRating (100.0f,     "Average",      "#BFBF00"),
                     new LuckRating (140.0f,     "Good",         "#00BF00"),
                     new LuckRating (9999.0f,    "Bonkers",      "#6000BF"),
-                };
+            };
 
-            public static int GetLuckRatingIndex(float luckPercentage)
+        public static int GetLuckRatingIndex(float luckPercentage)
+        {
+            int index = 0;
+            foreach (LuckRating rating in __m_luckRatingTable)
             {
-                int index = 0;
-                foreach (LuckRating rating in __m_luckRatingTable)
+                if (luckPercentage <= rating.m_percent)
                 {
-                    if (luckPercentage <= rating.m_percent)
+                    return index;
+                }
+
+                index++;
+            }
+
+            return 0;
+        }
+
+        public static string GetLuckRatingUIString(float luckPercentage)
+        {
+            int ratingIndex = GetLuckRatingIndex(luckPercentage);
+
+            LuckRating luckRating = __m_luckRatingTable[ratingIndex];
+
+            return $"<color={luckRating.m_colorString}>{luckRating.m_luckString}</color>";
+        }
+
+        public static string BuildLuckTooltipText(GameObject uiObject)
+        {
+            if (uiObject == null)
+            {
+                return "Invalid";
+            }
+
+            int numTrophyTypesKilled = 0;
+            float cumulativeDropRatio = 0f;
+
+            float luckiestScore = float.MinValue;
+            string luckiestTrophy = "<n/a>";
+            float luckiestActualPercent = 0f;
+            float luckiestExpectedPercent = 0f;
+            float luckiestRatio = 0f;
+            float unluckiestScore = float.MaxValue;
+            string unluckiestTrophy = "<n/a>";
+            float unluckiestActualPercent = 0f;
+            float unluckiestExpectedPercent = 0f;
+            float unluckiestRatio = 0f;
+
+            // Compute Luck
+            foreach (KeyValuePair<string, DropInfo> entry in __m_allTrophyDropInfo)
+            {
+                DropInfo di = entry.Value;
+                if (di.m_numKilled == 0)
+                {
+                    continue;
+                }
+
+                string trophyName = entry.Key;
+                TrophyHuntData data = Array.Find(__m_trophyHuntData, element => element.m_name == trophyName);
+
+                // Ignore 100% drop trophies
+                if (data.m_dropPercent >= 100)
+                {
+                    continue;
+                }
+
+                // Ignore if you haven't killed enough to get a drop
+                if (di.m_trophies == 0 ||
+                    di.m_numKilled < (100 / data.m_dropPercent))
+                {
+                    continue;
+                }
+
+                float actualDropPercent = 100.0f * (float)di.m_trophies / (float)di.m_numKilled;
+                float wikiDropPercent = data.m_dropPercent;
+
+                float dropRatio = actualDropPercent / wikiDropPercent;
+
+                if (dropRatio > luckiestScore)
+                {
+                    luckiestScore = dropRatio;
+                    luckiestTrophy = data.m_prettyName;
+                    luckiestActualPercent = actualDropPercent;
+                    luckiestExpectedPercent = data.m_dropPercent;
+                    luckiestRatio = luckiestActualPercent / luckiestExpectedPercent * 100.0f;
+                }
+                if (dropRatio < unluckiestScore)
+                {
+                    unluckiestScore = dropRatio;
+                    unluckiestTrophy = data.m_prettyName;
+                    unluckiestActualPercent = actualDropPercent;
+                    unluckiestExpectedPercent = data.m_dropPercent;
+                    unluckiestRatio = unluckiestActualPercent / unluckiestExpectedPercent * 100.0f;
+                }
+                //                    Debug.LogWarning($"Drop: {trophyName}: {dropRatio}");
+
+                cumulativeDropRatio += dropRatio;
+
+                numTrophyTypesKilled++;
+            }
+
+
+            string luckPercentStr = "<n/a>";
+            string luckRatingStr = "<n/a>";
+            float luckPercentage = 0.0f;
+            //                int luckRatingIndex = -1;
+
+            if (numTrophyTypesKilled > 0)
+            {
+                luckPercentage = (100.0f * (cumulativeDropRatio / (float)numTrophyTypesKilled));
+                luckPercentStr = luckPercentage.ToString("0.0");
+                luckRatingStr = GetLuckRatingUIString(luckPercentage);
+                //                    luckRatingIndex = GetLuckRatingIndex(luckPercentage);
+
+            }
+
+            string text =
+                $"<size=16><b><color=#FFB75B>Luck-O-Meter</color><b></size>\n" +
+                $"<color=white>  Player Luck Score: </color><color=orange>{luckPercentStr}</color>\n" +
+                $"<color=white>  Player Luck Rating: </color>{luckRatingStr}\n";
+
+            //int index = 0;
+            //foreach (LuckRating luckRating in __m_luckRatingTable)
+            //{
+            //    string colorStr = "#606060";
+            //    if (index == luckRatingIndex)
+            //    {
+            //        colorStr = luckRating.m_colorString;
+            //    }
+            //    text += $"      <color={colorStr}>{luckRating.m_luckString}</color>\n";
+
+            //    index++;
+            //}
+
+            string luckiestColor = __m_luckRatingTable[GetLuckRatingIndex(luckiestRatio)].m_colorString;
+            string unluckiestColor = __m_luckRatingTable[GetLuckRatingIndex(unluckiestRatio)].m_colorString;
+
+            // Luckiest and Unluckiest
+            text += $"<color=white>  Luckiest:</color>\n";
+            text += $"    <color={luckiestColor}>{luckiestTrophy}</color> <color=orange>{luckiestActualPercent.ToString("0.0")}%</color> (<color=yellow>{luckiestExpectedPercent}%)</color>\n";
+            text += $"<color=white>  Unluckiest:</color>\n";
+            text += $"    <color={unluckiestColor}>{unluckiestTrophy}</color> <color=orange>{unluckiestActualPercent.ToString("0.0")}%</color> (<color=yellow>{unluckiestExpectedPercent}%)</color>\n";
+
+            return text;
+        }
+
+        public static void ShowLuckTooltip(GameObject uiObject)
+        {
+            if (uiObject == null)
+                return;
+
+            string text = BuildLuckTooltipText(uiObject);
+
+            __m_luckTooltip.text = text;
+
+            __m_luckTooltipBackground.SetActive(true);
+            __m_luckTooltipObject.SetActive(true);
+
+            Vector3 tooltipOffset = new Vector3(__m_luckTooltipWindowSize.x / 2, __m_luckTooltipWindowSize.y, 0);
+            Vector3 mousePosition = Input.mousePosition;
+            Vector3 desiredPosition = mousePosition + tooltipOffset;
+
+            // Clamp the tooltip window onscreen
+            if (desiredPosition.x < 150) desiredPosition.x = 150;
+            if (desiredPosition.y < 150) desiredPosition.y = 150;
+            if (desiredPosition.x > Screen.width - __m_luckTooltipWindowSize.x)
+                desiredPosition.x = Screen.width - __m_luckTooltipWindowSize.x;
+            if (desiredPosition.y > Screen.height - __m_luckTooltipWindowSize.y)
+                desiredPosition.y = Screen.height - __m_luckTooltipWindowSize.y;
+
+            //                Debug.LogWarning($"Luck Tooltip x={desiredPosition.x} y={desiredPosition.y}");
+
+            __m_luckTooltipBackground.transform.position = desiredPosition;
+            __m_luckTooltipObject.transform.position = new Vector3(desiredPosition.x + __m_luckTooltipTextOffset.x, desiredPosition.y - __m_luckTooltipTextOffset.y, 0f);
+        }
+
+        public static void HideLuckTooltip()
+        {
+            __m_luckTooltipBackground.SetActive(false);
+            __m_luckTooltipObject.SetActive(false);
+        }
+
+        // Standings Tooltips
+
+        static GameObject __m_standingsTooltipObject = null;
+        static GameObject __m_standingsTooltipBackground = null;
+        static TextMeshProUGUI __m_standingsTooltip;
+        static Vector2 __m_standingsTooltipWindowSize = new Vector2(250, 300);
+        static Vector2 __m_standingsTooltipTextOffset = new Vector2(5, 2);
+
+        public static void CreateStandingsTooltip()
+        {
+            // Tooltip Background
+            __m_standingsTooltipBackground = new GameObject("Standings Tooltip Background");
+
+            // Set %the parent to the HUD
+            Transform hudrootTransform = Hud.instance.transform;
+            __m_standingsTooltipBackground.transform.SetParent(hudrootTransform, false);
+
+            RectTransform bgTransform = __m_standingsTooltipBackground.AddComponent<RectTransform>();
+            bgTransform.sizeDelta = __m_standingsTooltipWindowSize;
+
+            // Add an Image component for the background
+            UnityEngine.UI.Image backgroundImage = __m_standingsTooltipBackground.AddComponent<UnityEngine.UI.Image>();
+            backgroundImage.color = new Color(0, 0, 0, 0.90f); // Semi-transparent black background
+
+            __m_standingsTooltipBackground.SetActive(false);
+
+            // Create a new GameObject for the tooltip
+            __m_standingsTooltipObject = new GameObject("Standings Tooltip Text");
+            __m_standingsTooltipObject.transform.SetParent(__m_standingsTooltipBackground.transform, false);
+
+            // Add a RectTransform component for positioning
+            RectTransform rectTransform = __m_standingsTooltipObject.AddComponent<RectTransform>();
+            rectTransform.sizeDelta = new Vector2(__m_standingsTooltipWindowSize.x - __m_standingsTooltipTextOffset.x, __m_standingsTooltipWindowSize.y - __m_standingsTooltipTextOffset.y);
+
+            // Add a TextMeshProUGUI component for displaying the tooltip text
+            __m_standingsTooltip = AddTextMeshProComponent(__m_standingsTooltipObject);
+            __m_standingsTooltip.fontSize = 14;
+            __m_standingsTooltip.alignment = TextAlignmentOptions.TopLeft;
+            __m_standingsTooltip.color = Color.yellow;
+
+            // Initially hide the tooltip
+            __m_standingsTooltipObject.SetActive(false);
+        }
+
+        public static void AddTooltipTriggersToStandingsObject(GameObject uiObject)
+        {
+            // Add EventTrigger component if not already present
+            EventTrigger trigger = uiObject.GetComponent<EventTrigger>();
+            if (trigger != null)
+            {
+                return;
+            }
+
+            trigger = uiObject.AddComponent<EventTrigger>();
+
+            // Mouse Enter event (pointer enters the icon area)
+            EventTrigger.Entry entryEnter = new EventTrigger.Entry();
+            entryEnter.eventID = EventTriggerType.PointerEnter;
+            entryEnter.callback.AddListener((eventData) => ShowStandingsTooltip(uiObject));
+            trigger.triggers.Add(entryEnter);
+
+            // Mouse Exit event (pointer exits the icon area)
+            EventTrigger.Entry entryExit = new EventTrigger.Entry();
+            entryExit.eventID = EventTriggerType.PointerExit;
+            entryExit.callback.AddListener((eventData) => HideStandingsTooltip());
+            trigger.triggers.Add(entryExit);
+        }
+
+        public static string BuildStandingsTooltipText(GameObject uiObject)
+        {
+            string nameString = "<color=yellow>No Tournament Active</color>";
+            string modeString = "";
+
+            if (__m_tournamentStatus != TournamentStatus.NotRunning)
+            {
+                nameString = __m_tournamentName;
+                modeString = __m_tournamentMode;
+                if (modeString == "")
+                {
+                    modeString = GetGameMode().ToString();
+                }
+
+            }
+            string statusString = "<color=red>Not Running</color>";
+            if (__m_tournamentStatus == TournamentStatus.Live)
+            {
+                statusString = "<color=green>Live</color>";
+            }
+            else
+            if (__m_tournamentStatus == TournamentStatus.Over)
+            {
+                statusString = "<color=yellow>Ended</color>";
+            }
+
+            string tooltipText = $"<color=#FFB75B><size=24> Leaderboard</size></color>";
+            tooltipText += $"\n   <size=18><color=white> Name: '<color=orange>{nameString}</color>'</color></size>";
+            tooltipText += $"\n   <size=16><color=white> Game: <color=orange>{modeString}</color> [</color=yellow>{statusString}</color>]</size></color>\n";
+
+            int size = 20;
+
+            // Sort the list before displaying
+            __m_tournamentPlayerInfo.Sort((p1, p2) => p2.score.CompareTo(p1.score));
+
+            foreach (TournamentPlayerInfo info in __m_tournamentPlayerInfo)
+            {
+                int score = info.score;
+                if (info.id == __m_configDiscordId.Value)
+                {
+                    score = __m_playerCurrentScore;
+                }
+                tooltipText += $"<indent=10%><size={size}><color=white>{info.name}</color></size><indent=70%><size={size + 2}><color=yellow>{score}</color>\n";
+            }
+
+            return tooltipText;
+        }
+
+        public static void ShowStandingsTooltip(GameObject uiObject)
+        {
+            if (uiObject == null)
+                return;
+
+            string text = BuildStandingsTooltipText(uiObject);
+
+            __m_standingsTooltip.text = text;
+
+            __m_standingsTooltipBackground.SetActive(true);
+            __m_standingsTooltipObject.SetActive(true);
+
+            __m_standingsTooltip.ForceMeshUpdate(true, true);
+
+            Bounds bounds = __m_standingsTooltip.textBounds;
+
+            RectTransform objRectTransform = __m_standingsTooltipObject.GetComponent<RectTransform>();
+            RectTransform bgRectTransform = __m_standingsTooltipBackground.GetComponent<RectTransform>();
+
+            Vector2 size = new Vector2(bounds.size.x + 20, bounds.size.y + 10);
+            __m_standingsTooltipWindowSize = size;
+
+            objRectTransform.sizeDelta = size;
+            bgRectTransform.sizeDelta = size;
+
+            __m_standingsTooltip.ForceMeshUpdate(true, true);
+
+            Vector3 tooltipOffset = new Vector3(__m_standingsTooltipWindowSize.x / 2, __m_standingsTooltipWindowSize.y, 0);
+            Vector3 mousePosition = Input.mousePosition;
+            Vector3 desiredPosition = mousePosition + tooltipOffset;
+
+            // Clamp the tooltip window onscreen
+            if (desiredPosition.x < 150) desiredPosition.x = 150;
+            if (desiredPosition.y < 150) desiredPosition.y = 150;
+            if (desiredPosition.x > Screen.width - __m_standingsTooltipWindowSize.x)
+                desiredPosition.x = Screen.width - __m_standingsTooltipWindowSize.x;
+            if (desiredPosition.y > Screen.height - __m_standingsTooltipWindowSize.y)
+                desiredPosition.y = Screen.height - __m_standingsTooltipWindowSize.y;
+
+            __m_standingsTooltipBackground.transform.position = desiredPosition;
+            __m_standingsTooltipObject.transform.position = new Vector3(desiredPosition.x + __m_standingsTooltipTextOffset.x, desiredPosition.y - __m_standingsTooltipTextOffset.y, 0f);
+        }
+
+        public static void HideStandingsTooltip()
+        {
+            __m_standingsTooltipBackground.SetActive(false);
+            __m_standingsTooltipObject.SetActive(false);
+        }
+
+        // Trophy Tooltips
+
+        static GameObject __m_trophyTooltipObject = null;
+        static GameObject __m_trophyTooltipBackground = null;
+        static TextMeshProUGUI __m_trophyTooltip;
+        static Vector2 __m_trophyTooltipWindowSize = new Vector2(240, 125);
+        static Vector2 __m_trophyTooltipTextOffset = new Vector2(5, 2);
+        static Vector2 __m_trophyTooltipAllTrophyStatsWindowSize = new Vector2(240, 195);
+
+        public static void CreateTrophyTooltip()
+        {
+            //                Debug.LogWarning("Creating Tooltip object");
+
+            Vector2 tooltipWindowSize = __m_trophyTooltipWindowSize;
+            if (__m_showAllTrophyStats)
+            {
+                tooltipWindowSize = __m_trophyTooltipAllTrophyStatsWindowSize;
+            }
+
+            // Tooltip Background
+            __m_trophyTooltipBackground = new GameObject("Tooltip Background");
+
+            // Set %the parent to the HUD
+            Transform hudrootTransform = Hud.instance.transform;
+            __m_trophyTooltipBackground.transform.SetParent(hudrootTransform, false);
+
+            RectTransform bgTransform = __m_trophyTooltipBackground.AddComponent<RectTransform>();
+            bgTransform.sizeDelta = tooltipWindowSize;
+
+            // Add an Image component for the background
+            UnityEngine.UI.Image backgroundImage = __m_trophyTooltipBackground.AddComponent<UnityEngine.UI.Image>();
+            backgroundImage.color = new Color(0, 0, 0, 0.85f); // Semi-transparent black background
+
+            __m_trophyTooltipBackground.SetActive(false);
+
+            // Create a new GameObject for the tooltip
+            __m_trophyTooltipObject = new GameObject("Tooltip Text");
+            __m_trophyTooltipObject.transform.SetParent(__m_trophyTooltipBackground.transform, false);
+
+            // Add a RectTransform component for positioning
+            RectTransform rectTransform = __m_trophyTooltipObject.AddComponent<RectTransform>();
+            rectTransform.sizeDelta = new Vector2(tooltipWindowSize.x - __m_trophyTooltipTextOffset.x, tooltipWindowSize.y - __m_trophyTooltipTextOffset.y);
+
+            // Add a TextMeshProUGUI component for displaying the tooltip text
+            __m_trophyTooltip = AddTextMeshProComponent(__m_trophyTooltipObject);
+            __m_trophyTooltip.fontSize = 14;
+            __m_trophyTooltip.alignment = TextAlignmentOptions.TopLeft;
+            __m_trophyTooltip.color = Color.yellow;
+
+            // Initially hide the tooltip
+            __m_trophyTooltipObject.SetActive(false);
+        }
+
+        public static void DeleteTrophyTooltip()
+        {
+            if (__m_trophyTooltipObject != null)
+            {
+                GameObject.DestroyImmediate(__m_trophyTooltipObject);
+                __m_trophyTooltipObject = null;
+            }
+
+            if (__m_trophyTooltipBackground)
+            {
+                GameObject.DestroyImmediate(__m_trophyTooltipBackground);
+                __m_trophyTooltipBackground = null;
+            }
+        }
+
+        public static void AddTooltipTriggersToTrophyIcon(GameObject trophyIconObject)
+        {
+            // Add EventTrigger component if not already present
+            EventTrigger trigger = trophyIconObject.GetComponent<EventTrigger>();
+            if (trigger != null)
+            {
+                return;
+            }
+
+            trigger = trophyIconObject.AddComponent<EventTrigger>();
+
+            // Mouse Enter event (pointer enters the icon area)
+            EventTrigger.Entry entryEnter = new EventTrigger.Entry();
+            entryEnter.eventID = EventTriggerType.PointerEnter;
+            entryEnter.callback.AddListener((eventData) => ShowTrophyTooltip(trophyIconObject));
+            trigger.triggers.Add(entryEnter);
+
+            // Mouse Exit event (pointer exits the icon area)
+            EventTrigger.Entry entryExit = new EventTrigger.Entry();
+            entryExit.eventID = EventTriggerType.PointerExit;
+            entryExit.callback.AddListener((eventData) => HideTrophyTooltip());
+            trigger.triggers.Add(entryExit);
+        }
+
+        public static void CalculateDropPercentAndRating(TrophyHuntData trophyHuntData, DropInfo dropInfo, out string dropPercentStr, out string dropRatingStr)
+        {
+            dropPercentStr = "0";
+            dropRatingStr = "<n/a>";
+
+            if (dropInfo.m_numKilled > 0)
+            {
+                float dropPercent = 0.0f;
+                float expectedDropPercent = trophyHuntData.m_dropPercent;
+
+                dropPercent = (100.0f * ((float)dropInfo.m_trophies / (float)dropInfo.m_numKilled));
+                dropPercentStr = dropPercent.ToString("0.0");
+
+                // Don't compute for 100% drop enemies
+                if (trophyHuntData.m_dropPercent < 100)
+                {
+                    if (dropInfo.m_trophies > 0 &&
+                        dropInfo.m_numKilled >= (100 / expectedDropPercent))
                     {
-                        return index;
-                    }
-
-                    index++;
-                }
-
-                return 0;
-            }
-
-            public static string GetLuckRatingUIString(float luckPercentage)
-            {
-                int ratingIndex = GetLuckRatingIndex(luckPercentage);
-
-                LuckRating luckRating = __m_luckRatingTable[ratingIndex];
-
-                return $"<color={luckRating.m_colorString}>{luckRating.m_luckString}</color>";
-            }
-
-            public static string BuildLuckTooltipText(GameObject uiObject)
-            {
-                if (uiObject == null)
-                {
-                    return "Invalid";
-                }
-
-                int numTrophyTypesKilled = 0;
-                float cumulativeDropRatio = 0f;
-
-                float luckiestScore = float.MinValue;
-                string luckiestTrophy = "<n/a>";
-                float luckiestActualPercent = 0f;
-                float luckiestExpectedPercent = 0f;
-                float luckiestRatio = 0f;
-                float unluckiestScore = float.MaxValue;
-                string unluckiestTrophy = "<n/a>";
-                float unluckiestActualPercent = 0f;
-                float unluckiestExpectedPercent = 0f;
-                float unluckiestRatio = 0f;
-
-                // Compute Luck
-                foreach (KeyValuePair<string, DropInfo> entry in __m_allTrophyDropInfo)
-                {
-                    DropInfo di = entry.Value;
-                    if (di.m_numKilled == 0)
-                    {
-                        continue;
-                    }
-
-                    string trophyName = entry.Key;
-                    TrophyHuntData data = Array.Find(__m_trophyHuntData, element => element.m_name == trophyName);
-
-                    // Ignore 100% drop trophies
-                    if (data.m_dropPercent >= 100)
-                    {
-                        continue;
-                    }
-
-                    // Ignore if you haven't killed enough to get a drop
-                    if (di.m_trophies == 0 ||
-                        di.m_numKilled < (100 / data.m_dropPercent))
-                    {
-                        continue;
-                    }
-
-                    float actualDropPercent = 100.0f * (float)di.m_trophies / (float)di.m_numKilled;
-                    float wikiDropPercent = data.m_dropPercent;
-
-                    float dropRatio = actualDropPercent / wikiDropPercent;
-
-                    if (dropRatio > luckiestScore)
-                    {
-                        luckiestScore = dropRatio;
-                        luckiestTrophy = data.m_prettyName;
-                        luckiestActualPercent = actualDropPercent;
-                        luckiestExpectedPercent = data.m_dropPercent;
-                        luckiestRatio = luckiestActualPercent / luckiestExpectedPercent * 100.0f;
-                    }
-                    if (dropRatio < unluckiestScore)
-                    {
-                        unluckiestScore = dropRatio;
-                        unluckiestTrophy = data.m_prettyName;
-                        unluckiestActualPercent = actualDropPercent;
-                        unluckiestExpectedPercent = data.m_dropPercent;
-                        unluckiestRatio = unluckiestActualPercent / unluckiestExpectedPercent * 100.0f;
-                    }
-                    //                    Debug.LogWarning($"Drop: {trophyName}: {dropRatio}");
-
-                    cumulativeDropRatio += dropRatio;
-
-                    numTrophyTypesKilled++;
-                }
-
-
-                string luckPercentStr = "<n/a>";
-                string luckRatingStr = "<n/a>";
-                float luckPercentage = 0.0f;
-                //                int luckRatingIndex = -1;
-
-                if (numTrophyTypesKilled > 0)
-                {
-                    luckPercentage = (100.0f * (cumulativeDropRatio / (float)numTrophyTypesKilled));
-                    luckPercentStr = luckPercentage.ToString("0.0");
-                    luckRatingStr = GetLuckRatingUIString(luckPercentage);
-                    //                    luckRatingIndex = GetLuckRatingIndex(luckPercentage);
-
-                }
-
-                string text =
-                    $"<size=16><b><color=#FFB75B>Luck-O-Meter</color><b></size>\n" +
-                    $"<color=white>  Player Luck Score: </color><color=orange>{luckPercentStr}</color>\n" +
-                    $"<color=white>  Player Luck Rating: </color>{luckRatingStr}\n";
-
-                //int index = 0;
-                //foreach (LuckRating luckRating in __m_luckRatingTable)
-                //{
-                //    string colorStr = "#606060";
-                //    if (index == luckRatingIndex)
-                //    {
-                //        colorStr = luckRating.m_colorString;
-                //    }
-                //    text += $"      <color={colorStr}>{luckRating.m_luckString}</color>\n";
-
-                //    index++;
-                //}
-
-                string luckiestColor = __m_luckRatingTable[GetLuckRatingIndex(luckiestRatio)].m_colorString;
-                string unluckiestColor = __m_luckRatingTable[GetLuckRatingIndex(unluckiestRatio)].m_colorString;
-
-                // Luckiest and Unluckiest
-                text += $"<color=white>  Luckiest:</color>\n";
-                text += $"    <color={luckiestColor}>{luckiestTrophy}</color> <color=orange>{luckiestActualPercent.ToString("0.0")}%</color> (<color=yellow>{luckiestExpectedPercent}%)</color>\n";
-                text += $"<color=white>  Unluckiest:</color>\n";
-                text += $"    <color={unluckiestColor}>{unluckiestTrophy}</color> <color=orange>{unluckiestActualPercent.ToString("0.0")}%</color> (<color=yellow>{unluckiestExpectedPercent}%)</color>\n";
-
-                return text;
-            }
-
-            public static void ShowLuckTooltip(GameObject uiObject)
-            {
-                if (uiObject == null)
-                    return;
-
-                string text = BuildLuckTooltipText(uiObject);
-
-                __m_luckTooltip.text = text;
-
-                __m_luckTooltipBackground.SetActive(true);
-                __m_luckTooltipObject.SetActive(true);
-
-                Vector3 tooltipOffset = new Vector3(__m_luckTooltipWindowSize.x / 2, __m_luckTooltipWindowSize.y, 0);
-                Vector3 mousePosition = Input.mousePosition;
-                Vector3 desiredPosition = mousePosition + tooltipOffset;
-
-                // Clamp the tooltip window onscreen
-                if (desiredPosition.x < 150) desiredPosition.x = 150;
-                if (desiredPosition.y < 150) desiredPosition.y = 150;
-                if (desiredPosition.x > Screen.width - __m_luckTooltipWindowSize.x)
-                    desiredPosition.x = Screen.width - __m_luckTooltipWindowSize.x;
-                if (desiredPosition.y > Screen.height - __m_luckTooltipWindowSize.y)
-                    desiredPosition.y = Screen.height - __m_luckTooltipWindowSize.y;
-
-                //                Debug.LogWarning($"Luck Tooltip x={desiredPosition.x} y={desiredPosition.y}");
-
-                __m_luckTooltipBackground.transform.position = desiredPosition;
-                __m_luckTooltipObject.transform.position = new Vector3(desiredPosition.x + __m_luckTooltipTextOffset.x, desiredPosition.y - __m_luckTooltipTextOffset.y, 0f);
-            }
-
-            public static void HideLuckTooltip()
-            {
-                __m_luckTooltipBackground.SetActive(false);
-                __m_luckTooltipObject.SetActive(false);
-            }
-
-            // Standings Tooltips
-
-            static GameObject __m_standingsTooltipObject = null;
-            static GameObject __m_standingsTooltipBackground = null;
-            static TextMeshProUGUI __m_standingsTooltip;
-            static Vector2 __m_standingsTooltipWindowSize = new Vector2(250, 300);
-            static Vector2 __m_standingsTooltipTextOffset = new Vector2(5, 2);
-
-            public static void CreateStandingsTooltip()
-            {
-                // Tooltip Background
-                __m_standingsTooltipBackground = new GameObject("Standings Tooltip Background");
-
-                // Set %the parent to the HUD
-                Transform hudrootTransform = Hud.instance.transform;
-                __m_standingsTooltipBackground.transform.SetParent(hudrootTransform, false);
-
-                RectTransform bgTransform = __m_standingsTooltipBackground.AddComponent<RectTransform>();
-                bgTransform.sizeDelta = __m_standingsTooltipWindowSize;
-
-                // Add an Image component for the background
-                UnityEngine.UI.Image backgroundImage = __m_standingsTooltipBackground.AddComponent<UnityEngine.UI.Image>();
-                backgroundImage.color = new Color(0, 0, 0, 0.90f); // Semi-transparent black background
-
-                __m_standingsTooltipBackground.SetActive(false);
-
-                // Create a new GameObject for the tooltip
-                __m_standingsTooltipObject = new GameObject("Standings Tooltip Text");
-                __m_standingsTooltipObject.transform.SetParent(__m_standingsTooltipBackground.transform, false);
-
-                // Add a RectTransform component for positioning
-                RectTransform rectTransform = __m_standingsTooltipObject.AddComponent<RectTransform>();
-                rectTransform.sizeDelta = new Vector2(__m_standingsTooltipWindowSize.x - __m_standingsTooltipTextOffset.x, __m_standingsTooltipWindowSize.y - __m_standingsTooltipTextOffset.y);
-
-                // Add a TextMeshProUGUI component for displaying the tooltip text
-                __m_standingsTooltip = AddTextMeshProComponent(__m_standingsTooltipObject);
-                __m_standingsTooltip.fontSize = 14;
-                __m_standingsTooltip.alignment = TextAlignmentOptions.TopLeft;
-                __m_standingsTooltip.color = Color.yellow;
-
-                // Initially hide the tooltip
-                __m_standingsTooltipObject.SetActive(false);
-            }
-
-            public static void AddTooltipTriggersToStandingsObject(GameObject uiObject)
-            {
-                // Add EventTrigger component if not already present
-                EventTrigger trigger = uiObject.GetComponent<EventTrigger>();
-                if (trigger != null)
-                {
-                    return;
-                }
-
-                trigger = uiObject.AddComponent<EventTrigger>();
-
-                // Mouse Enter event (pointer enters the icon area)
-                EventTrigger.Entry entryEnter = new EventTrigger.Entry();
-                entryEnter.eventID = EventTriggerType.PointerEnter;
-                entryEnter.callback.AddListener((eventData) => ShowStandingsTooltip(uiObject));
-                trigger.triggers.Add(entryEnter);
-
-                // Mouse Exit event (pointer exits the icon area)
-                EventTrigger.Entry entryExit = new EventTrigger.Entry();
-                entryExit.eventID = EventTriggerType.PointerExit;
-                entryExit.callback.AddListener((eventData) => HideStandingsTooltip());
-                trigger.triggers.Add(entryExit);
-            }
-
-            public static string BuildStandingsTooltipText(GameObject uiObject)
-            {
-                string nameString = "<color=yellow>No Tournament Active</color>";
-                string modeString = "";
-
-                if (__m_tournamentStatus != TournamentStatus.NotRunning)
-                {
-                    nameString = __m_tournamentName;
-                    modeString = __m_tournamentMode;
-                    if (modeString == "")
-                    {
-                        modeString = GetGameMode().ToString();
-                    }
-
-                }
-                string statusString = "<color=red>Not Running</color>";
-                if (__m_tournamentStatus == TournamentStatus.Live)
-                {
-                    statusString = "<color=green>Live</color>";
-                }
-                else
-                if (__m_tournamentStatus == TournamentStatus.Over)
-                {
-                    statusString = "<color=yellow>Ended</color>";
-                }
-
-                string tooltipText = $"<color=#FFB75B><size=24> Leaderboard</size></color>";
-                tooltipText += $"\n   <size=18><color=white> Name: '<color=orange>{nameString}</color>'</color></size>";
-                tooltipText += $"\n   <size=16><color=white> Game: <color=orange>{modeString}</color> [</color=yellow>{statusString}</color>]</size></color>\n";
-
-                int size = 20;
-
-                // Sort the list before displaying
-                __m_tournamentPlayerInfo.Sort((p1, p2) => p2.score.CompareTo(p1.score));
-
-                foreach (TournamentPlayerInfo info in __m_tournamentPlayerInfo)
-                {
-                    int score = info.score;
-                    if (info.id == __m_configDiscordId.Value)
-                    {
-                        score = __m_playerCurrentScore;
-                    }
-                    tooltipText += $"<indent=10%><size={size}><color=white>{info.name}</color></size><indent=70%><size={size + 2}><color=yellow>{score}</color>\n";
-                }
-
-                return tooltipText;
-            }
-
-            public static void ShowStandingsTooltip(GameObject uiObject)
-            {
-                if (uiObject == null)
-                    return;
-
-                string text = BuildStandingsTooltipText(uiObject);
-
-                __m_standingsTooltip.text = text;
-
-                __m_standingsTooltipBackground.SetActive(true);
-                __m_standingsTooltipObject.SetActive(true);
-
-                __m_standingsTooltip.ForceMeshUpdate(true, true);
-
-                Bounds bounds = __m_standingsTooltip.textBounds;
-
-                RectTransform objRectTransform = __m_standingsTooltipObject.GetComponent<RectTransform>();
-                RectTransform bgRectTransform = __m_standingsTooltipBackground.GetComponent<RectTransform>();
-
-                Vector2 size = new Vector2(bounds.size.x + 20, bounds.size.y + 10);
-                __m_standingsTooltipWindowSize = size;
-
-                objRectTransform.sizeDelta = size;
-                bgRectTransform.sizeDelta = size;
-
-                __m_standingsTooltip.ForceMeshUpdate(true, true);
-
-                Vector3 tooltipOffset = new Vector3(__m_standingsTooltipWindowSize.x / 2, __m_standingsTooltipWindowSize.y, 0);
-                Vector3 mousePosition = Input.mousePosition;
-                Vector3 desiredPosition = mousePosition + tooltipOffset;
-
-                // Clamp the tooltip window onscreen
-                if (desiredPosition.x < 150) desiredPosition.x = 150;
-                if (desiredPosition.y < 150) desiredPosition.y = 150;
-                if (desiredPosition.x > Screen.width - __m_standingsTooltipWindowSize.x)
-                    desiredPosition.x = Screen.width - __m_standingsTooltipWindowSize.x;
-                if (desiredPosition.y > Screen.height - __m_standingsTooltipWindowSize.y)
-                    desiredPosition.y = Screen.height - __m_standingsTooltipWindowSize.y;
-
-                __m_standingsTooltipBackground.transform.position = desiredPosition;
-                __m_standingsTooltipObject.transform.position = new Vector3(desiredPosition.x + __m_standingsTooltipTextOffset.x, desiredPosition.y - __m_standingsTooltipTextOffset.y, 0f);
-            }
-
-            public static void HideStandingsTooltip()
-            {
-                __m_standingsTooltipBackground.SetActive(false);
-                __m_standingsTooltipObject.SetActive(false);
-            }
-
-            // Trophy Tooltips
-
-            static GameObject __m_trophyTooltipObject = null;
-            static GameObject __m_trophyTooltipBackground = null;
-            static TextMeshProUGUI __m_trophyTooltip;
-            static Vector2 __m_trophyTooltipWindowSize = new Vector2(240, 125);
-            static Vector2 __m_trophyTooltipTextOffset = new Vector2(5, 2);
-            static Vector2 __m_trophyTooltipAllTrophyStatsWindowSize = new Vector2(240, 195);
-
-            public static void CreateTrophyTooltip()
-            {
-                //                Debug.LogWarning("Creating Tooltip object");
-
-                Vector2 tooltipWindowSize = __m_trophyTooltipWindowSize;
-                if (__m_showAllTrophyStats)
-                {
-                    tooltipWindowSize = __m_trophyTooltipAllTrophyStatsWindowSize;
-                }
-
-                // Tooltip Background
-                __m_trophyTooltipBackground = new GameObject("Tooltip Background");
-
-                // Set %the parent to the HUD
-                Transform hudrootTransform = Hud.instance.transform;
-                __m_trophyTooltipBackground.transform.SetParent(hudrootTransform, false);
-
-                RectTransform bgTransform = __m_trophyTooltipBackground.AddComponent<RectTransform>();
-                bgTransform.sizeDelta = tooltipWindowSize;
-
-                // Add an Image component for the background
-                UnityEngine.UI.Image backgroundImage = __m_trophyTooltipBackground.AddComponent<UnityEngine.UI.Image>();
-                backgroundImage.color = new Color(0, 0, 0, 0.85f); // Semi-transparent black background
-
-                __m_trophyTooltipBackground.SetActive(false);
-
-                // Create a new GameObject for the tooltip
-                __m_trophyTooltipObject = new GameObject("Tooltip Text");
-                __m_trophyTooltipObject.transform.SetParent(__m_trophyTooltipBackground.transform, false);
-
-                // Add a RectTransform component for positioning
-                RectTransform rectTransform = __m_trophyTooltipObject.AddComponent<RectTransform>();
-                rectTransform.sizeDelta = new Vector2(tooltipWindowSize.x - __m_trophyTooltipTextOffset.x, tooltipWindowSize.y - __m_trophyTooltipTextOffset.y);
-
-                // Add a TextMeshProUGUI component for displaying the tooltip text
-                __m_trophyTooltip = AddTextMeshProComponent(__m_trophyTooltipObject);
-                __m_trophyTooltip.fontSize = 14;
-                __m_trophyTooltip.alignment = TextAlignmentOptions.TopLeft;
-                __m_trophyTooltip.color = Color.yellow;
-
-                // Initially hide the tooltip
-                __m_trophyTooltipObject.SetActive(false);
-            }
-
-            public static void DeleteTrophyTooltip()
-            {
-                if (__m_trophyTooltipObject != null)
-                {
-                    GameObject.DestroyImmediate(__m_trophyTooltipObject);
-                    __m_trophyTooltipObject = null;
-                }
-
-                if (__m_trophyTooltipBackground)
-                {
-                    GameObject.DestroyImmediate(__m_trophyTooltipBackground);
-                    __m_trophyTooltipBackground = null;
-                }
-            }
-
-            public static void AddTooltipTriggersToTrophyIcon(GameObject trophyIconObject)
-            {
-                // Add EventTrigger component if not already present
-                EventTrigger trigger = trophyIconObject.GetComponent<EventTrigger>();
-                if (trigger != null)
-                {
-                    return;
-                }
-
-                trigger = trophyIconObject.AddComponent<EventTrigger>();
-
-                // Mouse Enter event (pointer enters the icon area)
-                EventTrigger.Entry entryEnter = new EventTrigger.Entry();
-                entryEnter.eventID = EventTriggerType.PointerEnter;
-                entryEnter.callback.AddListener((eventData) => ShowTrophyTooltip(trophyIconObject));
-                trigger.triggers.Add(entryEnter);
-
-                // Mouse Exit event (pointer exits the icon area)
-                EventTrigger.Entry entryExit = new EventTrigger.Entry();
-                entryExit.eventID = EventTriggerType.PointerExit;
-                entryExit.callback.AddListener((eventData) => HideTrophyTooltip());
-                trigger.triggers.Add(entryExit);
-            }
-
-            public static void CalculateDropPercentAndRating(TrophyHuntData trophyHuntData, DropInfo dropInfo, out string dropPercentStr, out string dropRatingStr)
-            {
-                dropPercentStr = "0";
-                dropRatingStr = "<n/a>";
-
-                if (dropInfo.m_numKilled > 0)
-                {
-                    float dropPercent = 0.0f;
-                    float expectedDropPercent = trophyHuntData.m_dropPercent;
-
-                    dropPercent = (100.0f * ((float)dropInfo.m_trophies / (float)dropInfo.m_numKilled));
-                    dropPercentStr = dropPercent.ToString("0.0");
-
-                    // Don't compute for 100% drop enemies
-                    if (trophyHuntData.m_dropPercent < 100)
-                    {
-                        if (dropInfo.m_trophies > 0 &&
-                            dropInfo.m_numKilled >= (100 / expectedDropPercent))
-                        {
-                            float ratingPercent = 100 * (dropPercent / expectedDropPercent);
-                            dropRatingStr = GetLuckRatingUIString(ratingPercent);
-                        }
+                        float ratingPercent = 100 * (dropPercent / expectedDropPercent);
+                        dropRatingStr = GetLuckRatingUIString(ratingPercent);
                     }
                 }
             }
+        }
 
-            public static string BuildCookingTooltipText(GameObject uiObject)
+        public static string BuildCookingTooltipText(GameObject uiObject)
+        {
+            if (uiObject == null)
             {
-                if (uiObject == null)
-                {
-                    return "ERROR";
-                }
-
-                ConsumableData cookedFoodData = Array.Find(__m_cookedFoodData, element => element.m_prefabName == uiObject.name);
-
-                string text =
-                    $"<size=16><b><color=#FFB75B>{cookedFoodData.m_displayName}</color><b></size>\n" +
-                    $"<color=white>Point Value: </color><color=green>{cookedFoodData.m_points}</color>\n" +
-                    $"<color=white>  Health: </color><color=orange>{cookedFoodData.m_health}</color>\n" +
-                    $"<color=white>  Stamina: </color><color=orange>{cookedFoodData.m_stamina}</color>\n" +
-                    $"<color=white>  Regen: </color><color=orange>{cookedFoodData.m_regen}</color>/sec\n" +
-                    $"<color=white>  Eitr: <color=orange>{cookedFoodData.m_eitr}</color>\n" +
-                    $"<color=white>  Biome: <color=orange>{cookedFoodData.m_biome.ToString()}</color>\n";
-
-                return text;
+                return "ERROR";
             }
 
-            public static string BuildTrophyTooltipText(GameObject uiObject)
+            ConsumableData cookedFoodData = Array.Find(__m_cookedFoodData, element => element.m_prefabName == uiObject.name);
+
+            string text =
+                $"<size=16><b><color=#FFB75B>{cookedFoodData.m_displayName}</color><b></size>\n" +
+                $"<color=white>Point Value: </color><color=green>{cookedFoodData.m_points}</color>\n" +
+                $"<color=white>  Health: </color><color=orange>{cookedFoodData.m_health}</color>\n" +
+                $"<color=white>  Stamina: </color><color=orange>{cookedFoodData.m_stamina}</color>\n" +
+                $"<color=white>  Regen: </color><color=orange>{cookedFoodData.m_regen}</color>/sec\n" +
+                $"<color=white>  Eitr: <color=orange>{cookedFoodData.m_eitr}</color>\n" +
+                $"<color=white>  Biome: <color=orange>{cookedFoodData.m_biome.ToString()}</color>\n";
+
+            return text;
+        }
+
+        public static string BuildTrophyTooltipText(GameObject uiObject)
+        {
+            if (uiObject == null)
             {
-                if (uiObject == null)
-                {
-                    return "Invalid";
-                }
-
-                string trophyName = uiObject.name;
-
-                TrophyHuntData trophyHuntData = Array.Find(__m_trophyHuntData, element => element.m_name == trophyName);
-
-                DropInfo allTrophyDropInfo = __m_allTrophyDropInfo[trophyName];
-                DropInfo playerDropInfo = __m_playerTrophyDropInfo[trophyName];
-
-                //                Debug.LogWarning($"dropped: {dropInfo.m_trophiesDropped} killed: {dropInfo.m_numKilled} percent:{trophyHuntData.m_dropPercent}");
-
-                string playerDropPercentStr = "0";
-                string playerDropRatingStr = "<n/a>";
-
-                CalculateDropPercentAndRating(trophyHuntData, playerDropInfo, out playerDropPercentStr, out playerDropRatingStr);
-
-                string allTrophyDropPercentStr = "0";
-                string allTrophyDropRatingStr = "<n/a>";
-
-                CalculateDropPercentAndRating(trophyHuntData, allTrophyDropInfo, out allTrophyDropPercentStr, out allTrophyDropRatingStr);
-
-                string dropWikiPercentStr = trophyHuntData.m_dropPercent.ToString();
-
-                string text =
-                    $"<size=16><b><color=#FFB75B>{trophyHuntData.m_prettyName}</color><b></size>\n" +
-                    $"<color=white>Point Value: </color><color=green>{trophyHuntData.GetCurGameModeTrophyScoreValue()}</color>\n" +
-                    $"<color=white>Player Kills: </color><color=orange>{playerDropInfo.m_numKilled}</color>\n" +
-                    $"<color=white>Trophies Picked Up: </color><color=orange>{playerDropInfo.m_trophies}</color>\n" +
-                    $"<color=white>Kill/Pickup Rate: </color><color=orange>{playerDropPercentStr}%</color>\n" +
-                    $"<color=white>Wiki Trophy Drop Rate: (<color=orange>{dropWikiPercentStr}%)</color>\n" +
-                    $"<color=white>Player Luck Rating: <color=yellow>{playerDropRatingStr}</color>\n";
-
-                if (__m_showAllTrophyStats)
-                {
-                    text = text +
-                    $"<color=white>Actual Kills: </color><color=orange>{allTrophyDropInfo.m_numKilled}</color>\n" +
-                    $"<color=white>Actual Trophies: </color><color=orange>{allTrophyDropInfo.m_trophies}</color>\n" +
-                    $"<color=white>Actual Drop Rate: </color><color=orange>{allTrophyDropPercentStr}%</color> (<color=yellow>{dropWikiPercentStr}%)</color>\n" +
-                    $"<color=white>Actual Luck Rating: <color=yellow>{allTrophyDropRatingStr}</color>\n";
-
-                }
-                return text;
+                return "Invalid";
             }
 
-            public static void ShowTrophyTooltip(GameObject uiObject)
+            string trophyName = uiObject.name;
+
+            TrophyHuntData trophyHuntData = Array.Find(__m_trophyHuntData, element => element.m_name == trophyName);
+
+            DropInfo allTrophyDropInfo = __m_allTrophyDropInfo[trophyName];
+            DropInfo playerDropInfo = __m_playerTrophyDropInfo[trophyName];
+
+            //                Debug.LogWarning($"dropped: {dropInfo.m_trophiesDropped} killed: {dropInfo.m_numKilled} percent:{trophyHuntData.m_dropPercent}");
+
+            string playerDropPercentStr = "0";
+            string playerDropRatingStr = "<n/a>";
+
+            CalculateDropPercentAndRating(trophyHuntData, playerDropInfo, out playerDropPercentStr, out playerDropRatingStr);
+
+            string allTrophyDropPercentStr = "0";
+            string allTrophyDropRatingStr = "<n/a>";
+
+            CalculateDropPercentAndRating(trophyHuntData, allTrophyDropInfo, out allTrophyDropPercentStr, out allTrophyDropRatingStr);
+
+            string dropWikiPercentStr = trophyHuntData.m_dropPercent.ToString();
+
+            string text =
+                $"<size=16><b><color=#FFB75B>{trophyHuntData.m_prettyName}</color><b></size>\n" +
+                $"<color=white>Point Value: </color><color=green>{trophyHuntData.GetCurGameModeTrophyScoreValue()}</color>\n" +
+                $"<color=white>Player Kills: </color><color=orange>{playerDropInfo.m_numKilled}</color>\n" +
+                $"<color=white>Trophies Picked Up: </color><color=orange>{playerDropInfo.m_trophies}</color>\n" +
+                $"<color=white>Kill/Pickup Rate: </color><color=orange>{playerDropPercentStr}%</color>\n" +
+                $"<color=white>Wiki Trophy Drop Rate: (<color=orange>{dropWikiPercentStr}%)</color>\n" +
+                $"<color=white>Player Luck Rating: <color=yellow>{playerDropRatingStr}</color>\n";
+
+            if (__m_showAllTrophyStats)
             {
-                if (uiObject == null)
-                    return;
+                text = text +
+                $"<color=white>Actual Kills: </color><color=orange>{allTrophyDropInfo.m_numKilled}</color>\n" +
+                $"<color=white>Actual Trophies: </color><color=orange>{allTrophyDropInfo.m_trophies}</color>\n" +
+                $"<color=white>Actual Drop Rate: </color><color=orange>{allTrophyDropPercentStr}%</color> (<color=yellow>{dropWikiPercentStr}%)</color>\n" +
+                $"<color=white>Actual Luck Rating: <color=yellow>{allTrophyDropRatingStr}</color>\n";
 
-                string text = "";
-
-                if (GetGameMode() == TrophyGameMode.CulinarySaga)
-                {
-                    text = BuildCookingTooltipText(uiObject);
-                }
-                else
-                {
-                    text = BuildTrophyTooltipText(uiObject);
-                }
-                __m_trophyTooltip.text = text;
-
-                __m_trophyTooltipBackground.SetActive(true);
-                __m_trophyTooltipObject.SetActive(true);
-
-                Vector2 tooltipSize = __m_trophyTooltipWindowSize;
-                if (__m_showAllTrophyStats)
-                    tooltipSize = __m_trophyTooltipAllTrophyStatsWindowSize;
-
-                Vector3 tooltipOffset = new Vector3(tooltipSize.x / 2, tooltipSize.y, 0);
-                Vector3 mousePosition = Input.mousePosition;
-                Vector3 desiredPosition = mousePosition + tooltipOffset;
-
-                // Clamp the tooltip window onscreen
-                if (desiredPosition.x < 0) desiredPosition.x = 0;
-                if (desiredPosition.y < 0) desiredPosition.y = 0;
-                if (desiredPosition.x > Screen.width - tooltipSize.x)
-                    desiredPosition.x = Screen.width - tooltipSize.x;
-                if (desiredPosition.y > Screen.height - tooltipSize.y)
-                    desiredPosition.y = Screen.height - tooltipSize.y;
-
-                __m_trophyTooltipBackground.transform.position = desiredPosition;
-                __m_trophyTooltipObject.transform.position = new Vector3(desiredPosition.x + __m_trophyTooltipTextOffset.x, desiredPosition.y - __m_trophyTooltipTextOffset.y, 0f);
             }
+            return text;
+        }
 
-            public static void HideTrophyTooltip()
+        public static void ShowTrophyTooltip(GameObject uiObject)
+        {
+            if (uiObject == null)
+                return;
+
+            string text = "";
+
+            if (GetGameMode() == TrophyGameMode.CulinarySaga)
             {
-                __m_trophyTooltipBackground.SetActive(false);
-                __m_trophyTooltipObject.SetActive(false);
+                text = BuildCookingTooltipText(uiObject);
             }
-
-            #endregion
-
-            public static bool CharacterCanDropTrophies(string characterName)
+            else
             {
-                int index = Array.FindIndex(__m_trophyHuntData, element => element.m_enemies.Contains(characterName));
-                if (index >= 0) return true;
-                return false;
+                text = BuildTrophyTooltipText(uiObject);
             }
+            __m_trophyTooltip.text = text;
 
-            public static void RecordDroppedTrophy(string characterName, string trophyName)
+            __m_trophyTooltipBackground.SetActive(true);
+            __m_trophyTooltipObject.SetActive(true);
+
+            Vector2 tooltipSize = __m_trophyTooltipWindowSize;
+            if (__m_showAllTrophyStats)
+                tooltipSize = __m_trophyTooltipAllTrophyStatsWindowSize;
+
+            Vector3 tooltipOffset = new Vector3(tooltipSize.x / 2, tooltipSize.y, 0);
+            Vector3 mousePosition = Input.mousePosition;
+            Vector3 desiredPosition = mousePosition + tooltipOffset;
+
+            // Clamp the tooltip window onscreen
+            if (desiredPosition.x < 0) desiredPosition.x = 0;
+            if (desiredPosition.y < 0) desiredPosition.y = 0;
+            if (desiredPosition.x > Screen.width - tooltipSize.x)
+                desiredPosition.x = Screen.width - tooltipSize.x;
+            if (desiredPosition.y > Screen.height - tooltipSize.y)
+                desiredPosition.y = Screen.height - tooltipSize.y;
+
+            __m_trophyTooltipBackground.transform.position = desiredPosition;
+            __m_trophyTooltipObject.transform.position = new Vector3(desiredPosition.x + __m_trophyTooltipTextOffset.x, desiredPosition.y - __m_trophyTooltipTextOffset.y, 0f);
+        }
+
+        public static void HideTrophyTooltip()
+        {
+            __m_trophyTooltipBackground.SetActive(false);
+            __m_trophyTooltipObject.SetActive(false);
+        }
+
+        #endregion
+
+        public static bool CharacterCanDropTrophies(string characterName)
+        {
+            int index = Array.FindIndex(__m_trophyHuntData, element => element.m_enemies.Contains(characterName));
+            if (index >= 0) return true;
+            return false;
+        }
+
+        public static void RecordDroppedTrophy(string characterName, string trophyName)
+        {
+            DropInfo drop = __m_allTrophyDropInfo[trophyName];
+            drop.m_trophies++;
+            __m_allTrophyDropInfo[trophyName] = drop;
+        }
+
+        public static string EnemyNameToTrophyName(string enemyName)
+        {
+            int index = Array.FindIndex(__m_trophyHuntData, element => element.m_enemies.Contains(enemyName));
+            if (index < 0) return "Not Found";
+
+            return __m_trophyHuntData[index].m_name;
+        }
+
+        public static bool RecordPlayerPickedUpTrophy(string trophyName)
+        {
+            if (__m_playerTrophyDropInfo.ContainsKey(trophyName))
             {
-                DropInfo drop = __m_allTrophyDropInfo[trophyName];
+                DropInfo drop = __m_playerTrophyDropInfo[trophyName];
                 drop.m_trophies++;
+                __m_playerTrophyDropInfo[trophyName] = drop;
+
+                return true;
+            }
+
+            return false;
+        }
+
+        public static void RecordTrophyCapableKill(string characterName, bool killedByPlayer)
+        {
+            string trophyName = EnemyNameToTrophyName(characterName);
+
+            if (killedByPlayer)
+            {
+                //                    Debug.Log($"{characterName} killed by Player");
+
+                DropInfo drop = __m_playerTrophyDropInfo[trophyName];
+                drop.m_numKilled++;
+
+                __m_playerTrophyDropInfo[trophyName] = drop;
+
+            }
+            else
+            {
+                //                    Debug.Log($"{characterName} killed not by Player");
+
+                DropInfo drop = __m_allTrophyDropInfo[trophyName];
+                drop.m_numKilled++;
+
                 __m_allTrophyDropInfo[trophyName] = drop;
             }
+        }
 
-            public static string EnemyNameToTrophyName(string enemyName)
+        public struct SpecialSagaDrop
+        {
+            public SpecialSagaDrop(string itemName, float dropPercent, int dropAmountMin, int dropAmountMax, bool dropOnlyOne = false, bool stopDroppingOnPickup = false, TrophyGameMode onlyInMode = TrophyGameMode.Max)
             {
-                int index = Array.FindIndex(__m_trophyHuntData, element => element.m_enemies.Contains(enemyName));
-                if (index < 0) return "Not Found";
-
-                return __m_trophyHuntData[index].m_name;
+                m_itemName = itemName;
+                m_dropPercent = dropPercent;
+                m_dropAmountMin = dropAmountMin;
+                m_dropAmountMax = dropAmountMax;
+                m_dropOnlyOne = dropOnlyOne;
+                m_stopDroppingOnPickup = stopDroppingOnPickup;
+                m_numDropped = 0;
+                m_numPickedUp = 0;
+                m_onlyInMode = onlyInMode;
             }
 
-            public static bool RecordPlayerPickedUpTrophy(string trophyName)
-            {
-                if (__m_playerTrophyDropInfo.ContainsKey(trophyName))
-                {
-                    DropInfo drop = __m_playerTrophyDropInfo[trophyName];
-                    drop.m_trophies++;
-                    __m_playerTrophyDropInfo[trophyName] = drop;
+            public string m_itemName;
+            public float m_dropPercent;
+            public int m_dropAmountMin;
+            public int m_dropAmountMax;
+            public bool m_dropOnlyOne;
+            public bool m_stopDroppingOnPickup;
+            public TrophyGameMode m_onlyInMode;
+            public int m_numDropped;
+            public int m_numPickedUp;
+        }
 
-                    return true;
-                }
-
-                return false;
-            }
-
-            public static void RecordTrophyCapableKill(string characterName, bool killedByPlayer)
-            {
-                string trophyName = EnemyNameToTrophyName(characterName);
-
-                if (killedByPlayer)
-                {
-                    //                    Debug.Log($"{characterName} killed by Player");
-
-                    DropInfo drop = __m_playerTrophyDropInfo[trophyName];
-                    drop.m_numKilled++;
-
-                    __m_playerTrophyDropInfo[trophyName] = drop;
-
-                }
-                else
-                {
-                    //                    Debug.Log($"{characterName} killed not by Player");
-
-                    DropInfo drop = __m_allTrophyDropInfo[trophyName];
-                    drop.m_numKilled++;
-
-                    __m_allTrophyDropInfo[trophyName] = drop;
-                }
-            }
-
-            public struct SpecialSagaDrop
-            {
-                public SpecialSagaDrop(string itemName, float dropPercent, int dropAmountMin, int dropAmountMax, bool dropOnlyOne = false, bool stopDroppingOnPickup = false, TrophyGameMode onlyInMode = TrophyGameMode.Max)
-                {
-                    m_itemName = itemName;
-                    m_dropPercent = dropPercent;
-                    m_dropAmountMin = dropAmountMin;
-                    m_dropAmountMax = dropAmountMax;
-                    m_dropOnlyOne = dropOnlyOne;
-                    m_stopDroppingOnPickup = stopDroppingOnPickup;
-                    m_numDropped = 0;
-                    m_numPickedUp = 0;
-                    m_onlyInMode = onlyInMode;
-                }
-
-                public string m_itemName;
-                public float m_dropPercent;
-                public int m_dropAmountMin;
-                public int m_dropAmountMax;
-                public bool m_dropOnlyOne;
-                public bool m_stopDroppingOnPickup;
-                public TrophyGameMode m_onlyInMode;
-                public int m_numDropped;
-                public int m_numPickedUp;
-            }
-
-            static public Dictionary<string, List<SpecialSagaDrop>> __m_specialSagaDrops = new Dictionary<string, List<SpecialSagaDrop>>
+        static public Dictionary<string, List<SpecialSagaDrop>> __m_specialSagaDrops = new Dictionary<string, List<SpecialSagaDrop>>
             {
                 {
                     "$enemy_greyling",          new List<SpecialSagaDrop>
@@ -4326,242 +3868,241 @@ namespace TrophyHuntMod
 
             };
 
-            public static void InitializeSagaDrops()
+        public static void InitializeSagaDrops()
+        {
+            List<string> keys = new List<string>(__m_specialSagaDrops.Keys);
+            foreach (string key in keys)
             {
-                List<string> keys = new List<string>(__m_specialSagaDrops.Keys);
-                foreach (string key in keys)
+                List<SpecialSagaDrop> dropList = __m_specialSagaDrops[key];
+                for (int i = 0; i < dropList.Count; i++)
                 {
-                    List<SpecialSagaDrop> dropList = __m_specialSagaDrops[key];
-                    for (int i = 0; i < dropList.Count; i++)
-                    {
-                        SpecialSagaDrop drop = dropList[i];
+                    SpecialSagaDrop drop = dropList[i];
 
-                        drop.m_numDropped = 0;
-                        drop.m_numPickedUp = 0;
-                        dropList[i] = drop;
-                    }
-                    __m_specialSagaDrops[key] = dropList;
+                    drop.m_numDropped = 0;
+                    drop.m_numPickedUp = 0;
+                    dropList[i] = drop;
                 }
+                __m_specialSagaDrops[key] = dropList;
             }
+        }
 
-            public static bool HasAnyoneDropped(string itemName)
+        public static bool HasAnyoneDropped(string itemName)
+        {
+            bool hasDropped = false;
+
+            foreach (KeyValuePair<string, List<SpecialSagaDrop>> specialDrops in __m_specialSagaDrops)
             {
-                bool hasDropped = false;
-
-                foreach (KeyValuePair<string, List<SpecialSagaDrop>> specialDrops in __m_specialSagaDrops)
+                foreach (SpecialSagaDrop sagaDrop in specialDrops.Value)
                 {
-                    foreach (SpecialSagaDrop sagaDrop in specialDrops.Value)
+                    if (sagaDrop.m_itemName == itemName)
                     {
-                        if (sagaDrop.m_itemName == itemName)
+                        if (sagaDrop.m_numDropped > 0)
                         {
-                            if (sagaDrop.m_numDropped > 0)
-                            {
-                                return true;
-                            }
+                            return true;
                         }
                     }
                 }
-
-                return hasDropped;
             }
-            public static bool HasBeenPickedUp(string itemName)
-            {
-                bool hasDropped = false;
 
-                foreach (KeyValuePair<string, List<SpecialSagaDrop>> specialDrops in __m_specialSagaDrops)
+            return hasDropped;
+        }
+        public static bool HasBeenPickedUp(string itemName)
+        {
+            bool hasDropped = false;
+
+            foreach (KeyValuePair<string, List<SpecialSagaDrop>> specialDrops in __m_specialSagaDrops)
+            {
+                foreach (SpecialSagaDrop sagaDrop in specialDrops.Value)
                 {
-                    foreach (SpecialSagaDrop sagaDrop in specialDrops.Value)
+                    if (sagaDrop.m_itemName == itemName)
                     {
-                        if (sagaDrop.m_itemName == itemName)
+                        if (sagaDrop.m_numPickedUp > 0)
                         {
-                            if (sagaDrop.m_numPickedUp > 0)
-                            {
-                                return true;
-                            }
+                            return true;
                         }
                     }
                 }
-
-                return hasDropped;
             }
 
+            return hasDropped;
+        }
 
-            // Watch character drops and see what characters drop what items (actual dropped items)
-            //
-            [HarmonyPatch(typeof(CharacterDrop), nameof(CharacterDrop.GenerateDropList))]
-            class CharacterDrop_GenerateDropList_Patch
+
+        // Watch character drops and see what characters drop what items (actual dropped items)
+        //
+        [HarmonyPatch(typeof(CharacterDrop), nameof(CharacterDrop.GenerateDropList))]
+        class CharacterDrop_GenerateDropList_Patch
+        {
+            static void Postfix(CharacterDrop __instance, ref List<KeyValuePair<GameObject, int>> __result)
             {
-                static void Postfix(CharacterDrop __instance, ref List<KeyValuePair<GameObject, int>> __result)
+                if (__instance != null)
                 {
-                    if (__instance != null)
+                    Character character = __instance.GetComponent<Character>();
+
+                    string characterName = character.m_name;
+
+                    Debug.LogError($"CharacterDrop_GenerateDropList_Patch: {characterName} has dropped items: {__result?.Count}");
+
+                    // See if this is a trophy-dropper and handle any special trophy rules for the various game modes
+                    //
+                    if (CharacterCanDropTrophies(characterName))
                     {
-                        Character character = __instance.GetComponent<Character>();
 
-                        string characterName = character.m_name;
+                        //                              Debug.Log($"Trophy-capable character {characterName} has dropped items:");
 
-                        Debug.LogError($"CharacterDrop_GenerateDropList_Patch: {characterName} has dropped items: {__result?.Count}");
+                        RecordTrophyCapableKill(characterName, false);
 
-                        // See if this is a trophy-dropper and handle any special trophy rules for the various game modes
-                        //
-                        if (CharacterCanDropTrophies(characterName))
+                        bool droppedTrophy = false;
+
+                        // Check if there are any dropped items
+                        if (__result != null)
                         {
-
-                            //                              Debug.Log($"Trophy-capable character {characterName} has dropped items:");
-
-                            RecordTrophyCapableKill(characterName, false);
-
-                            bool droppedTrophy = false;
-
-                            // Check if there are any dropped items
-                            if (__result != null)
+                            foreach (KeyValuePair<GameObject, int> droppedItem in __result)
                             {
-                                foreach (KeyValuePair<GameObject, int> droppedItem in __result)
+                                // Get the item's name
+                                string itemName = droppedItem.Key.name;
+
+                                // Log or process the dropped item
+                                //                                    Debug.Log($"Dropped item: {itemName} count: {droppedItem.Value}");
+
+                                if (itemName.Contains("Trophy"))
                                 {
-                                    // Get the item's name
-                                    string itemName = droppedItem.Key.name;
+                                    //                                        Debug.Log($"Trophy {itemName} Dropped by {characterName}");
 
-                                    // Log or process the dropped item
-                                    //                                    Debug.Log($"Dropped item: {itemName} count: {droppedItem.Value}");
+                                    RecordDroppedTrophy(characterName, itemName);
 
-                                    if (itemName.Contains("Trophy"))
-                                    {
-                                        //                                        Debug.Log($"Trophy {itemName} Dropped by {characterName}");
-
-                                        RecordDroppedTrophy(characterName, itemName);
-
-                                        droppedTrophy = true;
-                                        break;
-                                    }
-                                }
-                            }
-                            else
-                            {
-                                Debug.Log($"Trophy-capable character {characterName} had null drop list");
-                            }
-
-                            if (!droppedTrophy)
-                            {
-                                float dropPercentage = 0f;
-
-                                if (GetGameMode() == TrophyGameMode.TrophyRush || (IsSagaMode() && GetGameMode() != TrophyGameMode.CasualSaga))
-                                {
-                                    string trophyName = EnemyNameToTrophyName(characterName);
-                                    if (!__m_trophyCache.Contains(trophyName) || trophyName == "TrophyDeer")
-                                    {
-                                        dropPercentage = 100f;
-                                    }
-                                }
-                                //else if (GetGameMode() == TrophyGameMode.TrophySaga)
-                                //{
-                                //    int index = Array.FindIndex(__m_trophyHuntData, element => element.m_enemies.Contains(characterName));
-                                //    if (index >= 0)
-                                //    {
-                                //        float wikiDropPercent = __m_trophyHuntData[index].m_dropPercent;
-
-                                //        // Cap at 50% drop rate
-                                //        dropPercentage = Math.Min(wikiDropPercent * TROPHY_SAGA_TROPHY_DROP_MULTIPLIER, 50f);
-                                //    }
-                                //}
-
-                                // Roll the dice
-                                System.Random randomizer = new System.Random();
-                                float randValue = (float)randomizer.NextDouble() * 100f;
-
-                                // If we rolled below drop percentage, drop a trophy
-                                if (randValue < dropPercentage)
-                                {
-                                    string trophyName = EnemyNameToTrophyName(characterName);
-
-                                    List<Drop> dropList = __instance.m_drops;
-
-                                    Drop trophyDrop = dropList.Find(theDrop => theDrop.m_prefab.name == trophyName);
-
-                                    if (trophyDrop != null)
-                                    {
-                                        KeyValuePair<GameObject, int> newDropItem = new KeyValuePair<GameObject, int>(trophyDrop.m_prefab, 1);
-
-                                        if (__result == null)
-                                        {
-                                            __result = new List<KeyValuePair<GameObject, int>>();
-                                        }
-                                        __result.Add(newDropItem);
-
-                                        RecordDroppedTrophy(characterName, trophyName);
-                                    }
+                                    droppedTrophy = true;
+                                    break;
                                 }
                             }
                         }
-
-                        // Check to see if we need to add any special drops to this character
-                        // ex: Saga only Greyling drops
-                        if (IsSagaMode())
+                        else
                         {
-                            //                            Debug.LogWarning($"Saga drops for {characterName}?");
+                            Debug.Log($"Trophy-capable character {characterName} had null drop list");
+                        }
 
-                            if (__m_specialSagaDrops.ContainsKey(characterName))
+                        if (!droppedTrophy)
+                        {
+                            float dropPercentage = 0f;
+
+                            if (GetGameMode() == TrophyGameMode.TrophyRush || (IsSagaMode() && GetGameMode() != TrophyGameMode.CasualSaga))
                             {
-                                List<SpecialSagaDrop> enemySagaDrops = __m_specialSagaDrops[characterName];
-
-                                System.Random randomizer = new System.Random(Guid.NewGuid().GetHashCode());
-
-                                for (int i = 0; i < enemySagaDrops.Count; i++)
+                                string trophyName = EnemyNameToTrophyName(characterName);
+                                if (!__m_trophyCache.Contains(trophyName) || trophyName == "TrophyDeer")
                                 {
-                                    SpecialSagaDrop sagaDrop = enemySagaDrops[i];
+                                    dropPercentage = 100f;
+                                }
+                            }
+                            //else if (GetGameMode() == TrophyGameMode.TrophySaga)
+                            //{
+                            //    int index = Array.FindIndex(__m_trophyHuntData, element => element.m_enemies.Contains(characterName));
+                            //    if (index >= 0)
+                            //    {
+                            //        float wikiDropPercent = __m_trophyHuntData[index].m_dropPercent;
 
-                                    //                                    Debug.LogWarning($"{sagaDrop.m_itemName} {sagaDrop.m_onlyInMode.ToString()} ({GetGameMode()}");
+                            //        // Cap at 50% drop rate
+                            //        dropPercentage = Math.Min(wikiDropPercent * TROPHY_SAGA_TROPHY_DROP_MULTIPLIER, 50f);
+                            //    }
+                            //}
 
-                                    // If it only drops in a specific game mode
-                                    if (sagaDrop.m_onlyInMode != TrophyGameMode.Max)
+                            // Roll the dice
+                            System.Random randomizer = new System.Random();
+                            float randValue = (float)randomizer.NextDouble() * 100f;
+
+                            // If we rolled below drop percentage, drop a trophy
+                            if (randValue < dropPercentage)
+                            {
+                                string trophyName = EnemyNameToTrophyName(characterName);
+
+                                List<Drop> dropList = __instance.m_drops;
+
+                                Drop trophyDrop = dropList.Find(theDrop => theDrop.m_prefab.name == trophyName);
+
+                                if (trophyDrop != null)
+                                {
+                                    KeyValuePair<GameObject, int> newDropItem = new KeyValuePair<GameObject, int>(trophyDrop.m_prefab, 1);
+
+                                    if (__result == null)
                                     {
-                                        // And we're not in that mode currently
-                                        if (GetGameMode() != sagaDrop.m_onlyInMode)
-                                        {
-                                            Debug.LogWarning($"{sagaDrop.m_itemName} Ignored");
-                                            continue;
-                                        }
+                                        __result = new List<KeyValuePair<GameObject, int>>();
                                     }
+                                    __result.Add(newDropItem);
 
-                                    bool alreadyDropped = false;
-                                    //                                    Debug.LogWarning($"{characterName} {sagaDrop.m_itemName} numDrops: {sagaDrop.m_numDropped}");
-                                    if (sagaDrop.m_dropOnlyOne)
-                                    {
-                                        alreadyDropped = HasAnyoneDropped(sagaDrop.m_itemName);
-                                    }
+                                    RecordDroppedTrophy(characterName, trophyName);
+                                }
+                            }
+                        }
+                    }
 
-                                    if (sagaDrop.m_stopDroppingOnPickup)
-                                    {
-                                        alreadyDropped = HasBeenPickedUp(sagaDrop.m_itemName);
-                                    }
-                                    // If it's only meant to drop once, just ignore additional drops
-                                    if (alreadyDropped)
-                                    {
-                                        //                                        Debug.LogWarning($"{characterName} already dropped {sagaDrop.m_itemName}");
+                    // Check to see if we need to add any special drops to this character
+                    // ex: Saga only Greyling drops
+                    if (IsSagaMode())
+                    {
+                        //                            Debug.LogWarning($"Saga drops for {characterName}?");
 
+                        if (__m_specialSagaDrops.ContainsKey(characterName))
+                        {
+                            List<SpecialSagaDrop> enemySagaDrops = __m_specialSagaDrops[characterName];
+
+                            System.Random randomizer = new System.Random(Guid.NewGuid().GetHashCode());
+
+                            for (int i = 0; i < enemySagaDrops.Count; i++)
+                            {
+                                SpecialSagaDrop sagaDrop = enemySagaDrops[i];
+
+                                //                                    Debug.LogWarning($"{sagaDrop.m_itemName} {sagaDrop.m_onlyInMode.ToString()} ({GetGameMode()}");
+
+                                // If it only drops in a specific game mode
+                                if (sagaDrop.m_onlyInMode != TrophyGameMode.Max)
+                                {
+                                    // And we're not in that mode currently
+                                    if (GetGameMode() != sagaDrop.m_onlyInMode)
+                                    {
+                                        Debug.LogWarning($"{sagaDrop.m_itemName} Ignored");
                                         continue;
                                     }
+                                }
 
-                                    float randValue = (float)randomizer.NextDouble() * 100f;
+                                bool alreadyDropped = false;
+                                //                                    Debug.LogWarning($"{characterName} {sagaDrop.m_itemName} numDrops: {sagaDrop.m_numDropped}");
+                                if (sagaDrop.m_dropOnlyOne)
+                                {
+                                    alreadyDropped = HasAnyoneDropped(sagaDrop.m_itemName);
+                                }
 
-                                    if (randValue < sagaDrop.m_dropPercent)
+                                if (sagaDrop.m_stopDroppingOnPickup)
+                                {
+                                    alreadyDropped = HasBeenPickedUp(sagaDrop.m_itemName);
+                                }
+                                // If it's only meant to drop once, just ignore additional drops
+                                if (alreadyDropped)
+                                {
+                                    //                                        Debug.LogWarning($"{characterName} already dropped {sagaDrop.m_itemName}");
+
+                                    continue;
+                                }
+
+                                float randValue = (float)randomizer.NextDouble() * 100f;
+
+                                if (randValue < sagaDrop.m_dropPercent)
+                                {
+                                    //                                        Debug.LogWarning($"{characterName} passed check to drop {sagaDrop.m_itemName}");
+                                    GameObject prefab = ObjectDB.instance.GetItemPrefab(sagaDrop.m_itemName);
+                                    if (prefab != null)
                                     {
-                                        //                                        Debug.LogWarning($"{characterName} passed check to drop {sagaDrop.m_itemName}");
-                                        GameObject prefab = ObjectDB.instance.GetItemPrefab(sagaDrop.m_itemName);
-                                        if (prefab != null)
+                                        int itemCount = randomizer.Next(sagaDrop.m_dropAmountMin, sagaDrop.m_dropAmountMax);
+
+                                        KeyValuePair<GameObject, int> newDropItem = new KeyValuePair<GameObject, int>(prefab, itemCount);
+
+                                        if (__result != null)
                                         {
-                                            int itemCount = randomizer.Next(sagaDrop.m_dropAmountMin, sagaDrop.m_dropAmountMax);
+                                            __result.Add(newDropItem);
 
-                                            KeyValuePair<GameObject, int> newDropItem = new KeyValuePair<GameObject, int>(prefab, itemCount);
+                                            Debug.LogWarning($"{characterName} dropping {itemCount} {sagaDrop.m_itemName}");
 
-                                            if (__result != null)
-                                            {
-                                                __result.Add(newDropItem);
+                                            sagaDrop.m_numDropped += itemCount;
 
-                                                Debug.LogWarning($"{characterName} dropping {itemCount} {sagaDrop.m_itemName}");
-
-                                                sagaDrop.m_numDropped += itemCount;
-
-                                                enemySagaDrops[i] = sagaDrop;
-                                            }
+                                            enemySagaDrops[i] = sagaDrop;
                                         }
                                     }
                                 }
@@ -4570,47 +4111,48 @@ namespace TrophyHuntMod
                     }
                 }
             }
+        }
 
-            [HarmonyPatch(typeof(Character), nameof(Character.OnDeath))]
-            public class Character_OnDeath_Patch
+        [HarmonyPatch(typeof(Character), nameof(Character.OnDeath))]
+        public class Character_OnDeath_Patch
+        {
+            static void Postfix(Character __instance)
             {
-                static void Postfix(Character __instance)
+                if (GetGameMode() == TrophyGameMode.CulinarySaga)
+                    return;
+
+                Character character = __instance;
+                // Check if the attacker is the local player
+                bool playerHit = false;
+                if (Player.m_localPlayer != null &&
+                    character.m_lastHit != null &&
+                    character.m_lastHit.GetAttacker() == Player.m_localPlayer)
                 {
-                    if (GetGameMode() == TrophyGameMode.CulinarySaga)
-                        return;
+                    playerHit = true;
+                }
 
-                    Character character = __instance;
-                    // Check if the attacker is the local player
-                    bool playerHit = false;
-                    if (Player.m_localPlayer != null &&
-                        character.m_lastHit != null &&
-                        character.m_lastHit.GetAttacker() == Player.m_localPlayer)
+                if (playerHit)
+                {
+                    // The local player killed this enemy
+                    //                        Debug.Log($"Player killed {__instance.name}");
+
+                    string characterName = __instance.m_name;
+                    if (CharacterCanDropTrophies(characterName))
                     {
-                        playerHit = true;
-                    }
+                        //                            Debug.Log($"Trophy-capable character {characterName} was killed by Player.");
 
-                    if (playerHit)
-                    {
-                        // The local player killed this enemy
-                        //                        Debug.Log($"Player killed {__instance.name}");
-
-                        string characterName = __instance.m_name;
-                        if (CharacterCanDropTrophies(characterName))
-                        {
-                            //                            Debug.Log($"Trophy-capable character {characterName} was killed by Player.");
-
-                            RecordTrophyCapableKill(characterName, true);
-                        }
+                        RecordTrophyCapableKill(characterName, true);
                     }
                 }
             }
+        }
 
 
-            //
-            // Trophy Saga Insta-Smelt
-            //
+        //
+        // Trophy Saga Insta-Smelt
+        //
 
-            public static Dictionary<string, string> __m_oreNameToBarPrefabName = new Dictionary<string, string>()
+        public static Dictionary<string, string> __m_oreNameToBarPrefabName = new Dictionary<string, string>()
             {
                 { "CopperOre",          "Copper" },
                 { "TinOre",             "Tin" },
@@ -4624,7 +4166,7 @@ namespace TrophyHuntMod
 //                { "Sap",                "Eitr"}
             };
 
-            public static Dictionary<string, string> __m_oreNameToBarItemName = new Dictionary<string, string>()
+        public static Dictionary<string, string> __m_oreNameToBarItemName = new Dictionary<string, string>()
             {
                 { "CopperOre",          "$item_copper" },
                 { "TinOre",             "$item_tin" },
@@ -4639,696 +4181,696 @@ namespace TrophyHuntMod
             };
 
 
-            public static void ConvertMetal(ref ItemDrop.ItemData itemData)
-            {
-                if (itemData == null)
-                    return;
+        public static void ConvertMetal(ref ItemDrop.ItemData itemData)
+        {
+            if (itemData == null)
+                return;
 
-                ZNetScene zNetScene = ZNetScene.instance;
-                if (zNetScene == null)
+            ZNetScene zNetScene = ZNetScene.instance;
+            if (zNetScene == null)
+            {
+                return;
+            }
+
+            //                Debug.LogWarning($"ConvertMetal(): Creating {itemData.ToString()} {itemData.m_dropPrefab.name}");
+
+            string cookedMetalName;
+            if (__m_oreNameToBarPrefabName.TryGetValue(itemData.m_dropPrefab.name, out cookedMetalName))
+            {
+                GameObject metalPrefab = zNetScene.GetPrefab(cookedMetalName);
+                if (metalPrefab == null)
                 {
                     return;
                 }
 
-                //                Debug.LogWarning($"ConvertMetal(): Creating {itemData.ToString()} {itemData.m_dropPrefab.name}");
+                ItemDrop tempItemDrop = metalPrefab.GetComponent<ItemDrop>();
+                if (tempItemDrop != null)
+                {
+                    int stackSize = itemData.m_stack;
+
+                    // Replace the ore/scrap itemdata with the cooked metal itemdata
+                    ItemDrop.ItemData tempItemData = tempItemDrop.m_itemData;
+
+                    itemData = tempItemData.Clone();
+                    itemData.m_stack = stackSize;
+                    itemData.m_dropPrefab = metalPrefab;
+                }
+            }
+        }
+
+        // Patch GetWeight and GetNonStackedWeight to calculate Ore weights as the bar weights
+        [HarmonyPatch(typeof(ItemDrop.ItemData), nameof(ItemDrop.ItemData.GetWeight))]
+        public class Humanoid_ItemDrop_ItemData_GetWeight_Patch
+        {
+            static bool Prefix(ItemDrop.ItemData __instance, ref float __result)
+            {
+                if (!IsSagaMode())
+                {
+                    return true;
+                }
+
+                if (__instance == null)
+                    return true;
+
+                if (__instance.m_dropPrefab == null)
+                    return true;
 
                 string cookedMetalName;
-                if (__m_oreNameToBarPrefabName.TryGetValue(itemData.m_dropPrefab.name, out cookedMetalName))
+                if (__m_oreNameToBarPrefabName.TryGetValue(__instance.m_dropPrefab.name, out cookedMetalName))
                 {
-                    GameObject metalPrefab = zNetScene.GetPrefab(cookedMetalName);
-                    if (metalPrefab == null)
+                    //                        Debug.LogWarning($"GetWeight(): Found {__instance.m_dropPrefab.name} => {cookedMetalName}");
+
+                    GameObject ingotPrefab = ZNetScene.instance.GetPrefab(cookedMetalName);
+                    ItemDrop.ItemData ingotItemData = ingotPrefab.GetComponent<ItemDrop>().m_itemData;
+                    if (ingotItemData != null)
                     {
-                        return;
+                        __result = ingotItemData.m_shared.m_weight * __instance.m_stack;
                     }
 
-                    ItemDrop tempItemDrop = metalPrefab.GetComponent<ItemDrop>();
-                    if (tempItemDrop != null)
-                    {
-                        int stackSize = itemData.m_stack;
-
-                        // Replace the ore/scrap itemdata with the cooked metal itemdata
-                        ItemDrop.ItemData tempItemData = tempItemDrop.m_itemData;
-
-                        itemData = tempItemData.Clone();
-                        itemData.m_stack = stackSize;
-                        itemData.m_dropPrefab = metalPrefab;
-                    }
+                    return false;
                 }
+
+                return true;
             }
+        }
 
-            // Patch GetWeight and GetNonStackedWeight to calculate Ore weights as the bar weights
-            [HarmonyPatch(typeof(ItemDrop.ItemData), nameof(ItemDrop.ItemData.GetWeight))]
-            public class Humanoid_ItemDrop_ItemData_GetWeight_Patch
+        [HarmonyPatch(typeof(ItemDrop.ItemData), nameof(ItemDrop.ItemData.GetNonStackedWeight))]
+        public class Humanoid_ItemDrop_ItemData_GetNonStackedWeight_Patch
+        {
+            static bool Prefix(ItemDrop.ItemData __instance, ref float __result)
             {
-                static bool Prefix(ItemDrop.ItemData __instance, ref float __result)
+                if (!IsSagaMode())
                 {
-                    if (!IsSagaMode())
-                    {
-                        return true;
-                    }
-
-                    if (__instance == null)
-                        return true;
-
-                    if (__instance.m_dropPrefab == null)
-                        return true;
-
-                    string cookedMetalName;
-                    if (__m_oreNameToBarPrefabName.TryGetValue(__instance.m_dropPrefab.name, out cookedMetalName))
-                    {
-                        //                        Debug.LogWarning($"GetWeight(): Found {__instance.m_dropPrefab.name} => {cookedMetalName}");
-
-                        GameObject ingotPrefab = ZNetScene.instance.GetPrefab(cookedMetalName);
-                        ItemDrop.ItemData ingotItemData = ingotPrefab.GetComponent<ItemDrop>().m_itemData;
-                        if (ingotItemData != null)
-                        {
-                            __result = ingotItemData.m_shared.m_weight * __instance.m_stack;
-                        }
-
-                        return false;
-                    }
-
                     return true;
                 }
-            }
 
-            [HarmonyPatch(typeof(ItemDrop.ItemData), nameof(ItemDrop.ItemData.GetNonStackedWeight))]
-            public class Humanoid_ItemDrop_ItemData_GetNonStackedWeight_Patch
-            {
-                static bool Prefix(ItemDrop.ItemData __instance, ref float __result)
-                {
-                    if (!IsSagaMode())
-                    {
-                        return true;
-                    }
-
-                    if (__instance == null)
-                        return true;
-
-                    if (__instance.m_dropPrefab == null)
-                        return true;
-
-                    string cookedMetalName;
-                    if (__m_oreNameToBarPrefabName.TryGetValue(__instance.m_dropPrefab.name, out cookedMetalName))
-                    {
-                        //                        Debug.LogWarning($"GetNonStackedWeight(): Found {__instance.m_dropPrefab.name} => {cookedMetalName}");
-
-                        GameObject ingotPrefab = ZNetScene.instance.GetPrefab(cookedMetalName);
-                        ItemDrop.ItemData ingotItemData = ingotPrefab.GetComponent<ItemDrop>().m_itemData;
-                        if (ingotItemData != null)
-                        {
-                            __result = ingotItemData.m_shared.m_weight;
-                        }
-
-                        return false;
-                    }
-
+                if (__instance == null)
                     return true;
-                }
-            }
 
-
-            // This is called when items are picked up
-            //
-            // Insta-Smelt when moving items between inventories
-            [HarmonyPatch(typeof(Inventory), nameof(Inventory.AddItem), new[] { typeof(ItemDrop.ItemData) })]
-            public static class Inventory_AddItem_Patch
-            {
-                static void Prefix(Inventory __instance, ref ItemDrop.ItemData item, bool __result)
-                {
-                    //                    Debug.LogWarning("Inventory.AddItem() 1");
-
-                    if (__instance != null && Player.m_localPlayer != null
-                        && __instance == Player.m_localPlayer.GetInventory())
-                    {
-                        if (IsSagaMode())
-                        {
-                            // Item successfully added to inventory
-                            if (__m_instaSmelt)
-                            {
-                                ConvertMetal(ref item);
-                            }
-
-                            if (GetGameMode() == TrophyGameMode.CulinarySaga)
-                            {
-                                bool isFood = false;
-                                foreach (ConsumableData cd in __m_cookedFoodData)
-                                {
-                                    if (cd.m_prefabName == item.m_dropPrefab.name)
-                                    {
-                                        isFood = true;
-                                        break;
-                                    }
-                                }
-
-                                if (isFood)
-                                {
-                                    if (!__m_cookedFoods.Contains(item.m_dropPrefab.name))
-                                    {
-                                        FlashTrophy(item.m_dropPrefab.name);
-
-                                        __m_cookedFoods.Add(item.m_dropPrefab.name);
-
-                                        if (__m_cookedFoods.Count == __m_cookedFoodData.Length)
-                                        {
-                                            MessageHud.instance.ShowBiomeFoundMsg("Odin is Sated", playStinger: true);
-                                        }
-                                    }
-                                }
-                                UpdateModUI(Player.m_localPlayer);
-                            }
-                        }
-
-                        string itemName = item.m_dropPrefab.name;
-
-                        if (item.m_quality > 1)
-                        {
-                            itemName += item.m_quality.ToString();
-                        }
-
-                        AddPlayerEvent(PlayerEventType.Item, itemName, Player.m_localPlayer.transform.position);
-                    }
-                }
-            }
-
-            // This is called when items are upgraded, so need to log upgrades as well as pickups
-            [HarmonyPatch(typeof(Inventory), nameof(Inventory.AddItem), new[] { typeof(string), typeof(int), typeof(int), typeof(int), typeof(long), typeof(string), typeof(Vector2i), typeof(bool) })]
-            public class UpgradeItemPatch
-            {
-                static void Postfix(Inventory __instance, string name, int stack, int quality, int variant, long crafterID, string crafterName, Vector2i position, bool pickedUp)
-                {
-                    //                    Debug.LogWarning("Inventory.AddItem() 2");
-
-                    if (__instance != null)
-                    {
-                        string itemName = name;
-
-                        if (quality > 1)
-                        {
-                            itemName += quality.ToString();
-                        }
-
-                        AddPlayerEvent(PlayerEventType.Item, itemName, Player.m_localPlayer.transform.position);
-                    }
-                }
-            }
-
-            // Trick "CanAddItem" into thinking the ores are bars if you have bars in your inventory already, this fixes an auto-pickup bug
-            [HarmonyPatch(typeof(Inventory), nameof(Inventory.CanAddItem), new[] { typeof(ItemDrop.ItemData), typeof(int) })]
-            public static class Inventory_CanAddItem_Patch
-            {
-                static bool Prefix(Inventory __instance, ref ItemDrop.ItemData item, int stack, ref bool __result)
-                {
-                    if (__instance != null && Player.m_localPlayer != null
-                        && __instance == Player.m_localPlayer.GetInventory())
-                    {
-                        if (IsSagaMode())
-                        {
-                            // Item successfully added to inventory
-                            if (__m_instaSmelt)
-                            {
-                                if (item != null && item.m_dropPrefab != null)
-                                {
-                                    string prefabName = item.m_dropPrefab.name;
-                                    string itemName;
-                                    if (__m_oreNameToBarItemName.TryGetValue(prefabName, out itemName))
-                                    {
-                                        if (stack <= 0)
-                                        {
-                                            stack = item.m_stack;
-                                        }
-
-                                        __result = __instance.FindFreeStackSpace(itemName, 0) + (__instance.m_width * __instance.m_height - __instance.m_inventory.Count) * item.m_shared.m_maxStackSize >= stack;
-
-                                        //                                        Debug.LogWarning($"CanAddItem {prefabName} result {__result} : {itemName}");
-
-                                        return false;
-                                    }
-                                }
-                            }
-                        }
-                    }
-
+                if (__instance.m_dropPrefab == null)
                     return true;
-                }
-            }
 
-            // Called when an item is added to the player's inventory
-            [HarmonyPatch(typeof(Humanoid), nameof(Humanoid.Pickup))]
-            public class Humanoid_Pickup_Patch
-            {
-                // Used in Trophy Saga to auto-convert metals on pickup
-                static void Prefix(Humanoid __instance, GameObject go, bool autoequip, bool autoPickupDelay, bool __result)
+                string cookedMetalName;
+                if (__m_oreNameToBarPrefabName.TryGetValue(__instance.m_dropPrefab.name, out cookedMetalName))
                 {
-                    // Before pickup occurs, see if it's auto-smeltable ore and convert it
-                    if (__instance == null || __instance != Player.m_localPlayer)
+                    //                        Debug.LogWarning($"GetNonStackedWeight(): Found {__instance.m_dropPrefab.name} => {cookedMetalName}");
+
+                    GameObject ingotPrefab = ZNetScene.instance.GetPrefab(cookedMetalName);
+                    ItemDrop.ItemData ingotItemData = ingotPrefab.GetComponent<ItemDrop>().m_itemData;
+                    if (ingotItemData != null)
                     {
-                        return;
+                        __result = ingotItemData.m_shared.m_weight;
                     }
 
-                    ItemDrop itemDrop = go.GetComponent<ItemDrop>();
-                    if (itemDrop != null)
+                    return false;
+                }
+
+                return true;
+            }
+        }
+
+
+        // This is called when items are picked up
+        //
+        // Insta-Smelt when moving items between inventories
+        [HarmonyPatch(typeof(Inventory), nameof(Inventory.AddItem), new[] { typeof(ItemDrop.ItemData) })]
+        public static class Inventory_AddItem_Patch
+        {
+            static void Prefix(Inventory __instance, ref ItemDrop.ItemData item, bool __result)
+            {
+                //                    Debug.LogWarning("Inventory.AddItem() 1");
+
+                if (__instance != null && Player.m_localPlayer != null
+                    && __instance == Player.m_localPlayer.GetInventory())
+                {
+                    if (IsSagaMode())
                     {
-                        if (IsSagaMode())
+                        // Item successfully added to inventory
+                        if (__m_instaSmelt)
                         {
-                            if (__m_instaSmelt)
+                            ConvertMetal(ref item);
+                        }
+
+                        if (GetGameMode() == TrophyGameMode.CulinarySaga)
+                        {
+                            bool isFood = false;
+                            foreach (ConsumableData cd in __m_cookedFoodData)
                             {
-                                ConvertMetal(ref itemDrop.m_itemData);
+                                if (cd.m_prefabName == item.m_dropPrefab.name)
+                                {
+                                    isFood = true;
+                                    break;
+                                }
                             }
 
-                            // Check to see if we picked up something that's a SpecialSagaDrop
-                            if (itemDrop.m_itemData != null && itemDrop.m_itemData.m_dropPrefab != null)
+                            if (isFood)
                             {
-                                string itemName = itemDrop.m_itemData.m_dropPrefab.name;
-
-                                foreach (KeyValuePair<string, List<SpecialSagaDrop>> specialDrops in __m_specialSagaDrops)
+                                if (!__m_cookedFoods.Contains(item.m_dropPrefab.name))
                                 {
-                                    string merbName = specialDrops.Key;
+                                    FlashTrophy(item.m_dropPrefab.name);
 
-                                    List<SpecialSagaDrop> merbDrop = __m_specialSagaDrops[merbName];
+                                    __m_cookedFoods.Add(item.m_dropPrefab.name);
 
-                                    for (int i = 0; i < merbDrop.Count; i++)
+                                    if (__m_cookedFoods.Count == __m_cookedFoodData.Length)
                                     {
-                                        SpecialSagaDrop sagaDrop = merbDrop[i];
-                                        if (sagaDrop.m_itemName == itemName && sagaDrop.m_stopDroppingOnPickup)
-                                        {
-                                            Debug.LogError($"Humanoid.Pickup() SpecialSagaDrop for {itemName} found in list for {merbName}");
+                                        MessageHud.instance.ShowBiomeFoundMsg("Odin is Sated", playStinger: true);
+                                    }
+                                }
+                            }
+                            UpdateModUI(Player.m_localPlayer);
+                        }
+                    }
 
-                                            Debug.LogError($"Player has picked up {sagaDrop.m_numPickedUp} {itemName}");
+                    string itemName = item.m_dropPrefab.name;
 
-                                            sagaDrop.m_numPickedUp++;
-                                        }
+                    if (item.m_quality > 1)
+                    {
+                        itemName += item.m_quality.ToString();
+                    }
 
-                                        merbDrop[i] = sagaDrop;
+                    AddPlayerEvent(PlayerEventType.Item, itemName, Player.m_localPlayer.transform.position);
+                }
+            }
+        }
+
+        // This is called when items are upgraded, so need to log upgrades as well as pickups
+        [HarmonyPatch(typeof(Inventory), nameof(Inventory.AddItem), new[] { typeof(string), typeof(int), typeof(int), typeof(int), typeof(long), typeof(string), typeof(Vector2i), typeof(bool) })]
+        public class UpgradeItemPatch
+        {
+            static void Postfix(Inventory __instance, string name, int stack, int quality, int variant, long crafterID, string crafterName, Vector2i position, bool pickedUp)
+            {
+                //                    Debug.LogWarning("Inventory.AddItem() 2");
+
+                if (__instance != null)
+                {
+                    string itemName = name;
+
+                    if (quality > 1)
+                    {
+                        itemName += quality.ToString();
+                    }
+
+                    AddPlayerEvent(PlayerEventType.Item, itemName, Player.m_localPlayer.transform.position);
+                }
+            }
+        }
+
+        // Trick "CanAddItem" into thinking the ores are bars if you have bars in your inventory already, this fixes an auto-pickup bug
+        [HarmonyPatch(typeof(Inventory), nameof(Inventory.CanAddItem), new[] { typeof(ItemDrop.ItemData), typeof(int) })]
+        public static class Inventory_CanAddItem_Patch
+        {
+            static bool Prefix(Inventory __instance, ref ItemDrop.ItemData item, int stack, ref bool __result)
+            {
+                if (__instance != null && Player.m_localPlayer != null
+                    && __instance == Player.m_localPlayer.GetInventory())
+                {
+                    if (IsSagaMode())
+                    {
+                        // Item successfully added to inventory
+                        if (__m_instaSmelt)
+                        {
+                            if (item != null && item.m_dropPrefab != null)
+                            {
+                                string prefabName = item.m_dropPrefab.name;
+                                string itemName;
+                                if (__m_oreNameToBarItemName.TryGetValue(prefabName, out itemName))
+                                {
+                                    if (stack <= 0)
+                                    {
+                                        stack = item.m_stack;
                                     }
 
-                                    List<SpecialSagaDrop> verifyList = __m_specialSagaDrops[merbName];
+                                    __result = __instance.FindFreeStackSpace(itemName, 0) + (__instance.m_width * __instance.m_height - __instance.m_inventory.Count) * item.m_shared.m_maxStackSize >= stack;
 
-                                    foreach (SpecialSagaDrop sd in verifyList)
-                                    {
-                                        if (sd.m_itemName == itemName && sd.m_stopDroppingOnPickup)
-                                        {
-                                            Debug.LogError($"{merbName} m_numPickedUp for {sd.m_itemName} is {sd.m_numPickedUp}");
+                                    //                                        Debug.LogWarning($"CanAddItem {prefabName} result {__result} : {itemName}");
 
-                                        }
-                                    }
+                                    return false;
                                 }
                             }
                         }
                     }
                 }
 
-                // Check picked up item to see if Trophy
-                static void Postfix(Humanoid __instance, GameObject go, bool autoequip, bool autoPickupDelay, bool __result)
+                return true;
+            }
+        }
+
+        // Called when an item is added to the player's inventory
+        [HarmonyPatch(typeof(Humanoid), nameof(Humanoid.Pickup))]
+        public class Humanoid_Pickup_Patch
+        {
+            // Used in Trophy Saga to auto-convert metals on pickup
+            static void Prefix(Humanoid __instance, GameObject go, bool autoequip, bool autoPickupDelay, bool __result)
+            {
+                // Before pickup occurs, see if it's auto-smeltable ore and convert it
+                if (__instance == null || __instance != Player.m_localPlayer)
                 {
-                    if (__instance == null || go == null)
-                    {
-                        return;
-                    }
+                    return;
+                }
 
-                    if (GetGameMode() == TrophyGameMode.CulinarySaga)
+                ItemDrop itemDrop = go.GetComponent<ItemDrop>();
+                if (itemDrop != null)
+                {
+                    if (IsSagaMode())
                     {
-                        return;
-                    }
-
-                    ItemDrop component = go.GetComponent<ItemDrop>();
-                    ItemDrop.ItemData item = component.m_itemData;
-
-                    if (__result && item != null && item.m_dropPrefab != null)
-                    {
-                        // Log the item name to the console when the player picks it up
-                        // You can add further logic here to check the item type or trigger specific events
-                        if (RecordPlayerPickedUpTrophy(item.m_dropPrefab.name))
+                        if (__m_instaSmelt)
                         {
-                            return;
+                            ConvertMetal(ref itemDrop.m_itemData);
+                        }
+
+                        // Check to see if we picked up something that's a SpecialSagaDrop
+                        if (itemDrop.m_itemData != null && itemDrop.m_itemData.m_dropPrefab != null)
+                        {
+                            string itemName = itemDrop.m_itemData.m_dropPrefab.name;
+
+                            foreach (KeyValuePair<string, List<SpecialSagaDrop>> specialDrops in __m_specialSagaDrops)
+                            {
+                                string merbName = specialDrops.Key;
+
+                                List<SpecialSagaDrop> merbDrop = __m_specialSagaDrops[merbName];
+
+                                for (int i = 0; i < merbDrop.Count; i++)
+                                {
+                                    SpecialSagaDrop sagaDrop = merbDrop[i];
+                                    if (sagaDrop.m_itemName == itemName && sagaDrop.m_stopDroppingOnPickup)
+                                    {
+                                        Debug.LogError($"Humanoid.Pickup() SpecialSagaDrop for {itemName} found in list for {merbName}");
+
+                                        Debug.LogError($"Player has picked up {sagaDrop.m_numPickedUp} {itemName}");
+
+                                        sagaDrop.m_numPickedUp++;
+                                    }
+
+                                    merbDrop[i] = sagaDrop;
+                                }
+
+                                List<SpecialSagaDrop> verifyList = __m_specialSagaDrops[merbName];
+
+                                foreach (SpecialSagaDrop sd in verifyList)
+                                {
+                                    if (sd.m_itemName == itemName && sd.m_stopDroppingOnPickup)
+                                    {
+                                        Debug.LogError($"{merbName} m_numPickedUp for {sd.m_itemName} is {sd.m_numPickedUp}");
+
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             }
 
-            [HarmonyPatch(typeof(Player), "PlacePiece")]
-            public class PlacePiecePatch
+            // Check picked up item to see if Trophy
+            static void Postfix(Humanoid __instance, GameObject go, bool autoequip, bool autoPickupDelay, bool __result)
             {
-                static void Postfix(Player __instance, Piece piece)
+                if (__instance == null || go == null)
                 {
-                    if (__instance == null)
+                    return;
+                }
+
+                if (GetGameMode() == TrophyGameMode.CulinarySaga)
+                {
+                    return;
+                }
+
+                ItemDrop component = go.GetComponent<ItemDrop>();
+                ItemDrop.ItemData item = component.m_itemData;
+
+                if (__result && item != null && item.m_dropPrefab != null)
+                {
+                    // Log the item name to the console when the player picks it up
+                    // You can add further logic here to check the item type or trigger specific events
+                    if (RecordPlayerPickedUpTrophy(item.m_dropPrefab.name))
                     {
                         return;
                     }
+                }
+            }
+        }
 
-                    if (piece != null)
+        [HarmonyPatch(typeof(Player), "PlacePiece")]
+        public class PlacePiecePatch
+        {
+            static void Postfix(Player __instance, Piece piece)
+            {
+                if (__instance == null)
+                {
+                    return;
+                }
+
+                if (piece != null)
+                {
+                    //                        Debug.Log($"Player {__instance.GetPlayerName()} placed a building: {piece.m_name}");
+
+                    AddPlayerEvent(PlayerEventType.Build, piece.m_name, __instance.transform.position);
+                }
+
+            }
+        }
+
+        public static void AddToggleGameModeButton(Transform parentTransform)
+        {
+            // Clone the existing button
+            GameObject toggleGameModeButton = new GameObject("ToggleGameModeButton");
+            toggleGameModeButton.transform.SetParent(parentTransform);
+
+            // The UI RectTransform for the button
+            RectTransform rectTransform = toggleGameModeButton.AddComponent<RectTransform>();
+            rectTransform.localScale = Vector3.one;
+            rectTransform.anchorMin = new Vector2(1.0f, 0.0f);
+            rectTransform.anchorMax = new Vector2(1.0f, 0.0f);
+            rectTransform.pivot = new Vector2(1.0f, 0.0f);
+            rectTransform.anchoredPosition = new Vector2(-80, -140); // Position below the logo
+            rectTransform.sizeDelta = new Vector2(200, 25);
+
+            // Add the Button component
+            UnityEngine.UI.Button button = toggleGameModeButton.AddComponent<UnityEngine.UI.Button>();
+
+            ColorBlock cb = button.colors;
+            cb.normalColor = Color.black;
+            cb.highlightedColor = Color.yellow;  // When hovering
+            cb.pressedColor = Color.red;      // When pressed
+            cb.selectedColor = Color.white;   // When selected
+            button.colors = cb;
+
+            Navigation nav = new Navigation();
+            nav.mode = Navigation.Mode.None;
+            button.navigation = nav;
+
+            // Add an Image component for the button background
+            UnityEngine.UI.Image image = toggleGameModeButton.AddComponent<UnityEngine.UI.Image>();
+            image.color = Color.white; // Set background color
+
+            // Create a sub-object for the text because the GameObject can't have an Image and a Text object
+            GameObject textObject = new GameObject("ToggleGameModeButtonText");
+            textObject.transform.SetParent(toggleGameModeButton.transform);
+
+            // Set the Text RectTransform
+            RectTransform textRect = textObject.AddComponent<RectTransform>();
+            textRect.anchoredPosition = new Vector2(0, 0);
+
+            // Change the button's text
+            //TextMeshProUGUI buttonText = textObject.AddComponent<TextMeshProUGUI>();
+            TextMeshProUGUI buttonText = AddTextMeshProComponent(textObject);
+
+            buttonText.text = "<b>Toggle Game Mode<b>";
+            buttonText.fontSize = 18;
+            buttonText.color = Color.black;
+            buttonText.alignment = TextAlignmentOptions.Center;
+            buttonText.fontStyle = FontStyles.Bold;
+
+            // Set up the click listener
+            button.onClick.AddListener(ToggleGameModeButtonClick);
+        }
+
+        public static void AddLoginWithDiscordButton(Transform parentTransform)
+        {
+            // Clone the existing button
+            GameObject loginButton = new GameObject("LoginButton");
+            loginButton.transform.SetParent(parentTransform);
+
+            // The UI RectTransform for the button
+            RectTransform rectTransform = loginButton.AddComponent<RectTransform>();
+            rectTransform.localScale = Vector3.one;
+            rectTransform.anchorMin = new Vector2(1.0f, 0.0f);
+            rectTransform.anchorMax = new Vector2(1.0f, 0.0f);
+            rectTransform.pivot = new Vector2(1.0f, 0.0f);
+            rectTransform.anchoredPosition = new Vector2(-140, -180); // Position below the logo
+            rectTransform.sizeDelta = new Vector2(140, 22);
+
+            // Add the Button component
+            UnityEngine.UI.Button button = loginButton.AddComponent<UnityEngine.UI.Button>();
+
+            ColorBlock cb = button.colors;
+            cb.normalColor = new Color(88, 101, 242);
+            cb.highlightedColor = Color.yellow;  // When hovering
+            cb.pressedColor = Color.red;      // When pressed
+            cb.selectedColor = Color.white;   // When selected
+            button.colors = cb;
+
+            Navigation nav = new Navigation();
+            nav.mode = Navigation.Mode.None;
+            button.navigation = nav;
+
+            // Add an Image component for the button background
+            UnityEngine.UI.Image image = loginButton.AddComponent<UnityEngine.UI.Image>();
+            image.color = new Color(88f / 256f, 101f / 256f, 242f / 256f); // Set background color
+                                                                           //                image.color = Color.blue;
+
+            // Create a sub-object for the text because the GameObject can't have an Image and a Text object
+            GameObject textObject = new GameObject("LoginButtonText");
+            textObject.transform.SetParent(loginButton.transform);
+
+            // Set the Text RectTransform
+            RectTransform textRect = textObject.AddComponent<RectTransform>();
+            textRect.anchoredPosition = new Vector2(0, 0);
+
+            // Change the button's text
+            __m_discordLoginButtonText = AddTextMeshProComponent(textObject);
+
+            if (__m_loggedInWithDiscord)
+            {
+                __m_discordLoginButtonText.text = "Discord Logout";
+            }
+            else
+            {
+                __m_discordLoginButtonText.text = "Discord Login";
+            }
+
+            __m_discordLoginButtonText.fontSize = 16;
+            __m_discordLoginButtonText.color = Color.white;
+            __m_discordLoginButtonText.alignment = TextAlignmentOptions.Center;
+
+            // Set up the click listener
+            button.onClick.AddListener(LoginButtonClick);
+
+            // Online Status Text
+            GameObject statusTextObject = new GameObject("StatusText");
+            statusTextObject.transform.SetParent(parentTransform);
+
+            // The UI RectTransform for the button
+            RectTransform statusRectTransform = statusTextObject.AddComponent<RectTransform>();
+            statusRectTransform.localScale = Vector3.one;
+            statusRectTransform.anchorMin = new Vector2(1.0f, 0.0f);
+            statusRectTransform.anchorMax = new Vector2(1.0f, 0.0f);
+            statusRectTransform.pivot = new Vector2(1.0f, 0.0f);
+            statusRectTransform.anchoredPosition = new Vector2(-5, -180);
+            statusRectTransform.sizeDelta = new Vector2(140, 22);
+
+            // Change the button's text
+            __m_onlineStatusText = AddTextMeshProComponent(statusTextObject);
+            __m_onlineStatusText.fontSize = 16;
+            __m_onlineStatusText.color = Color.white;
+            __m_onlineStatusText.alignment = TextAlignmentOptions.Center;
+            __m_onlineStatusText.raycastTarget = false;
+
+            __m_onlineStatusText.text = "Status: <Unknown>";
+
+            // Username Text
+            GameObject usernameTextObject = new GameObject("usernameText");
+            usernameTextObject.transform.SetParent(parentTransform);
+
+            // The UI RectTransform for the button
+            RectTransform usernameRectTransform = usernameTextObject.AddComponent<RectTransform>();
+            usernameRectTransform.localScale = Vector3.one;
+            usernameRectTransform.anchorMin = new Vector2(1.0f, 0.0f);
+            usernameRectTransform.anchorMax = new Vector2(1.0f, 0.0f);
+            usernameRectTransform.pivot = new Vector2(1.0f, 0.0f);
+            usernameRectTransform.anchoredPosition = new Vector2(-40, -205);
+            usernameRectTransform.sizeDelta = new Vector2(250, 20);
+
+            // Change the button's text
+            __m_onlineUsernameText = AddTextMeshProComponent(usernameTextObject);
+            __m_onlineUsernameText.fontSize = 16;
+            __m_onlineUsernameText.color = Color.white;
+            __m_onlineUsernameText.alignment = TextAlignmentOptions.Center;
+            __m_onlineUsernameText.raycastTarget = false;
+
+            __m_onlineUsernameText.text = "Discord User: <Unknown>";
+
+            GameObject avatarObject = new GameObject("AvatarObject");
+            avatarObject.transform.SetParent(parentTransform);
+
+            RectTransform avatarTransform = avatarObject.AddComponent<RectTransform>();
+            avatarTransform.sizeDelta = new Vector2(64, 64);
+            avatarTransform.anchoredPosition = new Vector2(0, -340);
+            avatarTransform.localScale = Vector3.one;
+
+            __m_discordAvatarImage = avatarObject.AddComponent<UnityEngine.UI.Image>();
+            __m_discordAvatarImage.raycastTarget = false;
+            __m_discordAvatarImage.color = Color.white;
+
+            UpdateOnlineStatus();
+        }
+
+
+        static private async Task FetchDiscordAvatar(string userId, string avatarId)
+        {
+            using (HttpClient httpClient = new HttpClient())
+            {
+                string imageUrl = $"https://cdn.discordapp.com/avatars/{userId}/{avatarId}.png";
+
+                // Download the image as a byte array
+                byte[] imageData = await httpClient.GetByteArrayAsync(imageUrl).ConfigureAwait(false);
+
+                //File.WriteAllBytes("avatar.png", imageData);
+
+                MainThreadDispatcher.Instance.Enqueue(() =>
+                {
+
+                    // Create a Texture2D from the downloaded data
+                    Texture2D texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                    //                        if (texture.LoadImage(imageData, true))
                     {
-                        //                        Debug.Log($"Player {__instance.GetPlayerName()} placed a building: {piece.m_name}");
+                        // Create a sprite from the texture
+                        Sprite sprite = Sprite.Create(
+                            texture,
+                            new Rect(0, 0, texture.width, texture.height),
+                            new Vector2(0.5f, 0.5f)
+                        );
 
-                        AddPlayerEvent(PlayerEventType.Build, piece.m_name, __instance.transform.position);
+                        // Assign the sprite to the target image
+                        if (__m_discordAvatarImage != null)
+                            __m_discordAvatarImage.sprite = sprite;
                     }
-
-                }
+                });
             }
+        }
 
-            public static void AddToggleGameModeButton(Transform parentTransform)
+
+
+        public static void UpdateOnlineStatus()
+        {
+
+            DiscordUserResponse response = __m_discordAuthentication.GetUserResponse();
+            if (response != null)
             {
-                // Clone the existing button
-                GameObject toggleGameModeButton = new GameObject("ToggleGameModeButton");
-                toggleGameModeButton.transform.SetParent(parentTransform);
+                __m_loggedInWithDiscord = true;
 
-                // The UI RectTransform for the button
-                RectTransform rectTransform = toggleGameModeButton.AddComponent<RectTransform>();
-                rectTransform.localScale = Vector3.one;
-                rectTransform.anchorMin = new Vector2(1.0f, 0.0f);
-                rectTransform.anchorMax = new Vector2(1.0f, 0.0f);
-                rectTransform.pivot = new Vector2(1.0f, 0.0f);
-                rectTransform.anchoredPosition = new Vector2(-80, -140); // Position below the logo
-                rectTransform.sizeDelta = new Vector2(200, 25);
+                __m_configDiscordId.SetSerializedValue(response.id);
+                __m_configDiscordUser.SetSerializedValue(response.username);
+                __m_configDiscordGlobalUser.SetSerializedValue(response.global_name);
+                __m_configDiscordAvatar.SetSerializedValue(response.avatar);
+                __m_configDiscordDiscriminator.SetSerializedValue(response.discriminator);
 
-                // Add the Button component
-                UnityEngine.UI.Button button = toggleGameModeButton.AddComponent<UnityEngine.UI.Button>();
-
-                ColorBlock cb = button.colors;
-                cb.normalColor = Color.black;
-                cb.highlightedColor = Color.yellow;  // When hovering
-                cb.pressedColor = Color.red;      // When pressed
-                cb.selectedColor = Color.white;   // When selected
-                button.colors = cb;
-
-                Navigation nav = new Navigation();
-                nav.mode = Navigation.Mode.None;
-                button.navigation = nav;
-
-                // Add an Image component for the button background
-                UnityEngine.UI.Image image = toggleGameModeButton.AddComponent<UnityEngine.UI.Image>();
-                image.color = Color.white; // Set background color
-
-                // Create a sub-object for the text because the GameObject can't have an Image and a Text object
-                GameObject textObject = new GameObject("ToggleGameModeButtonText");
-                textObject.transform.SetParent(toggleGameModeButton.transform);
-
-                // Set the Text RectTransform
-                RectTransform textRect = textObject.AddComponent<RectTransform>();
-                textRect.anchoredPosition = new Vector2(0, 0);
-
-                // Change the button's text
-                //TextMeshProUGUI buttonText = textObject.AddComponent<TextMeshProUGUI>();
-                TextMeshProUGUI buttonText = AddTextMeshProComponent(textObject);
-
-                buttonText.text = "<b>Toggle Game Mode<b>";
-                buttonText.fontSize = 18;
-                buttonText.color = Color.black;
-                buttonText.alignment = TextAlignmentOptions.Center;
-                buttonText.fontStyle = FontStyles.Bold;
-
-                // Set up the click listener
-                button.onClick.AddListener(ToggleGameModeButtonClick);
+                __m_trophyHuntMod.Config.Save();
             }
 
-            public static void AddLoginWithDiscordButton(Transform parentTransform)
+            //                System.Diagnostics.Debug.WriteLine($"UpdateOnlineStatus {__m_loggedInWithDiscord}");
+            //                Debug.Log($"UpdateOnlineStatus: {__m_loggedInWithDiscord} updating");
+
+
+            string onlineText = "n/a";
+            if (__m_loggedInWithDiscord)
             {
-                // Clone the existing button
-                GameObject loginButton = new GameObject("LoginButton");
-                loginButton.transform.SetParent(parentTransform);
+                __m_onlineUsernameText.text = $"Discord User: <color=yellow>{__m_configDiscordUser.Value}</color>";
+                onlineText = "<color=green>Online</color>";
+                __m_discordLoginButtonText.text = "Discord Logout";
 
-                // The UI RectTransform for the button
-                RectTransform rectTransform = loginButton.AddComponent<RectTransform>();
-                rectTransform.localScale = Vector3.one;
-                rectTransform.anchorMin = new Vector2(1.0f, 0.0f);
-                rectTransform.anchorMax = new Vector2(1.0f, 0.0f);
-                rectTransform.pivot = new Vector2(1.0f, 0.0f);
-                rectTransform.anchoredPosition = new Vector2(-140, -180); // Position below the logo
-                rectTransform.sizeDelta = new Vector2(140, 22);
-
-                // Add the Button component
-                UnityEngine.UI.Button button = loginButton.AddComponent<UnityEngine.UI.Button>();
-
-                ColorBlock cb = button.colors;
-                cb.normalColor = new Color(88, 101, 242);
-                cb.highlightedColor = Color.yellow;  // When hovering
-                cb.pressedColor = Color.red;      // When pressed
-                cb.selectedColor = Color.white;   // When selected
-                button.colors = cb;
-
-                Navigation nav = new Navigation();
-                nav.mode = Navigation.Mode.None;
-                button.navigation = nav;
-
-                // Add an Image component for the button background
-                UnityEngine.UI.Image image = loginButton.AddComponent<UnityEngine.UI.Image>();
-                image.color = new Color(88f / 256f, 101f / 256f, 242f / 256f); // Set background color
-                                                                               //                image.color = Color.blue;
-
-                // Create a sub-object for the text because the GameObject can't have an Image and a Text object
-                GameObject textObject = new GameObject("LoginButtonText");
-                textObject.transform.SetParent(loginButton.transform);
-
-                // Set the Text RectTransform
-                RectTransform textRect = textObject.AddComponent<RectTransform>();
-                textRect.anchoredPosition = new Vector2(0, 0);
-
-                // Change the button's text
-                __m_discordLoginButtonText = AddTextMeshProComponent(textObject);
-
-                if (__m_loggedInWithDiscord)
+                if (__m_discordAvatarImage != null)
                 {
-                    __m_discordLoginButtonText.text = "Discord Logout";
+                    __m_discordAvatarImage.color = new Color(1, 1, 1, 1);
                 }
-                else
-                {
-                    __m_discordLoginButtonText.text = "Discord Login";
-                }
-
-                __m_discordLoginButtonText.fontSize = 16;
-                __m_discordLoginButtonText.color = Color.white;
-                __m_discordLoginButtonText.alignment = TextAlignmentOptions.Center;
-
-                // Set up the click listener
-                button.onClick.AddListener(LoginButtonClick);
-
-                // Online Status Text
-                GameObject statusTextObject = new GameObject("StatusText");
-                statusTextObject.transform.SetParent(parentTransform);
-
-                // The UI RectTransform for the button
-                RectTransform statusRectTransform = statusTextObject.AddComponent<RectTransform>();
-                statusRectTransform.localScale = Vector3.one;
-                statusRectTransform.anchorMin = new Vector2(1.0f, 0.0f);
-                statusRectTransform.anchorMax = new Vector2(1.0f, 0.0f);
-                statusRectTransform.pivot = new Vector2(1.0f, 0.0f);
-                statusRectTransform.anchoredPosition = new Vector2(-5, -180);
-                statusRectTransform.sizeDelta = new Vector2(140, 22);
-
-                // Change the button's text
-                __m_onlineStatusText = AddTextMeshProComponent(statusTextObject);
-                __m_onlineStatusText.fontSize = 16;
-                __m_onlineStatusText.color = Color.white;
-                __m_onlineStatusText.alignment = TextAlignmentOptions.Center;
-                __m_onlineStatusText.raycastTarget = false;
-
-                __m_onlineStatusText.text = "Status: <Unknown>";
-
-                // Username Text
-                GameObject usernameTextObject = new GameObject("usernameText");
-                usernameTextObject.transform.SetParent(parentTransform);
-
-                // The UI RectTransform for the button
-                RectTransform usernameRectTransform = usernameTextObject.AddComponent<RectTransform>();
-                usernameRectTransform.localScale = Vector3.one;
-                usernameRectTransform.anchorMin = new Vector2(1.0f, 0.0f);
-                usernameRectTransform.anchorMax = new Vector2(1.0f, 0.0f);
-                usernameRectTransform.pivot = new Vector2(1.0f, 0.0f);
-                usernameRectTransform.anchoredPosition = new Vector2(-40, -205);
-                usernameRectTransform.sizeDelta = new Vector2(250, 20);
-
-                // Change the button's text
-                __m_onlineUsernameText = AddTextMeshProComponent(usernameTextObject);
-                __m_onlineUsernameText.fontSize = 16;
-                __m_onlineUsernameText.color = Color.white;
-                __m_onlineUsernameText.alignment = TextAlignmentOptions.Center;
-                __m_onlineUsernameText.raycastTarget = false;
-
-                __m_onlineUsernameText.text = "Discord User: <Unknown>";
-
-                GameObject avatarObject = new GameObject("AvatarObject");
-                avatarObject.transform.SetParent(parentTransform);
-
-                RectTransform avatarTransform = avatarObject.AddComponent<RectTransform>();
-                avatarTransform.sizeDelta = new Vector2(64, 64);
-                avatarTransform.anchoredPosition = new Vector2(0, -340);
-                avatarTransform.localScale = Vector3.one;
-
-                __m_discordAvatarImage = avatarObject.AddComponent<UnityEngine.UI.Image>();
-                __m_discordAvatarImage.raycastTarget = false;
-                __m_discordAvatarImage.color = Color.white;
-
-                UpdateOnlineStatus();
+                Task.Run(() => FetchDiscordAvatar(__m_configDiscordId.Value, __m_configDiscordAvatar.Value));
             }
-
-
-            static private async Task FetchDiscordAvatar(string userId, string avatarId)
+            else
             {
-                using (HttpClient httpClient = new HttpClient())
+                onlineText = "<color=red>Offline</color>";
+                __m_onlineUsernameText.text = "";
+                __m_discordLoginButtonText.text = "Discord Login";
+
+                if (__m_discordAvatarImage != null)
                 {
-                    string imageUrl = $"https://cdn.discordapp.com/avatars/{userId}/{avatarId}.png";
-
-                    // Download the image as a byte array
-                    byte[] imageData = await httpClient.GetByteArrayAsync(imageUrl).ConfigureAwait(false);
-
-                    //File.WriteAllBytes("avatar.png", imageData);
-
-                    MainThreadDispatcher.Instance.Enqueue(() =>
-                    {
-
-                        // Create a Texture2D from the downloaded data
-                        Texture2D texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-                        //                        if (texture.LoadImage(imageData, true))
-                        {
-                            // Create a sprite from the texture
-                            Sprite sprite = Sprite.Create(
-                                texture,
-                                new Rect(0, 0, texture.width, texture.height),
-                                new Vector2(0.5f, 0.5f)
-                            );
-
-                            // Assign the sprite to the target image
-                            if (__m_discordAvatarImage != null)
-                                __m_discordAvatarImage.sprite = sprite;
-                        }
-                    });
+                    __m_discordAvatarImage.color = new Color(0, 0, 0, 0);
                 }
             }
 
+            __m_onlineStatusText.text = $"Status: {onlineText}";
+        }
 
+        public static void ToggleGameModeButtonClick()
+        {
+            ToggleGameMode();
+        }
 
-            public static void UpdateOnlineStatus()
+        public static void LoginButtonClick()
+        {
+            if (!__m_loggedInWithDiscord)
             {
+                string clientId = "1328474573334642728";
+                string redirectUri = "http://localhost:5000/callback";
 
-                DiscordUserResponse response = __m_discordAuthentication.GetUserResponse();
-                if (response != null)
-                {
-                    __m_loggedInWithDiscord = true;
-
-                    __m_configDiscordId.SetSerializedValue(response.id);
-                    __m_configDiscordUser.SetSerializedValue(response.username);
-                    __m_configDiscordGlobalUser.SetSerializedValue(response.global_name);
-                    __m_configDiscordAvatar.SetSerializedValue(response.avatar);
-                    __m_configDiscordDiscriminator.SetSerializedValue(response.discriminator);
-
-                    __m_trophyHuntMod.Config.Save();
-                }
-
-                //                System.Diagnostics.Debug.WriteLine($"UpdateOnlineStatus {__m_loggedInWithDiscord}");
-                //                Debug.Log($"UpdateOnlineStatus: {__m_loggedInWithDiscord} updating");
-
-
-                string onlineText = "n/a";
-                if (__m_loggedInWithDiscord)
-                {
-                    __m_onlineUsernameText.text = $"Discord User: <color=yellow>{__m_configDiscordUser.Value}</color>";
-                    onlineText = "<color=green>Online</color>";
-                    __m_discordLoginButtonText.text = "Discord Logout";
-
-                    if (__m_discordAvatarImage != null)
-                    {
-                        __m_discordAvatarImage.color = new Color(1, 1, 1, 1);
-                    }
-                    Task.Run(() => FetchDiscordAvatar(__m_configDiscordId.Value, __m_configDiscordAvatar.Value));
-                }
-                else
-                {
-                    onlineText = "<color=red>Offline</color>";
-                    __m_onlineUsernameText.text = "";
-                    __m_discordLoginButtonText.text = "Discord Login";
-
-                    if (__m_discordAvatarImage != null)
-                    {
-                        __m_discordAvatarImage.color = new Color(0, 0, 0, 0);
-                    }
-                }
-
-                __m_onlineStatusText.text = $"Status: {onlineText}";
+                __m_discordAuthentication.StartOAuthFlow(clientId, redirectUri, UpdateOnlineStatus);
             }
-
-            public static void ToggleGameModeButtonClick()
+            else
             {
-                ToggleGameMode();
+                __m_loggedInWithDiscord = false;
+                //                    Debug.Log("__m_loggedInWithDiscord = false");
+                __m_discordAuthentication.ClearUserResponse();
+                __m_configDiscordId.SetSerializedValue("");
+                __m_configDiscordUser.SetSerializedValue("");
+                __m_configDiscordGlobalUser.SetSerializedValue("");
+                __m_configDiscordAvatar.SetSerializedValue("");
+                __m_configDiscordDiscriminator.SetSerializedValue("");
+
+                __m_trophyHuntMod.Config.Save();
             }
 
-            public static void LoginButtonClick()
+            UpdateOnlineStatus();
+        }
+
+        // Player Log
+        //
+        // Log of events encountered during gameplay
+        //
+        public enum PlayerEventType
+        {
+            None,
+            Trophy,
+            Build,
+            Item,
+            Misc,
+            Max
+        }
+
+        [Serializable]
+        public class PlayerEventLog
+        {
+            public PlayerEventLog()
             {
-                if (!__m_loggedInWithDiscord)
-                {
-                    string clientId = "1328474573334642728";
-                    string redirectUri = "http://localhost:5000/callback";
-
-                    __m_discordAuthentication.StartOAuthFlow(clientId, redirectUri, UpdateOnlineStatus);
-                }
-                else
-                {
-                    __m_loggedInWithDiscord = false;
-                    //                    Debug.Log("__m_loggedInWithDiscord = false");
-                    __m_discordAuthentication.ClearUserResponse();
-                    __m_configDiscordId.SetSerializedValue("");
-                    __m_configDiscordUser.SetSerializedValue("");
-                    __m_configDiscordGlobalUser.SetSerializedValue("");
-                    __m_configDiscordAvatar.SetSerializedValue("");
-                    __m_configDiscordDiscriminator.SetSerializedValue("");
-
-                    __m_trophyHuntMod.Config.Save();
-                }
-
-                UpdateOnlineStatus();
+                eventType = PlayerEventType.None;
+                eventName = "";
+                eventPos = Vector3.zero;
+                eventTime = DateTime.MinValue;
             }
-
-            // Player Log
-            //
-            // Log of events encountered during gameplay
-            //
-            public enum PlayerEventType
+            public PlayerEventLog(PlayerEventType _eventType, string _eventName, Vector3 _eventPos, DateTime _eventTime)
             {
-                None,
-                Trophy,
-                Build,
-                Item,
-                Misc,
-                Max
+                eventType = _eventType;
+                eventName = _eventName;
+                eventPos = _eventPos;
+                eventTime = _eventTime;
             }
 
-            [Serializable]
-            public class PlayerEventLog
+            public PlayerEventType eventType = PlayerEventType.None;
+            public string eventName = "";
+            public Vector3 eventPos = Vector3.zero;
+            public DateTime eventTime = DateTime.MinValue;
+        }
+
+        // Legal Events
+        public struct EventDescription
+        {
+            public EventDescription(PlayerEventType _eventType, List<string> _legalEvents)
             {
-                public PlayerEventLog()
-                {
-                    eventType = PlayerEventType.None;
-                    eventName = "";
-                    eventPos = Vector3.zero;
-                    eventTime = DateTime.MinValue;
-                }
-                public PlayerEventLog(PlayerEventType _eventType, string _eventName, Vector3 _eventPos, DateTime _eventTime)
-                {
-                    eventType = _eventType;
-                    eventName = _eventName;
-                    eventPos = _eventPos;
-                    eventTime = _eventTime;
-                }
-
-                public PlayerEventType eventType = PlayerEventType.None;
-                public string eventName = "";
-                public Vector3 eventPos = Vector3.zero;
-                public DateTime eventTime = DateTime.MinValue;
+                eventType = _eventType;
+                legalEvents = _legalEvents;
             }
 
-            // Legal Events
-            public struct EventDescription
-            {
-                public EventDescription(PlayerEventType _eventType, List<string> _legalEvents)
-                {
-                    eventType = _eventType;
-                    legalEvents = _legalEvents;
-                }
+            public PlayerEventType eventType;
+            public List<string> legalEvents;
+        }
 
-                public PlayerEventType eventType;
-                public List<string> legalEvents;
-            }
-
-            static public readonly Dictionary<PlayerEventType, List<string>> __m_eventDescriptions = new Dictionary<PlayerEventType, List<string>>()
+        static public readonly Dictionary<PlayerEventType, List<string>> __m_eventDescriptions = new Dictionary<PlayerEventType, List<string>>()
             {
                 {
                     PlayerEventType.Trophy, null    // pass all trophy events (no whitelist)
@@ -5374,177 +4916,129 @@ namespace TrophyHuntMod
                 },
             };
 
-            public static bool IsLoggableEvent(PlayerEventType eventType, string eventName)
+        public static bool IsLoggableEvent(PlayerEventType eventType, string eventName)
+        {
+            List<string> trackedEvents = __m_eventDescriptions[eventType];
+
+            // If no list, all events are considered loggable
+            if (trackedEvents == null)
+                return true;
+
+            return trackedEvents.Contains(eventName);
+        }
+
+        public static bool IsAlreadyLogged(PlayerEventType eventType, string eventName)
+        {
+            PlayerEventLog existingEntry = __m_playerEventLog.Find(x => x.eventName == eventName);
+            if (existingEntry != null)
             {
-                List<string> trackedEvents = __m_eventDescriptions[eventType];
-
-                // If no list, all events are considered loggable
-                if (trackedEvents == null)
-                    return true;
-
-                return trackedEvents.Contains(eventName);
+                return true;
             }
 
-            public static bool IsAlreadyLogged(PlayerEventType eventType, string eventName)
-            {
-                PlayerEventLog existingEntry = __m_playerEventLog.Find(x => x.eventName == eventName);
-                if (existingEntry != null)
-                {
-                    return true;
-                }
+            return false;
+        }
 
-                return false;
+        public static void AddPlayerEvent(PlayerEventType eventType, string eventName, Vector3 eventPos)
+        {
+            //                Debug.LogWarning($"AddPlayerEvent() Logging Event: {eventType.ToString()}, {eventName}, {eventPos}");
+
+            if (!IsLoggableEvent(eventType, eventName))
+            {
+                return;
             }
 
-            public static void AddPlayerEvent(PlayerEventType eventType, string eventName, Vector3 eventPos)
+            // Some events we only want to log the first time they occur
+            if (eventType != PlayerEventType.Trophy)
             {
-                //                Debug.LogWarning($"AddPlayerEvent() Logging Event: {eventType.ToString()}, {eventName}, {eventPos}");
-
-                if (!IsLoggableEvent(eventType, eventName))
+                if (IsAlreadyLogged(eventType, eventName))
                 {
                     return;
                 }
-
-                // Some events we only want to log the first time they occur
-                if (eventType != PlayerEventType.Trophy)
-                {
-                    if (IsAlreadyLogged(eventType, eventName))
-                    {
-                        return;
-                    }
-                }
-
-                // Add the event to our internal tracking log
-                __m_playerEventLog.Add(new PlayerEventLog(eventType, eventName, eventPos, DateTime.UtcNow));
-
-                PostTrackLogEntry(eventName, __m_playerCurrentScore);
             }
 
-            // Tracker Logs
+            // Add the event to our internal tracking log
+            __m_playerEventLog.Add(new PlayerEventLog(eventType, eventName, eventPos, DateTime.UtcNow));
 
-            // Single Log update
-            [Serializable]
-            public class TrackLogEntry
-            {
-                public string id;       // discord id
-                public string seed;     // game seed
-                public int score;       // Current score
-                public string code;     // event name
-                                        //                public string at;       // UTC time
-            }
+            PostTrackLogEntry(eventName, __m_playerCurrentScore);
+        }
 
+        // Tracker Logs
+
+        // Single Log update
+        [Serializable]
+        public class TrackLogEntry
+        {
+            public string id;       // discord id
+            public string seed;     // game seed
+            public int score;       // Current score
+            public string code;     // event name
+                                    //                public string at;       // UTC time
+        }
+
+        // List of Logs update
+        [Serializable]
+        public class TrackLogs
+        {
+            public string id;
+            public string user;
+            public string seed;
+            public string mode;
+            public int score;
+            public List<TrackLogsElement> logs;
+        }
+
+        [Serializable]
+        public class TrackLogsElement
+        {
+            public string code;     // event name
+            public string at;
+        }
+
+
+        [Serializable]
+        public class TrackHunt
+        {
             // List of Logs update
-            [Serializable]
-            public class TrackLogs
+            public string id;
+            public string user;
+            public string seed;
+            public string mode;
+            public int score;
+            public int deaths;
+            public int relogs;
+            public int slashdies;
+            public List<string> trophies;
+        }
+
+        static public IEnumerator UnityPostRequest(string url, string json)
+        {
+            //                Debug.LogWarning($"UnityPostRequest(): {url}\n{json}");
+
+            UnityWebRequest request = UnityWebRequest.Post(url, json, "application/json");
+            yield return request.SendWebRequest();
+
+            if (request.result != UnityWebRequest.Result.Success)
             {
-                public string id;
-                public string user;
-                public string seed;
-                public string mode;
-                public int score;
-                public List<TrackLogsElement> logs;
+                Debug.LogError(request.error);
+            }
+            else
+            {
+                //                    Debug.Log("Form upload complete!");
             }
 
-            [Serializable]
-            public class TrackLogsElement
+            //                Debug.LogWarning($"UnityPostRequest(): Result: {request.result.ToString()}");
+
+        }
+
+        public static void PostTrackLogs(bool force = false)
+        {
+            if (!__m_loggedInWithDiscord)
             {
-                public string code;     // event name
-                public string at;
+                return;
             }
 
-
-            [Serializable]
-            public class TrackHunt
+            if (force == false)
             {
-                // List of Logs update
-                public string id;
-                public string user;
-                public string seed;
-                public string mode;
-                public int score;
-                public int deaths;
-                public int relogs;
-                public int slashdies;
-                public List<string> trophies;
-            }
-
-            static public IEnumerator UnityPostRequest(string url, string json)
-            {
-                //                Debug.LogWarning($"UnityPostRequest(): {url}\n{json}");
-
-                UnityWebRequest request = UnityWebRequest.Post(url, json, "application/json");
-                yield return request.SendWebRequest();
-
-                if (request.result != UnityWebRequest.Result.Success)
-                {
-                    Debug.LogError(request.error);
-                }
-                else
-                {
-                    //                    Debug.Log("Form upload complete!");
-                }
-
-                //                Debug.LogWarning($"UnityPostRequest(): Result: {request.result.ToString()}");
-
-            }
-
-            public static void PostTrackLogs(bool force = false)
-            {
-                if (!__m_loggedInWithDiscord)
-                {
-                    return;
-                }
-
-                if (force == false)
-                {
-                    if (__m_tournamentStatus != TournamentStatus.Live)
-                    {
-                        return;
-                    }
-
-                    if (DateTime.Now > __m_tournamentEndTime)
-                    {
-                        return;
-                    }
-                }
-                else
-                {
-                    //                    Debug.LogWarning("PostTrackLogs: Forced track log request");
-                }
-
-                TrackLogs trackLogs = new TrackLogs();
-
-                trackLogs.id = __m_configDiscordId.Value;
-                trackLogs.user = __m_configDiscordUser.Value;
-                trackLogs.seed = __m_storedWorldSeed;
-                trackLogs.mode = GetGameMode().ToString();
-                trackLogs.score = __m_playerCurrentScore;
-                trackLogs.logs = new List<TrackLogsElement>();
-
-                foreach (PlayerEventLog logEntry in __m_playerEventLog)
-                {
-                    TrackLogsElement elem = new TrackLogsElement();
-                    elem.code = logEntry.eventName;
-                    elem.at = logEntry.eventTime.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
-                    trackLogs.logs.Add(elem);
-                }
-
-                string json = JsonConvert.SerializeObject(trackLogs);
-
-                //                Debug.LogWarning(json);
-
-                string url = "https://valhelp.azurewebsites.net/api/track/logs";
-
-                __m_trophyHuntMod.StartCoroutine(UnityPostRequest(url, json));
-            }
-
-            public static void PostTrackLogEntry(string eventName, int score)
-            {
-                if (!__m_loggedInWithDiscord)
-                {
-                    return;
-                }
-
                 if (__m_tournamentStatus != TournamentStatus.Live)
                 {
                     return;
@@ -5554,900 +5048,945 @@ namespace TrophyHuntMod
                 {
                     return;
                 }
-
-                TrackLogEntry entry = new TrackLogEntry();
-
-                entry.id = __m_configDiscordId.Value;
-                entry.seed = __m_storedWorldSeed;
-                entry.score = score;
-                entry.code = eventName;
-                //                entry.at = DateTime.UtcNow.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
-
-                string json = JsonConvert.SerializeObject(entry);
-
-                //                Debug.LogWarning($"PostTrackLogEntry: {json}");
-
-                string url = "https://valhelp.azurewebsites.net/api/track/log";
-
-                __m_trophyHuntMod.StartCoroutine(UnityPostRequest(url, json));
+            }
+            else
+            {
+                //                    Debug.LogWarning("PostTrackLogs: Forced track log request");
             }
 
-            public static void PostTrackHunt()
+            TrackLogs trackLogs = new TrackLogs();
+
+            trackLogs.id = __m_configDiscordId.Value;
+            trackLogs.user = __m_configDiscordUser.Value;
+            trackLogs.seed = __m_storedWorldSeed;
+            trackLogs.mode = GetGameMode().ToString();
+            trackLogs.score = __m_playerCurrentScore;
+            trackLogs.logs = new List<TrackLogsElement>();
+
+            foreach (PlayerEventLog logEntry in __m_playerEventLog)
             {
-                if (!__m_loggedInWithDiscord)
+                TrackLogsElement elem = new TrackLogsElement();
+                elem.code = logEntry.eventName;
+                elem.at = logEntry.eventTime.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+                trackLogs.logs.Add(elem);
+            }
+
+            string json = JsonConvert.SerializeObject(trackLogs);
+
+            //                Debug.LogWarning(json);
+
+            string url = "https://valhelp.azurewebsites.net/api/track/logs";
+
+            __m_trophyHuntMod.StartCoroutine(UnityPostRequest(url, json));
+        }
+
+        public static void PostTrackLogEntry(string eventName, int score)
+        {
+            if (!__m_loggedInWithDiscord)
+            {
+                return;
+            }
+
+            if (__m_tournamentStatus != TournamentStatus.Live)
+            {
+                return;
+            }
+
+            if (DateTime.Now > __m_tournamentEndTime)
+            {
+                return;
+            }
+
+            TrackLogEntry entry = new TrackLogEntry();
+
+            entry.id = __m_configDiscordId.Value;
+            entry.seed = __m_storedWorldSeed;
+            entry.score = score;
+            entry.code = eventName;
+            //                entry.at = DateTime.UtcNow.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+
+            string json = JsonConvert.SerializeObject(entry);
+
+            //                Debug.LogWarning($"PostTrackLogEntry: {json}");
+
+            string url = "https://valhelp.azurewebsites.net/api/track/log";
+
+            __m_trophyHuntMod.StartCoroutine(UnityPostRequest(url, json));
+        }
+
+        public static void PostTrackHunt()
+        {
+            if (!__m_loggedInWithDiscord)
+            {
+                return;
+            }
+
+            if (__m_tournamentStatus != TournamentStatus.Live)
+            {
+                return;
+            }
+
+            if (DateTime.Now > __m_tournamentEndTime)
+            {
+                return;
+            }
+
+            TrackHunt trackHunt = new TrackHunt();
+
+            trackHunt.id = __m_configDiscordId.Value;
+            trackHunt.user = __m_configDiscordUser.Value;
+            trackHunt.seed = __m_storedWorldSeed;
+            trackHunt.mode = GetGameMode().ToString();
+            trackHunt.score = __m_playerCurrentScore;
+            trackHunt.trophies = __m_trophyCache.ToList();
+            trackHunt.deaths = __m_deaths;
+            trackHunt.slashdies = __m_slashDieCount;
+            trackHunt.relogs = __m_logoutCount;
+
+            string json = JsonConvert.SerializeObject(trackHunt);
+
+            string url = "https://valhelp.azurewebsites.net/api/track/hunt";
+
+            __m_trophyHuntMod.StartCoroutine(UnityPostRequest(url, json));
+        }
+
+        // Tracker Standings
+        static public TournamentStatus __m_tournamentStatus = TournamentStatus.NotRunning;
+        static public string __m_tournamentName = "";
+        static public string __m_tournamentMode = "";
+        static public DateTime __m_tournamentEndTime;
+
+        public enum TournamentStatus
+        {
+            NotRunning = 0,
+            Live = 20,
+            Over = 30
+        }
+        public class TournamentPlayerInfo
+        {
+            public TournamentPlayerInfo(string _name, int _score, string _id)
+            {
+                name = _name;
+                score = _score;
+                id = _id;
+            }
+            public string name;
+            public int score;
+            public string id;
+        }
+
+        static public List<TournamentPlayerInfo> __m_tournamentPlayerInfo = new List<TournamentPlayerInfo>();
+
+
+        [Serializable]
+        public class TrackStandingsPlayer
+        {
+            public string name = "";
+            public string id = "";
+            public string avatarUrl = "";
+            public int score = 0;
+        }
+
+        [Serializable]
+        public class TrackStandings
+        {
+            public string name = ""; // tournament event name
+            public string mode = ""; // tournament event game mode
+            public string startAt = ""; // start time in UTC
+            public string endAt = ""; // end time in UTC
+            public int status = 0;
+            public List<TrackStandingsPlayer> players = new List<TrackStandingsPlayer>();
+
+        }
+
+        public static IEnumerator UnityGetStandingsRequest(string uri)
+        {
+            using (UnityWebRequest webRequest = UnityWebRequest.Get(uri))
+            {
+                // Request and wait for the desired page.
+                yield return webRequest.SendWebRequest();
+
+                if (webRequest.result == UnityWebRequest.Result.Success)
                 {
-                    return;
-                }
+                    //                        Debug.Log($"Standings Recieved: {webRequest.downloadHandler.text}");
 
-                if (__m_tournamentStatus != TournamentStatus.Live)
-                {
-                    return;
-                }
+                    string responseText = webRequest.downloadHandler.text;
 
-                if (DateTime.Now > __m_tournamentEndTime)
-                {
-                    return;
-                }
+                    TrackStandings standings = JsonConvert.DeserializeObject<TrackStandings>(webRequest.downloadHandler.text);
 
-                TrackHunt trackHunt = new TrackHunt();
+                    __m_tournamentStatus = (TournamentStatus)standings.status;
+                    __m_tournamentName = standings.name;
+                    __m_tournamentMode = standings.mode;
 
-                trackHunt.id = __m_configDiscordId.Value;
-                trackHunt.user = __m_configDiscordUser.Value;
-                trackHunt.seed = __m_storedWorldSeed;
-                trackHunt.mode = GetGameMode().ToString();
-                trackHunt.score = __m_playerCurrentScore;
-                trackHunt.trophies = __m_trophyCache.ToList();
-                trackHunt.deaths = __m_deaths;
-                trackHunt.slashdies = __m_slashDieCount;
-                trackHunt.relogs = __m_logoutCount;
+                    __m_standingsElement.SetActive(__m_tournamentStatus != TournamentStatus.NotRunning);
 
-                string json = JsonConvert.SerializeObject(trackHunt);
-
-                string url = "https://valhelp.azurewebsites.net/api/track/hunt";
-
-                __m_trophyHuntMod.StartCoroutine(UnityPostRequest(url, json));
-            }
-
-            // Tracker Standings
-            static public TournamentStatus __m_tournamentStatus = TournamentStatus.NotRunning;
-            static public string __m_tournamentName = "";
-            static public string __m_tournamentMode = "";
-            static public DateTime __m_tournamentEndTime;
-
-            public enum TournamentStatus
-            {
-                NotRunning = 0,
-                Live = 20,
-                Over = 30
-            }
-            public class TournamentPlayerInfo
-            {
-                public TournamentPlayerInfo(string _name, int _score, string _id)
-                {
-                    name = _name;
-                    score = _score;
-                    id = _id;
-                }
-                public string name;
-                public int score;
-                public string id;
-            }
-
-            static public List<TournamentPlayerInfo> __m_tournamentPlayerInfo = new List<TournamentPlayerInfo>();
-
-
-            [Serializable]
-            public class TrackStandingsPlayer
-            {
-                public string name = "";
-                public string id = "";
-                public string avatarUrl = "";
-                public int score = 0;
-            }
-
-            [Serializable]
-            public class TrackStandings
-            {
-                public string name = ""; // tournament event name
-                public string mode = ""; // tournament event game mode
-                public string startAt = ""; // start time in UTC
-                public string endAt = ""; // end time in UTC
-                public int status = 0;
-                public List<TrackStandingsPlayer> players = new List<TrackStandingsPlayer>();
-
-            }
-
-            public static IEnumerator UnityGetStandingsRequest(string uri)
-            {
-                using (UnityWebRequest webRequest = UnityWebRequest.Get(uri))
-                {
-                    // Request and wait for the desired page.
-                    yield return webRequest.SendWebRequest();
-
-                    if (webRequest.result == UnityWebRequest.Result.Success)
+                    DateTime endTime;
+                    if (DateTime.TryParse(standings.endAt, out endTime))
                     {
-                        //                        Debug.Log($"Standings Recieved: {webRequest.downloadHandler.text}");
+                        __m_tournamentEndTime = endTime;
+                    }
 
-                        string responseText = webRequest.downloadHandler.text;
+                    __m_tournamentPlayerInfo.Clear();
 
-                        TrackStandings standings = JsonConvert.DeserializeObject<TrackStandings>(webRequest.downloadHandler.text);
-
-                        __m_tournamentStatus = (TournamentStatus)standings.status;
-                        __m_tournamentName = standings.name;
-                        __m_tournamentMode = standings.mode;
-
-                        __m_standingsElement.SetActive(__m_tournamentStatus != TournamentStatus.NotRunning);
-
-                        DateTime endTime;
-                        if (DateTime.TryParse(standings.endAt, out endTime))
+                    //                        for (int i = 0; i < 8; i++)
+                    {
+                        foreach (TrackStandingsPlayer player in standings.players)
                         {
-                            __m_tournamentEndTime = endTime;
+                            __m_tournamentPlayerInfo.Add(new TournamentPlayerInfo(player.name, player.score, player.id));
                         }
+                    }
 
-                        __m_tournamentPlayerInfo.Clear();
+                    //Debug.LogWarning($"Tournament Standings");
+                    //Debug.LogWarning($" Name: {__m_tournamentName}");
+                    //Debug.LogWarning($" Mode: {__m_tournamentMode}");
+                    //Debug.LogWarning($" Status: {__m_tournamentStatus}");
+                    //foreach (TournamentPlayerInfo pi in __m_tournamentPlayerInfo)
+                    //{
+                    //    Debug.LogWarning($" - {pi.score} - {pi.name}");
+                    //}
 
-                        //                        for (int i = 0; i < 8; i++)
+                    if (__m_refreshLogsAndStandings)
+                    {
+                        PostTrackLogs();
+                        if (Player.m_localPlayer != null)
                         {
-                            foreach (TrackStandingsPlayer player in standings.players)
-                            {
-                                __m_tournamentPlayerInfo.Add(new TournamentPlayerInfo(player.name, player.score, player.id));
-                            }
+                            UpdateModUI(Player.m_localPlayer);
+                            __m_refreshLogsAndStandings = false;
                         }
+                    }
+                }
+                else
+                {
+                    switch (webRequest.result)
+                    {
+                        case UnityWebRequest.Result.ConnectionError:
+                        case UnityWebRequest.Result.DataProcessingError:
+                            Debug.LogError("Error: " + webRequest.error);
+                            __m_tournamentStatus = TournamentStatus.NotRunning;
+                            break;
+                        case UnityWebRequest.Result.ProtocolError:
+                            Debug.LogError("HTTP Error: " + webRequest.error);
+                            __m_tournamentStatus = TournamentStatus.NotRunning;
+                            break;
+                    }
+                }
+            }
 
-                        //Debug.LogWarning($"Tournament Standings");
-                        //Debug.LogWarning($" Name: {__m_tournamentName}");
-                        //Debug.LogWarning($" Mode: {__m_tournamentMode}");
-                        //Debug.LogWarning($" Status: {__m_tournamentStatus}");
-                        //foreach (TournamentPlayerInfo pi in __m_tournamentPlayerInfo)
+        }
+
+        public static void PostStandingsRequest()
+        {
+            if (!__m_loggedInWithDiscord)
+            {
+                return;
+            }
+            string standingsUrl = "https://valhelp.azurewebsites.net/api/track/standings";
+
+            string seed = __m_storedWorldSeed;
+            string mode = GetGameMode().ToString();
+            string url = $"{standingsUrl}?seed={seed}&mode={mode}";
+            //                Debug.Log($"Standings Request: {url}");
+            __m_trophyHuntMod.StartCoroutine(UnityGetStandingsRequest(url));
+        }
+
+
+        /* ------------------------------------------ */
+
+        [HarmonyPatch(typeof(FejdStartup), nameof(FejdStartup.Start))]
+        public class FejdStartup_Start_Patch
+        {
+            static void Postfix()
+            {
+                //                    Debug.LogError("Main Menu Start method called");
+
+                GameObject mainMenu = GameObject.Find("Menu");
+                if (mainMenu != null)
+                {
+                    GameObject topicObject = GameObject.Find("Topic");
+                    TextMeshProUGUI topicText = topicObject?.GetComponent<TextMeshProUGUI>();
+                    __m_globalFontObject = topicText.font;
+
+                    Transform logoTransform = mainMenu.transform.Find("Logo");
+                    if (logoTransform != null)
+                    {
+                        GameObject textObject = new GameObject("TrophyHuntModLogoText");
+                        textObject.transform.SetParent(logoTransform.parent);
+
+                        // Set up the RectTransform for positioning
+                        RectTransform rectTransform = textObject.AddComponent<RectTransform>();
+                        rectTransform.localScale = Vector3.one;
+                        rectTransform.anchorMin = new Vector2(0.5f, 0.6f);
+                        rectTransform.anchorMax = new Vector2(1.0f, 0.6f);
+                        rectTransform.pivot = new Vector2(1.0f, 1.0f);
+                        rectTransform.anchoredPosition = new Vector2(-20, 20); // Position below the logo
+                        rectTransform.sizeDelta = new Vector2(-650, 185);
+
+                        // Add a TextMeshProUGUI component
+                        __m_trophyHuntMainMenuText = AddTextMeshProComponent(textObject);
+                        __m_trophyHuntMainMenuText.font = __m_globalFontObject;
+                        __m_trophyHuntMainMenuText.fontMaterial = __m_globalFontObject.material;
+                        __m_trophyHuntMainMenuText.fontStyle = FontStyles.Bold;
+
+                        __m_trophyHuntMainMenuText.text = GetTrophyHuntMainMenuText();
+                        __m_trophyHuntMainMenuText.alignment = TextAlignmentOptions.Left;
+                        // Enable outline
+                        //                            __m_trophyHuntMainMenuText.fontMaterial.EnableKeyword("OUTLINE_ON");
+                        __m_trophyHuntMainMenuText.lineSpacingAdjustment = -5;
+                        // Set outline color and thickness
+                        //                            __m_trophyHuntMainMenuText.outlineColor = Color.black;
+                        //                            __m_trophyHuntMainMenuText.outlineWidth = 0.05f; // Adjust the thickness
+
+
+                        AddToggleGameModeButton(textObject.transform);
+
+                        AddLoginWithDiscordButton(textObject.transform);
+
+
+                        // Don't bother adding this button to the main menu, but keep the code around for new buttons
+                        //
+                        //AddShowAllTrophyStatsButton(textObject.transform);
+
+                        // HACK
+                        //GameObject copperPrefab = GameObject.Find("Copper");
+
+                        //                            FiestaTrophies.Initialize();
+
+                        //foreach (GameObject go in ObjectDB.m_instance.m_items)
                         //{
-                        //    Debug.LogWarning($" - {pi.score} - {pi.name}");
+                        //    Debug.Log(go);
                         //}
 
-                        if (__m_refreshLogsAndStandings)
-                        {
-                            PostTrackLogs();
-                            if (Player.m_localPlayer != null)
-                            {
-                                UpdateModUI(Player.m_localPlayer);
-                                __m_refreshLogsAndStandings = false;
-                            }
-                        }
                     }
                     else
                     {
-                        switch (webRequest.result)
-                        {
-                            case UnityWebRequest.Result.ConnectionError:
-                            case UnityWebRequest.Result.DataProcessingError:
-                                Debug.LogError("Error: " + webRequest.error);
-                                __m_tournamentStatus = TournamentStatus.NotRunning;
-                                break;
-                            case UnityWebRequest.Result.ProtocolError:
-                                Debug.LogError("HTTP Error: " + webRequest.error);
-                                __m_tournamentStatus = TournamentStatus.NotRunning;
-                                break;
-                        }
+                        Debug.LogWarning("Valheim logo not found!");
                     }
                 }
-
-            }
-
-            public static void PostStandingsRequest()
-            {
-                if (!__m_loggedInWithDiscord)
+                else
                 {
-                    return;
+                    Debug.LogWarning("Main menu not found!");
                 }
-                string standingsUrl = "https://valhelp.azurewebsites.net/api/track/standings";
-
-                string seed = __m_storedWorldSeed;
-                string mode = GetGameMode().ToString();
-                string url = $"{standingsUrl}?seed={seed}&mode={mode}";
-
-                //                Debug.Log($"Standings Request: {url}");
-
-
-                __m_trophyHuntMod.StartCoroutine(UnityGetStandingsRequest(url));
             }
+        }
 
 
-            /* ------------------------------------------ */
+        // Oh, this is sketchy, but it seems to work.
+        //
+        // Patch the New World creation dialogue to poke in world defaults for trophy rush automatically
 
-            [HarmonyPatch(typeof(FejdStartup), nameof(FejdStartup.Start))]
-            public class FejdStartup_Start_Patch
+        [HarmonyPatch(typeof(FejdStartup), nameof(FejdStartup.OnNewWorldDone), new[] { typeof(bool) })]
+        public class FejdStartup_OnNewWorldDone_Patch
+        {
+            static void Postfix(FejdStartup __instance, bool forceLocal)
             {
-                static void Postfix()
+                //                    Debug.LogError("FejdStartup.OnNewWorldDone:");
+
+                if (FejdStartup.m_instance.m_world != null)
                 {
-                    //                    Debug.LogError("Main Menu Start method called");
-
-                    GameObject mainMenu = GameObject.Find("Menu");
-                    if (mainMenu != null)
+                    if (GetGameMode() == TrophyGameMode.TrophyRush)
                     {
-                        GameObject topicObject = GameObject.Find("Topic");
-                        TextMeshProUGUI topicText = topicObject?.GetComponent<TextMeshProUGUI>();
-                        __m_globalFontObject = topicText.font;
+                        FejdStartup.m_instance.m_world.m_startingGlobalKeys.Clear();
 
-                        Transform logoTransform = mainMenu.transform.Find("Logo");
-                        if (logoTransform != null)
-                        {
-                            GameObject textObject = new GameObject("TrophyHuntModLogoText");
-                            textObject.transform.SetParent(logoTransform.parent);
-
-                            // Set up the RectTransform for positioning
-                            RectTransform rectTransform = textObject.AddComponent<RectTransform>();
-                            rectTransform.localScale = Vector3.one;
-                            rectTransform.anchorMin = new Vector2(0.5f, 0.6f);
-                            rectTransform.anchorMax = new Vector2(1.0f, 0.6f);
-                            rectTransform.pivot = new Vector2(1.0f, 1.0f);
-                            rectTransform.anchoredPosition = new Vector2(-20, 20); // Position below the logo
-                            rectTransform.sizeDelta = new Vector2(-650, 185);
-
-                            // Add a TextMeshProUGUI component
-                            __m_trophyHuntMainMenuText = AddTextMeshProComponent(textObject);
-                            __m_trophyHuntMainMenuText.font = __m_globalFontObject;
-                            __m_trophyHuntMainMenuText.fontMaterial = __m_globalFontObject.material;
-                            __m_trophyHuntMainMenuText.fontStyle = FontStyles.Bold;
-
-                            __m_trophyHuntMainMenuText.text = GetTrophyHuntMainMenuText();
-                            __m_trophyHuntMainMenuText.alignment = TextAlignmentOptions.Left;
-                            // Enable outline
-                            //                            __m_trophyHuntMainMenuText.fontMaterial.EnableKeyword("OUTLINE_ON");
-                            __m_trophyHuntMainMenuText.lineSpacingAdjustment = -5;
-                            // Set outline color and thickness
-                            //                            __m_trophyHuntMainMenuText.outlineColor = Color.black;
-                            //                            __m_trophyHuntMainMenuText.outlineWidth = 0.05f; // Adjust the thickness
-
-
-                            AddToggleGameModeButton(textObject.transform);
-
-                            AddLoginWithDiscordButton(textObject.transform);
-
-
-                            // Don't bother adding this button to the main menu, but keep the code around for new buttons
-                            //
-                            //AddShowAllTrophyStatsButton(textObject.transform);
-
-                            // HACK
-                            //GameObject copperPrefab = GameObject.Find("Copper");
-
-                            //                            FiestaTrophies.Initialize();
-
-                            //foreach (GameObject go in ObjectDB.m_instance.m_items)
-                            //{
-                            //    Debug.Log(go);
-                            //}
-
-                        }
-                        else
-                        {
-                            Debug.LogWarning("Valheim logo not found!");
-                        }
+                        FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("playerdamage 70");
+                        FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("enemydamage 200");
+                        FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("enemyspeedsize 120");
+                        FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("enemyleveluprate 140");
+                        FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("resourcerate 200");
+                        FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("preset combat_veryhard:deathpenalty_default: resources_muchmore: raids_default: portals_default");
+                        FejdStartup.m_instance.m_world.SaveWorldMetaData(DateTime.Now);
+                        __instance.UpdateWorldList(centerSelection: true);
                     }
-                    else
+                    else if (IsSagaMode())
                     {
-                        Debug.LogWarning("Main menu not found!");
+                        FejdStartup.m_instance.m_world.m_startingGlobalKeys.Clear();
+
+                        // Trying new tack with World Modifiers: portal everything, normal combat, no raids, double resources
+                        FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("resourcerate 200");
+                        FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("eventrate 0");
+                        FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("teleportall");
+                        FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("preset combat_default:deathpenalty_default:resources_muchmore:raids_none:portals_casual");
+
+                        //FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("playerdamage 85");
+                        //FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("enemydamage 150");
+                        //FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("enemyspeedsize 110");
+                        //FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("enemyleveluprate 120");
+                        //FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("resourcerate 200");
+                        //FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("eventrate 0");
+                        //FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("preset combat_hard:deathpenalty_default: resources_muchmore: raids_none: portals_default");
+
+                        FejdStartup.m_instance.m_world.SaveWorldMetaData(DateTime.Now);
+                        __instance.UpdateWorldList(centerSelection: true);
+                    }
+                    else if (GetGameMode() == TrophyGameMode.TrophyFiesta)
+                    {
+                        FejdStartup.m_instance.m_world.m_startingGlobalKeys.Clear();
+
+                        // Trying new tack with World Modifiers: portal everything, normal combat, no raids, double resources
+                        FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("enemyspeedsize 200");
+                        FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("enemyleveluprate 300");
+
+                        //FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("playerdamage 85");
+                        //FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("enemydamage 150");
+                        //FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("enemyspeedsize 110");
+                        //FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("enemyleveluprate 120");
+                        //FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("resourcerate 200");
+                        //FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("eventrate 0");
+                        //FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("preset combat_hard:deathpenalty_default: resources_muchmore: raids_none: portals_default");
+
+                        FejdStartup.m_instance.m_world.SaveWorldMetaData(DateTime.Now);
+                        __instance.UpdateWorldList(centerSelection: true);
                     }
                 }
             }
+        }
 
-
-            // Oh, this is sketchy, but it seems to work.
-            //
-            // Patch the New World creation dialogue to poke in world defaults for trophy rush automatically
-
-            [HarmonyPatch(typeof(FejdStartup), nameof(FejdStartup.OnNewWorldDone), new[] { typeof(bool) })]
-            public class FejdStartup_OnNewWorldDone_Patch
-            {
-                static void Postfix(FejdStartup __instance, bool forceLocal)
-                {
-                    //                    Debug.LogError("FejdStartup.OnNewWorldDone:");
-
-                    if (FejdStartup.m_instance.m_world != null)
-                    {
-                        if (GetGameMode() == TrophyGameMode.TrophyRush)
-                        {
-                            FejdStartup.m_instance.m_world.m_startingGlobalKeys.Clear();
-
-                            FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("playerdamage 70");
-                            FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("enemydamage 200");
-                            FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("enemyspeedsize 120");
-                            FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("enemyleveluprate 140");
-                            FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("resourcerate 200");
-                            FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("preset combat_veryhard:deathpenalty_default: resources_muchmore: raids_default: portals_default");
-                            FejdStartup.m_instance.m_world.SaveWorldMetaData(DateTime.Now);
-                            __instance.UpdateWorldList(centerSelection: true);
-                        }
-                        else if (IsSagaMode())
-                        {
-                            FejdStartup.m_instance.m_world.m_startingGlobalKeys.Clear();
-
-                            // Trying new tack with World Modifiers: portal everything, normal combat, no raids, double resources
-                            FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("resourcerate 200");
-                            FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("eventrate 0");
-                            FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("teleportall");
-                            FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("preset combat_default:deathpenalty_default:resources_muchmore:raids_none:portals_casual");
-
-                            //FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("playerdamage 85");
-                            //FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("enemydamage 150");
-                            //FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("enemyspeedsize 110");
-                            //FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("enemyleveluprate 120");
-                            //FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("resourcerate 200");
-                            //FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("eventrate 0");
-                            //FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("preset combat_hard:deathpenalty_default: resources_muchmore: raids_none: portals_default");
-
-                            FejdStartup.m_instance.m_world.SaveWorldMetaData(DateTime.Now);
-                            __instance.UpdateWorldList(centerSelection: true);
-                        }
-                        else if (GetGameMode() == TrophyGameMode.TrophyFiesta)
-                        {
-                            FejdStartup.m_instance.m_world.m_startingGlobalKeys.Clear();
-
-                            // Trying new tack with World Modifiers: portal everything, normal combat, no raids, double resources
-                            FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("enemyspeedsize 200");
-                            FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("enemyleveluprate 300");
-
-                            //FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("playerdamage 85");
-                            //FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("enemydamage 150");
-                            //FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("enemyspeedsize 110");
-                            //FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("enemyleveluprate 120");
-                            //FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("resourcerate 200");
-                            //FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("eventrate 0");
-                            //FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("preset combat_hard:deathpenalty_default: resources_muchmore: raids_none: portals_default");
-
-                            FejdStartup.m_instance.m_world.SaveWorldMetaData(DateTime.Now);
-                            __instance.UpdateWorldList(centerSelection: true);
-                        }
-                    }
-                }
-            }
-
-            // Uncomment to inspect current world modifiers when hitting World Modifiers button
-            /*           
-                                   [HarmonyPatch (typeof(FejdStartup), nameof(FejdStartup.OnServerOptions))]
-                                   public class ServerOptionsGUI_Initizalize_Patch
+        // Uncomment to inspect current world modifiers when hitting World Modifiers button
+        /*           
+                               [HarmonyPatch (typeof(FejdStartup), nameof(FejdStartup.OnServerOptions))]
+                               public class ServerOptionsGUI_Initizalize_Patch
+                               {
+                                   static void Postfix(FejdStartup __instance)
                                    {
-                                       static void Postfix(FejdStartup __instance)
+                                       ServerOptionsGUI serverOptionsGUI = __instance.m_serverOptions;
+
+                                       Debug.LogError("OnServerOptions:");
+
+                                       foreach (KeyUI entry in ServerOptionsGUI.m_modifiers)
                                        {
-                                           ServerOptionsGUI serverOptionsGUI = __instance.m_serverOptions;
-
-                                           Debug.LogError("OnServerOptions:");
-
-                                           foreach (KeyUI entry in ServerOptionsGUI.m_modifiers)
+                                           Debug.LogWarning($"  KeyUI: {entry.ToString()}");
+                                           if (entry.GetType() == typeof(KeySlider))
                                            {
-                                               Debug.LogWarning($"  KeyUI: {entry.ToString()}");
-                                               if (entry.GetType() == typeof(KeySlider))
+                                               KeySlider slider = entry as KeySlider;
+
+
+                                               Debug.LogWarning($"  {slider.m_modifier.ToString()}");
+
+                                               foreach (KeySlider.SliderSetting setting in slider.m_settings)
                                                {
-                                                   KeySlider slider = entry as KeySlider;
+                                                   Debug.LogWarning($"    {setting.m_name}, {setting.m_modifierValue.ToString()}");
 
-
-                                                   Debug.LogWarning($"  {slider.m_modifier.ToString()}");
-
-                                                   foreach (KeySlider.SliderSetting setting in slider.m_settings)
+                                                   foreach(string key in setting.m_keys)
                                                    {
-                                                       Debug.LogWarning($"    {setting.m_name}, {setting.m_modifierValue.ToString()}");
-
-                                                       foreach(string key in setting.m_keys)
-                                                       {
-                                                           Debug.LogWarning($"      {key}");
-                                                       }
+                                                       Debug.LogWarning($"      {key}");
                                                    }
                                                }
                                            }
+                                       }
 
-                                           World world = FejdStartup.m_instance.m_world;
-                                           if (world != null)
+                                       World world = FejdStartup.m_instance.m_world;
+                                       if (world != null)
+                                       {
+                                           Debug.LogWarning("FejdStartup.m_instance.m_world.m_startingGlobalKeys");
+                                           foreach (string key in world.m_startingGlobalKeys)
                                            {
-                                               Debug.LogWarning("FejdStartup.m_instance.m_world.m_startingGlobalKeys");
-                                               foreach (string key in world.m_startingGlobalKeys)
-                                               {
-                                                   Debug.LogWarning($"  world key: {key}");
-                                               }
+                                               Debug.LogWarning($"  world key: {key}");
                                            }
                                        }
                                    }
-           */
+                               }
+       */
 
-            // Catch /die console command to track it
-            [HarmonyPatch(typeof(ConsoleCommand), nameof(ConsoleCommand.RunAction), new[] { typeof(ConsoleEventArgs) })]
-            public static class ConsoleCommand_RunAction_Patch
+        // Catch /die console command to track it
+        [HarmonyPatch(typeof(ConsoleCommand), nameof(ConsoleCommand.RunAction), new[] { typeof(ConsoleEventArgs) })]
+        public static class ConsoleCommand_RunAction_Patch
+        {
+            static void Postfix(ConsoleEventArgs args)
             {
-                static void Postfix(ConsoleEventArgs args)
+                if (Player.m_localPlayer != null)
                 {
-                    if (Player.m_localPlayer != null)
+                    if (args.Length > 0 && args[0] == "die")
                     {
-                        if (args.Length > 0 && args[0] == "die")
-                        {
-                            __m_slashDieCount += 1;
+                        __m_slashDieCount += 1;
 
-                            AddPlayerEvent(PlayerEventType.Misc, "PenaltySlashDie", Player.m_localPlayer.transform.position);
+                        AddPlayerEvent(PlayerEventType.Misc, "PenaltySlashDie", Player.m_localPlayer.transform.position);
+                    }
+                    if (args.Length > 0 && args[0] == "devcommands")
+                    {
+                        __m_invalidForTournamentPlay = true;
+
+                        if (__m_scoreTextElement != null)
+                        {
+                            TMPro.TextMeshProUGUI tmText = __m_scoreTextElement.GetComponent<TMPro.TextMeshProUGUI>();
+                            tmText.color = Color.green;
                         }
-                        if (args.Length > 0 && args[0] == "devcommands")
+
+                        UpdateModUI(Player.m_localPlayer);
+                    }
+                }
+            }
+        }
+
+        [HarmonyPatch(typeof(Player), nameof(Player.OnDeath))]
+        public static class Patch_Player_OnDeath
+        {
+            static void Prefix(Player __instance)
+            {
+                if (__instance != null)
+                {
+                    AddPlayerEvent(PlayerEventType.Misc, "PenaltyDeath", __instance.transform.position);
+                }
+            }
+        }
+
+        // Increase sailing speed
+        //
+        // Informed by "Sailing Speed" mod by Smoothbrain
+        [HarmonyPatch(typeof(Ship), nameof(Ship.GetSailForce))]
+        public class Ship_GetSailForce_Patch
+        {
+            static void Postfix(ref Vector3 __result)
+            {
+                if (IsSagaMode())
+                {
+                    __result *= __m_sagaSailingSpeedMultiplier;
+                }
+            }
+        }
+
+        [HarmonyPatch(typeof(Ship), nameof(Ship.Awake))]
+        public class Ship_Awake_Patch
+        {
+            static void Postfix(Ship __instance)
+            {
+                if (IsSagaMode())
+                {
+                    __instance.m_backwardForce *= __m_sagaPaddlingSpeedMultiplier;
+                }
+            }
+        }
+
+        // Ability to chop down any tree with any axe if the elder power is active
+        //
+        [HarmonyPatch(typeof(TreeBase), nameof(TreeBase.Damage))]
+        public static class TreeBase_Damage_Patch
+        {
+            static void Prefix(TreeBase __instance, ref HitData hit)
+            {
+
+                if (__m_elderPowerCutsAllTrees)
+                {
+                    Player player = Player.m_localPlayer;
+
+                    if (player != null && player.GetGuardianPowerName() == "GP_TheElder" && player.m_guardianPowerCooldown > 0.0f)
+                    {
+                        hit.m_toolTier = (short)__instance.m_minToolTier;
+                    }
+                }
+                //Debug.LogWarning($"Guardian Power: {player.GetGuardianPowerName()}");
+                //Debug.LogWarning($"Treebase.m_minToolTier: {__instance.m_minToolTier}");
+                //Debug.LogWarning($"HitData.m_toolTier: {hit.m_toolTier}");
+            }
+        }
+        [HarmonyPatch(typeof(TreeLog), nameof(TreeLog.Damage))]
+        public static class TreeLog_Damage_Patch
+        {
+            static void Prefix(TreeLog __instance, ref HitData hit)
+            {
+
+                if (__m_elderPowerCutsAllTrees)
+                {
+                    Player player = Player.m_localPlayer;
+
+                    if (player != null && player.GetGuardianPowerName() == "GP_TheElder" && player.m_guardianPowerCooldown > 0.0f)
+                    {
+                        hit.m_toolTier = (short)__instance.m_minToolTier;
+                    }
+                }
+                //Debug.LogWarning($"Guardian Power: {player.GetGuardianPowerName()}");
+                //Debug.LogWarning($"Treebase.m_minToolTier: {__instance.m_minToolTier}");
+                //Debug.LogWarning($"HitData.m_toolTier: {hit.m_toolTier}");
+            }
+        }
+
+        [HarmonyPatch(typeof(Fermenter), nameof(Fermenter.Awake))]
+        public static class Fermenter_AddItem_Patch
+        {
+            static void Postfix(Fermenter __instance)
+            {
+                if (__instance != null && (IsSagaMode()))
+                {
+                    //                        Debug.LogWarning("Fermenter.Awake()");
+
+                    __instance.m_fermentationDuration = 10;
+                }
+            }
+        }
+
+        // In trophy saga, fermenter output is doubled
+        //
+        [HarmonyPatch(typeof(Fermenter), nameof(Fermenter.DelayedTap))]
+        public static class Fermenter_DelayedTap_Patch
+        {
+            static void Prefix(Fermenter __instance)
+            {
+                if (__instance != null && IsSagaMode())
+                {
+
+                    Fermenter.ItemConversion itemConversion = __instance.GetItemConversion(__instance.m_delayedTapItem);
+                    if (itemConversion != null)
+                    {
+                        itemConversion.m_producedItems = 9;
+                    }
+                }
+            }
+        }
+
+        // In trophy saga, Planted plants grow to maturity as soon as possible
+        //
+        [HarmonyPatch(typeof(Plant), nameof(Plant.TimeSincePlanted))]
+        public static class Plant_GetGrowTime_Patch
+        {
+            static void Postfix(Plant __instance, ref double __result)
+            {
+                if (__instance != null && (IsSagaMode()))
+                {
+                    //                        Debug.LogWarning("Plant.TimeSincePlanted()");
+
+                    __result = (double)__instance.m_growTimeMax + 1;
+                }
+            }
+        }
+
+        // Let's not fuck with cooking stations
+        //
+        //[HarmonyPatch(typeof(CookingStation), MethodType.Constructor)]
+        //public static class CookingStation_Constructor_Patch
+        //{
+        //    static void Postfix(CookingStation __instance)
+        //    {
+        //        if (__instance != null && GetGameMode() == TrophyGameMode.TrophySaga)
+        //        {
+        //            Debug.LogWarning($"CookingStation() {__instance.m_name}");
+        //        }
+        //    }
+        //}
+
+        [HarmonyPatch(typeof(Smelter), nameof(Smelter.Awake))]
+        public static class Smelter_Awake_Patch
+        {
+            static void Postfix(Smelter __instance)
+            {
+                if (__instance != null && (IsSagaMode()))
+                {
+                    //Debug.LogWarning($"Smelter.Awake() {__instance.m_name}");
+                    //foreach (Smelter.ItemConversion item in __instance.m_conversion)
+                    //{
+                    //    Debug.LogWarning($" {item.m_from.name} to {item.m_to.name}");
+                    //}
+
+                    if (__instance.m_name.Contains("eitr"))
+                    {
+                        __instance.m_secPerProduct = 1f;
+                    }
+                    else if (__instance.m_name.Contains("bathtub") || __instance.m_name.Contains("batteringram"))
+                    {
+                        // Do nothing to the hot tub or the battering ram
+
+                    }
+                    else
+                    {
+                        __instance.m_secPerProduct = 0.03f;
+                    }
+                }
+            }
+        }
+
+        // If it's an Eitr Refiner, auto-add the "ore" (Softtissue) when Sap is added to remove Softtisue requirement
+        [HarmonyPatch(typeof(Smelter), nameof(Smelter.OnAddFuel))]
+        public static class Smelter_OnAddFuel_Patch
+        {
+            static void Postfix(Smelter __instance, Switch sw, Humanoid user, ItemDrop.ItemData item, bool __result)
+            {
+                if (__instance != null && (IsSagaMode()))
+                {
+                    //                        Debug.LogWarning($"Smelter.OnAddFuel() {__instance.m_name}");
+
+                    if (__instance.m_name.Contains("eitr"))
+                    {
+                        // Add ore if not full
+                        if (__instance.GetQueueSize() < __instance.m_maxOre)
                         {
-                            __m_invalidForTournamentPlay = true;
-
-                            if (__m_scoreTextElement != null)
-                            {
-                                TMPro.TextMeshProUGUI tmText = __m_scoreTextElement.GetComponent<TMPro.TextMeshProUGUI>();
-                                tmText.color = Color.green;
-                            }
-
-                            UpdateModUI(Player.m_localPlayer);
-                        }
-                    }
-                }
-            }
-
-            [HarmonyPatch(typeof(Player), nameof(Player.OnDeath))]
-            public static class Patch_Player_OnDeath
-            {
-                static void Prefix(Player __instance)
-                {
-                    if (__instance != null)
-                    {
-                        AddPlayerEvent(PlayerEventType.Misc, "PenaltyDeath", __instance.transform.position);
-                    }
-                }
-            }
-
-            // Increase sailing speed
-            //
-            // Informed by "Sailing Speed" mod by Smoothbrain
-            [HarmonyPatch(typeof(Ship), nameof(Ship.GetSailForce))]
-            public class Ship_GetSailForce_Patch
-            {
-                static void Postfix(ref Vector3 __result)
-                {
-                    if (IsSagaMode())
-                    {
-                        __result *= __m_sagaSailingSpeedMultiplier;
-                    }
-                }
-            }
-
-            [HarmonyPatch(typeof(Ship), nameof(Ship.Awake))]
-            public class Ship_Awake_Patch
-            {
-                static void Postfix(Ship __instance)
-                {
-                    if (IsSagaMode())
-                    {
-                        __instance.m_backwardForce *= __m_sagaPaddlingSpeedMultiplier;
-                    }
-                }
-            }
-
-            // Ability to chop down any tree with any axe if the elder power is active
-            //
-            [HarmonyPatch(typeof(TreeBase), nameof(TreeBase.Damage))]
-            public static class TreeBase_Damage_Patch
-            {
-                static void Prefix(TreeBase __instance, ref HitData hit)
-                {
-
-                    if (__m_elderPowerCutsAllTrees)
-                    {
-                        Player player = Player.m_localPlayer;
-
-                        if (player != null && player.GetGuardianPowerName() == "GP_TheElder" && player.m_guardianPowerCooldown > 0.0f)
-                        {
-                            hit.m_toolTier = (short)__instance.m_minToolTier;
-                        }
-                    }
-                    //Debug.LogWarning($"Guardian Power: {player.GetGuardianPowerName()}");
-                    //Debug.LogWarning($"Treebase.m_minToolTier: {__instance.m_minToolTier}");
-                    //Debug.LogWarning($"HitData.m_toolTier: {hit.m_toolTier}");
-                }
-            }
-            [HarmonyPatch(typeof(TreeLog), nameof(TreeLog.Damage))]
-            public static class TreeLog_Damage_Patch
-            {
-                static void Prefix(TreeLog __instance, ref HitData hit)
-                {
-
-                    if (__m_elderPowerCutsAllTrees)
-                    {
-                        Player player = Player.m_localPlayer;
-
-                        if (player != null && player.GetGuardianPowerName() == "GP_TheElder" && player.m_guardianPowerCooldown > 0.0f)
-                        {
-                            hit.m_toolTier = (short)__instance.m_minToolTier;
-                        }
-                    }
-                    //Debug.LogWarning($"Guardian Power: {player.GetGuardianPowerName()}");
-                    //Debug.LogWarning($"Treebase.m_minToolTier: {__instance.m_minToolTier}");
-                    //Debug.LogWarning($"HitData.m_toolTier: {hit.m_toolTier}");
-                }
-            }
-
-            [HarmonyPatch(typeof(Fermenter), nameof(Fermenter.Awake))]
-            public static class Fermenter_AddItem_Patch
-            {
-                static void Postfix(Fermenter __instance)
-                {
-                    if (__instance != null && (IsSagaMode()))
-                    {
-                        //                        Debug.LogWarning("Fermenter.Awake()");
-
-                        __instance.m_fermentationDuration = 10;
-                    }
-                }
-            }
-
-            // In trophy saga, fermenter output is doubled
-            //
-            [HarmonyPatch(typeof(Fermenter), nameof(Fermenter.DelayedTap))]
-            public static class Fermenter_DelayedTap_Patch
-            {
-                static void Prefix(Fermenter __instance)
-                {
-                    if (__instance != null && IsSagaMode())
-                    {
-
-                        Fermenter.ItemConversion itemConversion = __instance.GetItemConversion(__instance.m_delayedTapItem);
-                        if (itemConversion != null)
-                        {
-                            itemConversion.m_producedItems = 9;
-                        }
-                    }
-                }
-            }
-
-            // In trophy saga, Planted plants grow to maturity as soon as possible
-            //
-            [HarmonyPatch(typeof(Plant), nameof(Plant.TimeSincePlanted))]
-            public static class Plant_GetGrowTime_Patch
-            {
-                static void Postfix(Plant __instance, ref double __result)
-                {
-                    if (__instance != null && (IsSagaMode()))
-                    {
-                        //                        Debug.LogWarning("Plant.TimeSincePlanted()");
-
-                        __result = (double)__instance.m_growTimeMax + 1;
-                    }
-                }
-            }
-
-            // Let's not fuck with cooking stations
-            //
-            //[HarmonyPatch(typeof(CookingStation), MethodType.Constructor)]
-            //public static class CookingStation_Constructor_Patch
-            //{
-            //    static void Postfix(CookingStation __instance)
-            //    {
-            //        if (__instance != null && GetGameMode() == TrophyGameMode.TrophySaga)
-            //        {
-            //            Debug.LogWarning($"CookingStation() {__instance.m_name}");
-            //        }
-            //    }
-            //}
-
-            [HarmonyPatch(typeof(Smelter), nameof(Smelter.Awake))]
-            public static class Smelter_Awake_Patch
-            {
-                static void Postfix(Smelter __instance)
-                {
-                    if (__instance != null && (IsSagaMode()))
-                    {
-                        //Debug.LogWarning($"Smelter.Awake() {__instance.m_name}");
-                        //foreach (Smelter.ItemConversion item in __instance.m_conversion)
-                        //{
-                        //    Debug.LogWarning($" {item.m_from.name} to {item.m_to.name}");
-                        //}
-
-                        if (__instance.m_name.Contains("eitr"))
-                        {
-                            __instance.m_secPerProduct = 1f;
-                        }
-                        else if (__instance.m_name.Contains("bathtub") || __instance.m_name.Contains("batteringram"))
-                        {
-                            // Do nothing to the hot tub or the battering ram
-
-                        }
-                        else
-                        {
-                            __instance.m_secPerProduct = 0.03f;
-                        }
-                    }
-                }
-            }
-
-            // If it's an Eitr Refiner, auto-add the "ore" (Softtissue) when Sap is added to remove Softtisue requirement
-            [HarmonyPatch(typeof(Smelter), nameof(Smelter.OnAddFuel))]
-            public static class Smelter_OnAddFuel_Patch
-            {
-                static void Postfix(Smelter __instance, Switch sw, Humanoid user, ItemDrop.ItemData item, bool __result)
-                {
-                    if (__instance != null && (IsSagaMode()))
-                    {
-                        //                        Debug.LogWarning($"Smelter.OnAddFuel() {__instance.m_name}");
-
-                        if (__instance.m_name.Contains("eitr"))
-                        {
-                            // Add ore if not full
-                            if (__instance.GetQueueSize() < __instance.m_maxOre)
-                            {
-                                __instance.m_nview.InvokeRPC("RPC_AddOre", "Softtissue");
-                            }
-                        }
-                    }
-                }
-            }
-
-
-            [HarmonyPatch(typeof(SapCollector), nameof(SapCollector.Awake))]
-            public static class SapCollector_Awake_Patch
-            {
-                static void Postfix(SapCollector __instance)
-                {
-                    if (__instance != null && (IsSagaMode()))
-                    {
-                        //                        Debug.LogWarning($"SapCollector.Awake() {__instance.m_name}");
-
-                        __instance.m_secPerUnit = 0.1f;
-                    }
-                }
-            }
-
-            [HarmonyPatch(typeof(Beehive), nameof(Beehive.Awake))]
-            public static class Beehive_Awake_Patch
-            {
-                static void Postfix(Beehive __instance)
-                {
-                    if (__instance != null && (IsSagaMode()))
-                    {
-                        __instance.m_secPerUnit = 5f;
-                        __instance.m_maxHoney = 4;
-                    }
-                }
-            }
-            /*
-            [HarmonyPatch(typeof(Game), nameof(Game.ShowIntro))]
-            public static class Game_ShowIntro_Patch
-            {
-                static string m_originalText;
-
-                static void Prefix(Game __instance)
-                {
-                    if (__instance != null)
-                    {
-                        m_originalText = __instance.m_introText;
-
-                        if (GetGameMode() == TrophyGameMode.CulinarySaga)
-                        {
-                            __instance.m_introText = CULINARY_SAGA_INTRO_TEXT;
-                        }
-                        else
-                        {
-                            __instance.m_introText = TROPHY_SAGA_INTRO_TEXT;
+                            __instance.m_nview.InvokeRPC("RPC_AddOre", "Softtissue");
                         }
                     }
                 }
-                static void Postfix(Game __instance)
-                {
-                    //                    Debug.LogError($"Intro Text: {__instance.m_introText}");
+            }
+        }
 
-                    if (__instance != null)
+
+        [HarmonyPatch(typeof(SapCollector), nameof(SapCollector.Awake))]
+        public static class SapCollector_Awake_Patch
+        {
+            static void Postfix(SapCollector __instance)
+            {
+                if (__instance != null && (IsSagaMode()))
+                {
+                    //                        Debug.LogWarning($"SapCollector.Awake() {__instance.m_name}");
+
+                    __instance.m_secPerUnit = 0.1f;
+                }
+            }
+        }
+
+        [HarmonyPatch(typeof(Beehive), nameof(Beehive.Awake))]
+        public static class Beehive_Awake_Patch
+        {
+            static void Postfix(Beehive __instance)
+            {
+                if (__instance != null && (IsSagaMode()))
+                {
+                    __instance.m_secPerUnit = 5f;
+                    __instance.m_maxHoney = 4;
+                }
+            }
+        }
+        /*
+        [HarmonyPatch(typeof(Game), nameof(Game.ShowIntro))]
+        public static class Game_ShowIntro_Patch
+        {
+            static string m_originalText;
+
+            static void Prefix(Game __instance)
+            {
+                if (__instance != null)
+                {
+                    m_originalText = __instance.m_introText;
+
+                    if (GetGameMode() == TrophyGameMode.CulinarySaga)
                     {
-                        __instance.m_introText = m_originalText;
+                        __instance.m_introText = CULINARY_SAGA_INTRO_TEXT;
+                    }
+                    else
+                    {
+                        __instance.m_introText = TROPHY_SAGA_INTRO_TEXT;
                     }
                 }
             }
-            */
-            // Mining all veins are more productive
-            //
-            [HarmonyPatch(typeof(MineRock5), nameof(MineRock5.Awake))]
-            public static class MineRock5_Awake_Patch
+            static void Postfix(Game __instance)
             {
-                static void Postfix(MineRock5 __instance)
+                //                    Debug.LogError($"Intro Text: {__instance.m_introText}");
+
+                if (__instance != null)
                 {
-                    if (__instance != null && (IsSagaMode()))
-                    {
-                        __instance.m_dropItems.m_dropMin *= TROPHY_SAGA_MINING_MULTIPLIER;
-                        __instance.m_dropItems.m_dropMax *= (TROPHY_SAGA_MINING_MULTIPLIER + 1);
-                    }
+                    __instance.m_introText = m_originalText;
                 }
             }
-
-            [HarmonyPatch(typeof(LoadingIndicator), nameof(LoadingIndicator.Awake))]
-            public static class LoadingIndicator_Awake_Patch
+        }
+        */
+        // Mining all veins are more productive
+        //
+        [HarmonyPatch(typeof(MineRock5), nameof(MineRock5.Awake))]
+        public static class MineRock5_Awake_Patch
+        {
+            static void Postfix(MineRock5 __instance)
             {
-                static void Postfix(LoadingIndicator __instance)
+                if (__instance != null && (IsSagaMode()))
                 {
-                    if (__instance != null)
-                    {
+                    __instance.m_dropItems.m_dropMin *= TROPHY_SAGA_MINING_MULTIPLIER;
+                    __instance.m_dropItems.m_dropMax *= (TROPHY_SAGA_MINING_MULTIPLIER + 1);
+                }
+            }
+        }
+
+        [HarmonyPatch(typeof(LoadingIndicator), nameof(LoadingIndicator.Awake))]
+        public static class LoadingIndicator_Awake_Patch
+        {
+            static void Postfix(LoadingIndicator __instance)
+            {
+                if (__instance != null)
+                {
 #if SAGA_STANDALONE
                         __instance.m_spinner.color = new Color(255f / 255f, 215f / 255f, 0, 1);
                         __instance.m_spinnerOriginalColor = __instance.m_spinner.color;
 #else
-                        //                        Debug.LogWarning($"LoadingIndicator.Awake() {__instance.m_spinner.name} {__instance.m_spinner.sprite.name}");
-                        IEnumerable<AssetBundle> loadedBundles = AssetBundle.GetAllLoadedAssetBundles();
+                    //                        Debug.LogWarning($"LoadingIndicator.Awake() {__instance.m_spinner.name} {__instance.m_spinner.sprite.name}");
+                    IEnumerable<AssetBundle> loadedBundles = AssetBundle.GetAllLoadedAssetBundles();
 
-                        foreach (var bundle in loadedBundles)
+                    foreach (var bundle in loadedBundles)
+                    {
+                        string assetName = "Assets/UI/textures/small/trophies.png";
+                        if (bundle.Contains(assetName))
                         {
-                            string assetName = "Assets/UI/textures/small/trophies.png";
-                            if (bundle.Contains(assetName))
+                            var asset = bundle.LoadAsset(assetName);
+                            if (asset is Texture2D texture)
                             {
-                                var asset = bundle.LoadAsset(assetName);
-                                if (asset is Texture2D texture)
-                                {
-                                    Sprite trophySprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f));
+                                Sprite trophySprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f));
 
-                                    __instance.m_spinner.sprite = trophySprite;
-                                    __instance.m_spinner.color = new Color(255f / 255f, 215f / 255f, 0, 1);
-                                    __instance.m_spinnerOriginalColor = __instance.m_spinner.color;
+                                __instance.m_spinner.sprite = trophySprite;
+                                __instance.m_spinner.color = new Color(255f / 255f, 215f / 255f, 0, 1);
+                                __instance.m_spinnerOriginalColor = __instance.m_spinner.color;
 
-                                    __m_trophySprite = trophySprite;
+                                __m_trophySprite = trophySprite;
 
-                                    //Texture2D newTexture = CreateReadableTextureCopy(texture);
-                                    //byte[] pngData = newTexture.EncodeToPNG();
-                                    //File.WriteAllBytes("ValheimTrophyIcon", pngData);
+                                //Texture2D newTexture = CreateReadableTextureCopy(texture);
+                                //byte[] pngData = newTexture.EncodeToPNG();
+                                //File.WriteAllBytes("ValheimTrophyIcon", pngData);
 
-                                }
-
-                                break;
                             }
+
+                            break;
                         }
+                    }
 #endif
-                    }
-
-                    Texture2D CreateReadableTextureCopy(Texture2D texture)
-                    {
-                        // Create a new Texture2D with the same width, height, and format as the original
-                        Texture2D readableTexture = new Texture2D(texture.width, texture.height, texture.format, texture.mipmapCount > 1);
-
-                        // Copy the pixel data from the original to the new texture
-                        RenderTexture tempRenderTexture = RenderTexture.GetTemporary(texture.width, texture.height);
-                        Graphics.Blit(texture, tempRenderTexture);
-                        RenderTexture previous = RenderTexture.active;
-                        RenderTexture.active = tempRenderTexture;
-
-                        // Read the pixels from the RenderTexture into the new Texture2D
-                        readableTexture.ReadPixels(new Rect(0, 0, texture.width, texture.height), 0, 0);
-                        readableTexture.Apply();
-
-                        // Restore the previous RenderTexture and release the temporary one
-                        RenderTexture.active = previous;
-                        RenderTexture.ReleaseTemporary(tempRenderTexture);
-
-                        return readableTexture;
-                    }
-
                 }
-            }
 
-
-            // Eitr Refinery
-            // "eitrrefinery"
-            // insta-sap, Sap (0.2 weight to Eitr 5.0 weight)
-            // Soft Tissue: "SoftTissue" "$item_softtissue"
-            // Sap: "Sap" "$item_sap" 0.2 weight
-            // Eitr: "Eitr" "$item_eitr" 5.0 weight
-            //
-            // Sap converts to Eitr when picked up?
-            //
-
-            // Boss Drops
-            //
-            // Eikthyr
-            //  Hard Antler: "HardAntler" "$item_hardantler"
-            //  Not dropped by anyone else
-            //
-            // Elder
-            //  Crypt Key: "CryptKey" "$item_cryptkey"
-            //  Also dropped by Greyling Brutes? 25%
-            //
-            // Bonemass
-            //  Wishbone: "Wishbone" "$item_wishbone"
-            //  Dropped by Oozers, 50%?
-            //
-            // Moder
-            //  Dragon Tear: "DragonTear" "$item_dragontear"
-            //  Dropped by Drakes, 10%?
-            //
-            // Yagluth
-            //  Torn Spirit: "YagluthDrop" "$item_yagluththing"
-            //  Dropped by Fuling Shaman, 25%?
-            //
-            // Queen
-            //  Majestic Carapace: "QueenDrop" "$item_seekerqueen_drop"
-            //  Dropped by Seeker Soldiers, 25%?
-            //
-
-
-            // Spinning Wheel
-            // "piece_spinningwheel"
-            //   
-
-            // Windmill
-            // "Windmill"
-            // Windmill(), has m_smelter that makes it?
-
-
-            // Oven
-            // "piece_oven"
-            // CookingStation()
-            // m_smelter
-            //
-
-            [HarmonyPatch(typeof(EggGrow), nameof(EggGrow.Start))]
-            public static class EggGrow_Start_Patch
-            {
-                static void Postfix(EggGrow __instance)
+                Texture2D CreateReadableTextureCopy(Texture2D texture)
                 {
-                    if (__instance != null && (IsSagaMode()))
+                    // Create a new Texture2D with the same width, height, and format as the original
+                    Texture2D readableTexture = new Texture2D(texture.width, texture.height, texture.format, texture.mipmapCount > 1);
+
+                    // Copy the pixel data from the original to the new texture
+                    RenderTexture tempRenderTexture = RenderTexture.GetTemporary(texture.width, texture.height);
+                    Graphics.Blit(texture, tempRenderTexture);
+                    RenderTexture previous = RenderTexture.active;
+                    RenderTexture.active = tempRenderTexture;
+
+                    // Read the pixels from the RenderTexture into the new Texture2D
+                    readableTexture.ReadPixels(new Rect(0, 0, texture.width, texture.height), 0, 0);
+                    readableTexture.Apply();
+
+                    // Restore the previous RenderTexture and release the temporary one
+                    RenderTexture.active = previous;
+                    RenderTexture.ReleaseTemporary(tempRenderTexture);
+
+                    return readableTexture;
+                }
+
+            }
+        }
+
+
+        // Eitr Refinery
+        // "eitrrefinery"
+        // insta-sap, Sap (0.2 weight to Eitr 5.0 weight)
+        // Soft Tissue: "SoftTissue" "$item_softtissue"
+        // Sap: "Sap" "$item_sap" 0.2 weight
+        // Eitr: "Eitr" "$item_eitr" 5.0 weight
+        //
+        // Sap converts to Eitr when picked up?
+        //
+
+        // Boss Drops
+        //
+        // Eikthyr
+        //  Hard Antler: "HardAntler" "$item_hardantler"
+        //  Not dropped by anyone else
+        //
+        // Elder
+        //  Crypt Key: "CryptKey" "$item_cryptkey"
+        //  Also dropped by Greyling Brutes? 25%
+        //
+        // Bonemass
+        //  Wishbone: "Wishbone" "$item_wishbone"
+        //  Dropped by Oozers, 50%?
+        //
+        // Moder
+        //  Dragon Tear: "DragonTear" "$item_dragontear"
+        //  Dropped by Drakes, 10%?
+        //
+        // Yagluth
+        //  Torn Spirit: "YagluthDrop" "$item_yagluththing"
+        //  Dropped by Fuling Shaman, 25%?
+        //
+        // Queen
+        //  Majestic Carapace: "QueenDrop" "$item_seekerqueen_drop"
+        //  Dropped by Seeker Soldiers, 25%?
+        //
+
+
+        // Spinning Wheel
+        // "piece_spinningwheel"
+        //   
+
+        // Windmill
+        // "Windmill"
+        // Windmill(), has m_smelter that makes it?
+
+
+        // Oven
+        // "piece_oven"
+        // CookingStation()
+        // m_smelter
+        //
+
+        [HarmonyPatch(typeof(EggGrow), nameof(EggGrow.Start))]
+        public static class EggGrow_Start_Patch
+        {
+            static void Postfix(EggGrow __instance)
+            {
+                if (__instance != null && (IsSagaMode()))
+                {
+                    __instance.m_growTime = 2f;
+                }
+            }
+        }
+
+        [HarmonyPatch(typeof(Growup), nameof(Growup.Start))]
+        public static class Growup_Start_Patch
+        {
+            static void Postfix(Growup __instance)
+            {
+                if (__instance != null && (IsSagaMode()))
+                {
+                    __instance.m_growTime = 1f;
+                }
+            }
+        }
+
+        [HarmonyPatch(typeof(Procreation), nameof(Procreation.Awake))]
+        public static class Procreation_Awake_Patch
+        {
+            static void Postfix(Procreation __instance)
+            {
+                if (__instance != null && (IsSagaMode()))
+                {
+                    if (__instance.name.Contains("Hen"))
                     {
-                        __instance.m_growTime = 2f;
+                        Debug.LogWarning($"Procreation.Start: {__instance.name} {__instance.m_character.name}");
+                        __instance.m_pregnancyDuration = 0.1f;
+                        __instance.m_pregnancyChance = 0;
+                        __instance.m_updateInterval = 1;
                     }
                 }
             }
+        }
 
-            [HarmonyPatch(typeof(Growup), nameof(Growup.Start))]
-            public static class Growup_Start_Patch
+
+
+
+        // END Harmony Patch area
+
+
+        static public List<string> __m_cookedFoods = new List<string>();
+
+        public class ConsumableData
+        {
+            public ConsumableData(string prefab, string item, string display, Biome biome, int points, float health, float stamina, float eitr, float regen)
             {
-                static void Postfix(Growup __instance)
-                {
-                    if (__instance != null && (IsSagaMode()))
-                    {
-                        __instance.m_growTime = 1f;
-                    }
-                }
+                m_prefabName = prefab;
+                m_itemName = item;
+                m_displayName = display;
+                m_biome = biome;
+                m_points = points;
+                m_health = health;
+                m_stamina = stamina;
+                m_eitr = eitr;
+                m_regen = regen;
             }
 
-            [HarmonyPatch(typeof(Procreation), nameof(Procreation.Awake))]
-            public static class Procreation_Awake_Patch
-            {
-                static void Postfix(Procreation __instance)
-                {
-                    if (__instance != null && (IsSagaMode()))
-                    {
-                        if (__instance.name.Contains("Hen"))
-                        {
-                            Debug.LogWarning($"Procreation.Start: {__instance.name} {__instance.m_character.name}");
-                            __instance.m_pregnancyDuration = 0.1f;
-                            __instance.m_pregnancyChance = 0;
-                            __instance.m_updateInterval = 1;
-                        }
-                    }
-                }
-            }
+            public string m_prefabName;
+            public string m_itemName;
+            public string m_displayName;
+            public Biome m_biome;
+            public int m_points;
+            public float m_health;
+            public float m_stamina;
+            public float m_eitr;
+            public float m_regen;
+        }
 
-
-
-
-            // END Harmony Patch area
-
-
-            static public List<string> __m_cookedFoods = new List<string>();
-
-            public class ConsumableData
-            {
-                public ConsumableData(string prefab, string item, string display, Biome biome, int points, float health, float stamina, float eitr, float regen)
-                {
-                    m_prefabName = prefab;
-                    m_itemName = item;
-                    m_displayName = display;
-                    m_biome = biome;
-                    m_points = points;
-                    m_health = health;
-                    m_stamina = stamina;
-                    m_eitr = eitr;
-                    m_regen = regen;
-                }
-
-                public string m_prefabName;
-                public string m_itemName;
-                public string m_displayName;
-                public Biome m_biome;
-                public int m_points;
-                public float m_health;
-                public float m_stamina;
-                public float m_eitr;
-                public float m_regen;
-            }
-
-            static public ConsumableData[] __m_rawFoodData = new ConsumableData[]
-            {
+        static public ConsumableData[] __m_rawFoodData = new ConsumableData[]
+        {
                 new ConsumableData("Blueberries",              "$item_blueberries",             "Blueberries",                    Biome.Meadows,   0,   8,   25,  0,   1),
                 new ConsumableData("Carrot",                   "$item_carrot",                  "Carrot",                         Biome.Meadows,   0,   10,  32,  0,   1),
                 new ConsumableData("Cloudberry",               "$item_cloudberries",            "Cloudberries",                   Biome.Meadows,   0,   13,  40,  0,   1),
@@ -6466,10 +6005,10 @@ namespace TrophyHuntMod
                 new ConsumableData("RottenMeat",               "$item_meat_rotten",             "Rotten Meat",                    Biome.Meadows,   0,   0,   0,   0,   1),
                 new ConsumableData("RoyalJelly",               "$item_royaljelly",              "Royal Jelly",                    Biome.Meadows,   0,   15,  15,  0,   1),
                 new ConsumableData("Vineberry",                "$item_vineberry",               "Vineberry Cluster",              Biome.Meadows,   0,   30,  30,  30,  1),
-            };
+        };
 
-            static public ConsumableData[] __m_drinkData = new ConsumableData[]
-            {
+        static public ConsumableData[] __m_drinkData = new ConsumableData[]
+        {
                 new ConsumableData("BarleyWine",               "$item_barleywine",              "Fire Resistance Barley Wine",    Biome.Meadows,   0,   0,   0,   0,   0),
                 new ConsumableData("MeadBugRepellent",         "$item_mead_bugrepellent",       "Anti-Sting Concoction",          Biome.Meadows,   0,   0,   0,   0,   0),
                 new ConsumableData("MeadBzerker",              "$item_mead_bzerker",            "Berserkir Mead",                 Biome.Meadows,   0,   0,   0,   0,   0),
@@ -6491,10 +6030,10 @@ namespace TrophyHuntMod
                 new ConsumableData("MeadTamer",                "$item_mead_tamer",              "Brew of Animal Whispers",        Biome.Meadows,   0,   0,   0,   0,   0),
                 new ConsumableData("MeadTasty",                "$item_mead_tasty",              "Tasty Mead",                     Biome.Meadows,   0,   0,   0,   0,   0),
                 new ConsumableData("MeadTrollPheromones",      "$item_mead_trollpheromones",    "Love Potion",                    Biome.Meadows,   0,   0,   0,   0,   0),
-            };
+        };
 
-            static public ConsumableData[] __m_feastData = new ConsumableData[]
-            {
+        static public ConsumableData[] __m_feastData = new ConsumableData[]
+        {
                 new ConsumableData("FeastAshlands",            "$item_feastashlands",           "Ashlands Gourmet Bowl",          Biome.Meadows,   0,   75,  75,  38,  6),
                 new ConsumableData("FeastBlackforest",         "$item_feastblackforest",        "Black Forest Buffet Platter",    Biome.Meadows,   0,   35,  35,  0,   3),
                 new ConsumableData("FeastMeadows",             "$item_feastmeadows",            "Whole Roasted Meadow Boar",      Biome.Meadows,   0,   35,  35,  0,   2),
@@ -6504,10 +6043,10 @@ namespace TrophyHuntMod
                 new ConsumableData("FeastPlains",              "$item_feastplains",             "Plains Pie Picnic",              Biome.Meadows,   0,   55,  55,  0,   4),
                 new ConsumableData("FeastSwamps",              "$item_feastswamps",             "Swamp Dweller's Delight",        Biome.Meadows,   0,   35,  35,  0,   3),
 
-            };
+        };
 
-            static public ConsumableData[] __m_cookedFoodData = new ConsumableData[]
-            {
+        static public ConsumableData[] __m_cookedFoodData = new ConsumableData[]
+        {
                 new ConsumableData("NeckTailGrilled",          "$item_necktailgrilled",         "Grilled Neck Tail",              Biome.Meadows,   10,   25,  8,   0,   2),
                 new ConsumableData("CookedMeat",               "$item_boar_meat_cooked",        "Cooked Boar Meat",               Biome.Meadows,   10,   30,  10,  0,   2),
                 new ConsumableData("CookedDeerMeat",           "$item_deer_meat_cooked",        "Cooked Deer Meat",               Biome.Meadows,   10,   35,  12,  0,   2),
@@ -6566,13 +6105,12 @@ namespace TrophyHuntMod
                 new ConsumableData("SparklingShroomshake",     "$item_sparklingshroomshake",    "Sparkling Shroomshake",          Biome.Ashlands,  60,   30,  15,  90,  4),
                 new ConsumableData("MarinatedGreens",          "$item_marinatedgreens",         "Marinated Greens",               Biome.Ashlands,  60,   32,  16,  95,  4),
 
-                //new ConsumableData("HealthUpgrade_Bonemass",   "Bonemass heart",                "Bonemass heart",                 Biome.Meadows,   0,   0,   0,   0,   0),
-                //new ConsumableData("HealthUpgrade_GDKing",     "Elder heart",                   "Elder heart",                    Biome.Meadows,   0,   0,   0,   0,   0),
-                //new ConsumableData("StaminaUpgrade_Greydwarf", "Stamina Greydwarf",             "Stamina Greydwarf",              Biome.Meadows,   0,   0,   0,   0,   0),
-                //new ConsumableData("StaminaUpgrade_Troll",     "Stamina Troll",                 "Stamina Troll",                  Biome.Meadows,   0,   0,   0,   0,   0),
-                //new ConsumableData("StaminaUpgrade_Wraith",    "Stamina Wraith",                "Stamina Wraith",                 Biome.Meadows,   0,   0,   0,   0,   0),
-            };
-        }
+            //new ConsumableData("HealthUpgrade_Bonemass",   "Bonemass heart",                "Bonemass heart",                 Biome.Meadows,   0,   0,   0,   0,   0),
+            //new ConsumableData("HealthUpgrade_GDKing",     "Elder heart",                   "Elder heart",                    Biome.Meadows,   0,   0,   0,   0,   0),
+            //new ConsumableData("StaminaUpgrade_Greydwarf", "Stamina Greydwarf",             "Stamina Greydwarf",              Biome.Meadows,   0,   0,   0,   0,   0),
+            //new ConsumableData("StaminaUpgrade_Troll",     "Stamina Troll",                 "Stamina Troll",                  Biome.Meadows,   0,   0,   0,   0,   0),
+            //new ConsumableData("StaminaUpgrade_Wraith",    "Stamina Wraith",                "Stamina Wraith",                 Biome.Meadows,   0,   0,   0,   0,   0),
+        };
     }
 }
 
