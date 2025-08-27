@@ -68,7 +68,7 @@
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>$(SolutionDir)\utils\pdb2mdb.exe $(TargetPath)
-copy /Y $(TargetDir)\$(TargetFileName)* $(ProjectDir)\Package\plugins
-copy /Y $(TargetDir)\$(TargetFileName)* "C:\Program Files (x86)\Steam\steamapps\common\Valheim_Dev\BepInEx\Plugins"</PostBuildEvent>
+xcopy /F /Y "$(TargetDir)\$(TargetFileName)" "$(ProjectDir)\Package\plugins"
+xcopy /F /Y "$(TargetDir)\$(TargetFileName)" "$(ValheimPath)\BepInEx\Plugins"</PostBuildEvent>
   </PropertyGroup>
 </Project>

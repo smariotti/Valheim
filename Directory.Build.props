@@ -1,0 +1,5 @@
+    <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+      <PropertyGroup>
+        <ValheimPath>C:\Program Files (x86)\Steam\steamapps\common\Valheim_Dev</ValheimPath>
+      </PropertyGroup>
+    </Project>
