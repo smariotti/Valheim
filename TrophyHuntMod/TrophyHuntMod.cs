@@ -5075,7 +5075,7 @@ namespace TrophyHuntMod
 
             //                Debug.LogWarning(json);
 
-            string url = "https://valhelp.azurewebsites.net/api/track/logs";
+            string url = "https://valheim.help/api/track/standings";
 
             __m_trophyHuntMod.StartCoroutine(UnityPostRequest(url, json));
         }
