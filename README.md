@@ -1,5 +1,7 @@
 ----
 # oathorse Valheim Projects
+
+https://thunderstore.io/c/valheim/p/oathorse/
 ----
 
 ## Configuring for Building and Running Locally
@@ -23,11 +25,22 @@ Open up the included `denikson-BepInExPack_Valheim-*.zip` archive and unzip the 
 ----
 ## Mods Included
 ### TrophyHuntMod
+https://thunderstore.io/c/valheim/p/oathorse/TrophyHuntMod/
+
 ### Dude, Where's My Portal?
+https://thunderstore.io/c/valheim/p/oathorse/DudeWheresMyPortal/
+
 ### TubaWalk
+https://thunderstore.io/c/valheim/p/oathorse/TubaWalk/
+
 ### InstaSmelt
+https://thunderstore.io/c/valheim/p/oathorse/InstaSmelt/
+
 ### ScytheEverything
+https://thunderstore.io/c/valheim/p/oathorse/ScytheEverything/
+
 ### ITawtITaw
+https://thunderstore.io/c/valheim/p/oathorse/ITawtITaw/
 
 ----
 Version 0.1 of this document
