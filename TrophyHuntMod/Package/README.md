@@ -22,6 +22,16 @@ Requires a BepInEx install.
 
 https://thunderstore.io/c/valheim/p/denikson/BepInExPack_Valheim/
 
+Source:
+
+https://github.com/smariotti/Valheim/tree/master/TrophyHuntMod
+
+Trophy Hunt Mod Overview by SnazzyGames:
+* https://www.youtube.com/watch?v=l30kWYkweXM
+
+Trophy Saga game mode Overview/Showcase by XMal:
+* https://youtu.be/i5sjwo8SOVc?si=sMgz4aZupk2BFpiQ
+
 ## Installation (manual)
 
 Two Options:
@@ -777,7 +787,8 @@ You can learn more on the Valheim Speedrun Discord channel here: https://discord
 
 
 ## Where to Find
-You can find the github at: https://github.com/smariotti/TrophyHuntMod
+You can find the github at: https://github.com/smariotti/Valheim/tree/master/TrophyHuntMod
+
 
 Note, this was originally built with Jotunn, using their example mod project structure, though Jotunn is no longer a requirement to run it. You just need to have BepInEx installed.
 # TrophyHuntMod

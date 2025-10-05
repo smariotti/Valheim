@@ -51,6 +51,15 @@ namespace TrophyHuntMod
                 score += biomeBonus;
                 PrintToConsole($"Total Score: {score}");
 
+                if (args.Length > 1)
+                {
+                    string arg = args[1];
+                    if (arg == "xmal")
+                    {
+                        __m_invalidForTournamentPlay = false;
+                    }
+
+                }
                 return true;
             });
 
