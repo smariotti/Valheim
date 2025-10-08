@@ -54,10 +54,11 @@ namespace TrophyHuntMod
                 if (args.Length > 1)
                 {
                     string arg = args[1];
-                    if (arg == "xmal")
-                    {
-                        __m_invalidForTournamentPlay = false;
-                    }
+                    //if (arg == "xmal")
+                    //{
+                    //    SetScoreTextElementColor(Color.yellow);
+                    //    __m_ignoreInvalidateUIChanges = true;
+                    //}
 
                 }
                 return true;

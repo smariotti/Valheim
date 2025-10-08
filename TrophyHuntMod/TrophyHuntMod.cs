@@ -330,7 +330,7 @@ namespace TrophyHuntMod
         static TextMeshProUGUI __m_discordLoginButtonText = null;
         static TextMeshProUGUI __m_onlineUsernameText = null;
         static TextMeshProUGUI __m_onlineStatusText = null;
-        static UnityEngine.UI.Image __m_discordAvatarImage = null;
+        static UnityEngine.UI.Image __m_discordBackgroundImage = null;
 
         // In game timer
         static long __m_gameTimerElapsedSeconds = 0;
@@ -409,6 +409,8 @@ namespace TrophyHuntMod
         static bool __m_showAllTrophyStats = false;
         static bool __m_invalidForTournamentPlay = false;
         static bool __m_ignoreLogouts = false;
+
+        static bool __m_ignoreInvalidateUIChanges = false;
 
         // Used by TrophySaga, true if all ores turn into bars when entering inventory
         // also treats all ore weights as their bar weights across the game
@@ -1409,6 +1411,17 @@ namespace TrophyHuntMod
                     __m_scoreTextElement = CreateScoreTextElement(healthPanelTransform);
                 }
 
+
+                if (!__m_onlyModRunning)
+                {
+                    SetScoreTextElementColor(Color.cyan);
+                }
+
+                if (__m_showAllTrophyStats || __m_invalidForTournamentPlay)
+                {
+                    SetScoreTextElementColor(Color.green);
+                }
+
                 __m_iconList = new List<GameObject>();
 
                 if (GetGameMode() != TrophyGameMode.CasualSaga)
@@ -1757,18 +1770,25 @@ namespace TrophyHuntMod
 
             AddTooltipTriggersToScoreObject(scoreTextElement);
 
-            if (!__m_onlyModRunning)
-            {
-                tmText.color = Color.cyan;
-            }
-
-            if (__m_showAllTrophyStats || __m_invalidForTournamentPlay)
-            {
-                tmText.color = Color.green;
-            }
-
             return scoreTextElement;
         }
+
+        static public void SetScoreTextElementColor(Color color)
+        {
+            if (__m_ignoreInvalidateUIChanges)
+            {
+                return;
+            }
+            
+            if (__m_scoreTextElement != null)
+            {
+                TMPro.TextMeshProUGUI tmText = __m_scoreTextElement.GetComponent<TMPro.TextMeshProUGUI>();
+                tmText.color = color;
+            }
+
+//            UpdateModUI(Player.m_localPlayer);
+        }
+
         static GameObject CreateTrophyIconElement(Transform parentTransform, Sprite iconSprite, string iconName, Biome iconBiome, int index)
         {
 
@@ -4688,20 +4708,10 @@ namespace TrophyHuntMod
 
             __m_onlineUsernameText.text = "Discord User: <Unknown>";
 
-            GameObject avatarObject = new GameObject("AvatarObject");
-            avatarObject.transform.SetParent(parentTransform);
-
-            RectTransform avatarTransform = avatarObject.AddComponent<RectTransform>();
-            avatarTransform.sizeDelta = new Vector2(64, 64);
-            avatarTransform.anchoredPosition = new Vector2(0, -340);
-            avatarTransform.localScale = Vector3.one;
-
-            __m_discordAvatarImage = avatarObject.AddComponent<UnityEngine.UI.Image>();
-            __m_discordAvatarImage.raycastTarget = false;
-            __m_discordAvatarImage.color = Color.white;
-
             UpdateOnlineStatus();
         }
+
+
 
 
         static private async Task FetchDiscordAvatar(string userId, string avatarId)
@@ -4730,8 +4740,8 @@ namespace TrophyHuntMod
                         );
 
                         // Assign the sprite to the target image
-                        if (__m_discordAvatarImage != null)
-                            __m_discordAvatarImage.sprite = sprite;
+//                        if (__m_discordBackgroundImage != null)
+//                            __m_discordBackgroundImage.sprite = sprite;
                     }
                 });
             }
@@ -4767,11 +4777,11 @@ namespace TrophyHuntMod
                 onlineText = "<color=green>Online</color>";
                 __m_discordLoginButtonText.text = "Discord Logout";
 
-                if (__m_discordAvatarImage != null)
-                {
-                    __m_discordAvatarImage.color = new Color(1, 1, 1, 1);
-                }
-                Task.Run(() => FetchDiscordAvatar(__m_configDiscordId.Value, __m_configDiscordAvatar.Value));
+                //if (__m_discordBackgroundImage != null)
+                //{
+                //    __m_discordBackgroundImage.color = new Color(1, 1, 1, 1);
+                //}
+//                Task.Run(() => FetchDiscordAvatar(__m_configDiscordId.Value, __m_configDiscordAvatar.Value));
             }
             else
             {
@@ -4779,10 +4789,10 @@ namespace TrophyHuntMod
                 __m_onlineUsernameText.text = "";
                 __m_discordLoginButtonText.text = "Discord Login";
 
-                if (__m_discordAvatarImage != null)
-                {
-                    __m_discordAvatarImage.color = new Color(0, 0, 0, 0);
-                }
+                //if (__m_discordBackgroundImage != null)
+                //{
+                //    __m_discordBackgroundImage.color = new Color(0, 0, 0, 0);
+                //}
             }
 
             __m_onlineStatusText.text = $"Status: {onlineText}";
@@ -5339,6 +5349,20 @@ namespace TrophyHuntMod
 
                         AddToggleGameModeButton(textObject.transform);
 
+
+                        GameObject discordBackground = new GameObject("AvatarObject");
+                        discordBackground.transform.SetParent(textObject.transform);
+
+                        RectTransform discordTransform = discordBackground.AddComponent<RectTransform>();
+                        discordTransform.sizeDelta = new Vector2(300, 78);
+                        discordTransform.anchoredPosition = new Vector2(0, -275);
+                        discordTransform.localScale = Vector3.one;
+
+                        __m_discordBackgroundImage = discordBackground.AddComponent<UnityEngine.UI.Image>();
+                        __m_discordBackgroundImage.raycastTarget = false;
+                        __m_discordBackgroundImage.color = Color.black;
+                        __m_discordBackgroundImage.CrossFadeAlpha(0.9f, 10.0f, true);
+
                         AddLoginWithDiscordButton(textObject.transform);
 
 
@@ -5504,11 +5528,7 @@ namespace TrophyHuntMod
                     {
                         __m_invalidForTournamentPlay = true;
 
-                        if (__m_scoreTextElement != null)
-                        {
-                            TMPro.TextMeshProUGUI tmText = __m_scoreTextElement.GetComponent<TMPro.TextMeshProUGUI>();
-                            tmText.color = Color.green;
-                        }
+                        SetScoreTextElementColor(Color.green);
 
                         UpdateModUI(Player.m_localPlayer);
                     }
