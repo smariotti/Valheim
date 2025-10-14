@@ -40,7 +40,7 @@ namespace TrophyHuntMod
 
 
 #endif
-        public const string PluginVersion = "0.9.14";
+        public const string PluginVersion = "0.9.15";
         private readonly Harmony harmony = new Harmony(PluginGUID);
 
         // Configuration variables
