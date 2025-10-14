@@ -12,31 +12,15 @@ using UnityEngine.UI;
 using System.Threading.Tasks;
 using static CharacterDrop;
 using UnityEngine.EventSystems;
-using System.Xml.Linq;
-using static System.Net.Mime.MediaTypeNames;
-using static TrophyHuntMod.TrophyHuntMod;
-using static UnityEngine.EventSystems.EventTrigger;
-using System.Configuration;
-using System.Reflection;
-using System.Xml;
-using Valheim.UI;
-using UnityEngine.SocialPlatforms.Impl;
-using System.CodeDom;
-using UnityEngine.UIElements;
-using static UnityEngine.UI.GridLayoutGroup;
-using static Room;
 using static Skills;
 using System.Linq;
-using static TrophyHuntMod.TrophyHuntMod.Player_OnSpawned_Patch;
 using static TrophyHuntMod.TrophyHuntMod.THMSaveData;
 using System.Xml.Serialization;
-using System.Reflection.Emit;
-using System.Net;
 using BepInEx.Configuration;
-using static Incinerator;
 using Newtonsoft.Json;
 using System.Security.Policy;
 using System.Net.Http;
+using System.Timers;
 
 namespace TrophyHuntMod
 {
@@ -540,7 +524,7 @@ namespace TrophyHuntMod
 
             string dataKey = GetPersistentDataKey();
 
-            Debug.LogWarning($"SaveData {dataKey}");
+//            Debug.LogWarning($"SaveData {dataKey}");
 
             THMSaveData saveData = new THMSaveData();
 
@@ -622,7 +606,7 @@ namespace TrophyHuntMod
         {
             string dataKey = GetPersistentDataKey();
 
-            Debug.LogWarning($"LoadData {dataKey}");
+//            Debug.LogWarning($"LoadData {dataKey}");
 
             if (Player.m_localPlayer == null || !Player.m_localPlayer.m_customData.ContainsKey(dataKey))
             {
@@ -705,6 +689,7 @@ namespace TrophyHuntMod
                 }
             }
         }
+
         private void Awake()
         {
             __m_trophyHuntMod = this;
@@ -733,9 +718,6 @@ namespace TrophyHuntMod
             {
                 __m_loggedInWithDiscord = true;
             }
-
-            //            PostStandingsRequest();
-            //            PostTrackLogEntry("TrophyDeer", 10);
         }
 
         private string[] __m_modWhiteList = new string[]
@@ -894,6 +876,7 @@ namespace TrophyHuntMod
             text += $"<align=\"left\">      * Biome minions can <color=orange>drop Boss Items</color>\n";
             text += $"<align=\"left\">      * Greylings/Trolls/Dvergr <color=orange>drop gifts</color>\n";
             text += $"<align=\"left\">      * Mining is <color=orange>more productive</color>\n";
+            text += $"<align=\"left\">      * <color=orange>CheatDeath(tm)</color> within 3 sec.\n";
 
             return text;
         }
@@ -996,6 +979,7 @@ namespace TrophyHuntMod
                 text += $"<align=\"left\">      * Time Limit: <color=orange>{timeLimit}</color>\n";
                 text += $"<align=\"left\">      * Resources: <color=orange>{resourceMultiplier.ToString("0.0")}x</color>\n";
                 text += $"<align=\"left\">      * Combat Difficulty: <color=orange>{combatDifficulty}</color>\n";
+
                 if (GetGameMode() != TrophyGameMode.CasualSaga)
                 {
                     text += $"<align=\"left\">      * Trophy Drop Rate: <color=orange>{dropRate}</color>\n";
@@ -1022,14 +1006,18 @@ namespace TrophyHuntMod
                     text += $"<align=\"left\"><size=14>      * Cook <color=orange>one of each food</color> to score big!\n</size>";
                     text += $"<align=\"left\"><size=14>      * Feasts are not (yet) included.\n</size>";
                 }
+                if (GetGameMode() == TrophyGameMode.TrophyRush)
+                {
+                    text += $"<align=\"left\">      * <color=orange>CheatDeath(tm)</color> within 3 sec.\n";
 
+                }
                 if (GetGameMode() == TrophyGameMode.CasualSaga)
                 {
                     text += GetSagaRulesText();
                 }
                 else if (IsSagaMode())
                 {
-                    text += $"\n<align=\"left\">      * Saga rule set (see Casual Saga)\n";
+                    text += GetSagaRulesText(); // $"\n<align=\"left\">      * Saga rule set (see Casual Saga)\n";
                 }
 
                 text += "</size>";
@@ -1156,7 +1144,7 @@ namespace TrophyHuntMod
                 //                Debug.LogWarning($"Total Logouts: {__m_logoutCount}");
 
                 string workingDirectory = Directory.GetCurrentDirectory();
-                Debug.Log($"Working Directory for Trophy Hunt Mod: {workingDirectory}");
+//                Debug.Log($"Working Directory for Trophy Hunt Mod: {workingDirectory}");
                 //                Debug.Log($"Steam username: {SteamFriends.GetPersonaName()}");
 
                 // Store the current session data to help determine the player changing these
@@ -1197,6 +1185,8 @@ namespace TrophyHuntMod
                 __m_refreshLogsAndStandings = true;
 
                 PostStandingsRequest();
+
+                StartPeriodicTimer();
             }
         }
         public static void RaiseAllPlayerSkills(float skillLevel)
@@ -1510,10 +1500,10 @@ namespace TrophyHuntMod
                         }
                     }
 
-                    if (__m_gameTimerElapsedSeconds % UPDATE_STANDINGS_INTERVAL == 0)
-                    {
-                        PostStandingsRequest();
-                    }
+                    //if (__m_gameTimerElapsedSeconds % UPDATE_STANDINGS_INTERVAL == 0)
+                    //{
+                    //    PostStandingsRequest();
+                    //}
 
                     __m_gameTimerElapsedSeconds++;
                 }
@@ -1779,14 +1769,14 @@ namespace TrophyHuntMod
             {
                 return;
             }
-            
+
             if (__m_scoreTextElement != null)
             {
                 TMPro.TextMeshProUGUI tmText = __m_scoreTextElement.GetComponent<TMPro.TextMeshProUGUI>();
                 tmText.color = color;
             }
 
-//            UpdateModUI(Player.m_localPlayer);
+            //            UpdateModUI(Player.m_localPlayer);
         }
 
         static GameObject CreateTrophyIconElement(Transform parentTransform, Sprite iconSprite, string iconName, Biome iconBiome, int index)
@@ -2522,11 +2512,35 @@ namespace TrophyHuntMod
                         __m_playerPathData.Add(curPlayerPos);
                         __m_previousPlayerPos = curPlayerPos;
 
-                        //                            Debug.Log($"Collected player position at {curPlayerPos.ToString()}");
+                                                    Debug.Log($"Collected player position at {curPlayerPos.ToString()}");
                     }
 
                     yield return new WaitForSeconds(__m_playerPathCollectionInterval);
                 }
+            }
+        }
+        #endregion
+
+        // Periodic Timer
+        #region Periodic Timer
+
+        public static void StartPeriodicTimer()
+        {
+            StopPeriodicTimer();
+            __m_trophyHuntMod.StartCoroutine(PeriodicTimer());
+        }
+
+        public static void StopPeriodicTimer()
+        {
+            __m_trophyHuntMod.StopCoroutine(PeriodicTimer());
+        }
+
+        public static IEnumerator PeriodicTimer()
+        {
+            if (Player.m_localPlayer != null)
+            {
+                PostTrackLogs();
+                yield return new WaitForSeconds(UPDATE_STANDINGS_INTERVAL);
             }
         }
         #endregion
@@ -2707,9 +2721,11 @@ namespace TrophyHuntMod
 
                     if (Game.instance != null)
                     {
-                        Game.instance.SavePlayerProfile(true);
+                        Game.instance.SavePlayerProfile(GetGameMode() != TrophyGameMode.TrophyHunt);
                     }
                 }
+
+                StopPeriodicTimer();
             }
         }
 
@@ -3961,7 +3977,7 @@ namespace TrophyHuntMod
 
                     string characterName = character.m_name;
 
-                    Debug.LogError($"CharacterDrop_GenerateDropList_Patch: {characterName} has dropped items: {__result?.Count}");
+//                    Debug.LogError($"CharacterDrop_GenerateDropList_Patch: {characterName} has dropped items: {__result?.Count}");
 
                     // See if this is a trophy-dropper and handle any special trophy rules for the various game modes
                     //
@@ -4309,7 +4325,47 @@ namespace TrophyHuntMod
             }
         }
 
+        public static void ConvertMetalOresIfNecessary(ref ItemDrop.ItemData item)
+        {
+            if (IsSagaMode())
+            {
+                // Item successfully added to inventory
+                if (__m_instaSmelt)
+                {
+                    ConvertMetal(ref item);
+                }
 
+                if (GetGameMode() == TrophyGameMode.CulinarySaga)
+                {
+                    bool isFood = false;
+                    foreach (ConsumableData cd in __m_cookedFoodData)
+                    {
+                        if (cd.m_prefabName == item.m_dropPrefab.name)
+                        {
+                            isFood = true;
+                            break;
+                        }
+                    }
+
+                    if (isFood)
+                    {
+                        if (!__m_cookedFoods.Contains(item.m_dropPrefab.name))
+                        {
+                            FlashTrophy(item.m_dropPrefab.name);
+
+                            __m_cookedFoods.Add(item.m_dropPrefab.name);
+
+                            if (__m_cookedFoods.Count == __m_cookedFoodData.Length)
+                            {
+                                MessageHud.instance.ShowBiomeFoundMsg("Odin is Sated", playStinger: true);
+                            }
+                        }
+                    }
+                    UpdateModUI(Player.m_localPlayer);
+                }
+            }
+        }
+    
         // This is called when items are picked up
         //
         // Insta-Smelt when moving items between inventories
@@ -4318,49 +4374,27 @@ namespace TrophyHuntMod
         {
             static void Prefix(Inventory __instance, ref ItemDrop.ItemData item, bool __result)
             {
-                //                    Debug.LogWarning("Inventory.AddItem() 1");
+//            Debug.LogWarning($"Inventory.AddItem() {item.m_dropPrefab.name}");
 
                 if (__instance != null && Player.m_localPlayer != null
                     && __instance == Player.m_localPlayer.GetInventory())
                 {
-                    if (IsSagaMode())
-                    {
-                        // Item successfully added to inventory
-                        if (__m_instaSmelt)
-                        {
-                            ConvertMetal(ref item);
-                        }
+                    ConvertMetalOresIfNecessary(ref item);
+                }
+            }
+        }
 
-                        if (GetGameMode() == TrophyGameMode.CulinarySaga)
-                        {
-                            bool isFood = false;
-                            foreach (ConsumableData cd in __m_cookedFoodData)
-                            {
-                                if (cd.m_prefabName == item.m_dropPrefab.name)
-                                {
-                                    isFood = true;
-                                    break;
-                                }
-                            }
+        // this is called when dropped into an inventory slot with the mouse
+        [HarmonyPatch(typeof(Inventory), nameof(Inventory.AddItem), new[] { typeof(ItemDrop.ItemData), typeof(int), typeof(int), typeof(int) })]
+        public class Inventory_AddItem_4_Patch
+        {
+            static void Postfix(Inventory __instance, ItemDrop.ItemData item, int amount, int x, int y, bool __result)
+            {
+ //               Debug.LogWarning($"Inventory.AddItem4() Postfix {amount} {x} {y}");
 
-                            if (isFood)
-                            {
-                                if (!__m_cookedFoods.Contains(item.m_dropPrefab.name))
-                                {
-                                    FlashTrophy(item.m_dropPrefab.name);
-
-                                    __m_cookedFoods.Add(item.m_dropPrefab.name);
-
-                                    if (__m_cookedFoods.Count == __m_cookedFoodData.Length)
-                                    {
-                                        MessageHud.instance.ShowBiomeFoundMsg("Odin is Sated", playStinger: true);
-                                    }
-                                }
-                            }
-                            UpdateModUI(Player.m_localPlayer);
-                        }
-                    }
-
+                if (__instance != null && Player.m_localPlayer != null
+                    && __instance == Player.m_localPlayer.GetInventory() && item != null && item.m_dropPrefab != null)
+                {
                     string itemName = item.m_dropPrefab.name;
 
                     if (item.m_quality > 1)
@@ -4371,15 +4405,148 @@ namespace TrophyHuntMod
                     AddPlayerEvent(PlayerEventType.Item, itemName, Player.m_localPlayer.transform.position);
                 }
             }
-        }
 
+
+            static bool Prefix(Inventory __instance, ItemDrop.ItemData item, int amount, int x, int y, ref bool __result)
+            {
+//                Debug.LogWarning($"Inventory.AddItem() Prefix {item.m_dropPrefab.name} stack={amount}, pos=({x},{y})");
+
+                if (!IsSagaMode())
+                {
+                    // Run original function with no modifications
+                    return true;
+                }
+
+                if (Player.m_localPlayer == null)
+                {
+                    // Run original function with no modifications
+                    return true;
+                }
+
+                if (__instance != Player.m_localPlayer.GetInventory())
+                {
+                    // Run original function with no modifications
+                    return true;
+                }
+
+                //if (__instance == null || item == null || item.m_dropPrefab == null)
+                //{
+                //    __result = false;
+                //    return false;
+                //}
+
+                amount = Mathf.Min(amount, item.m_stack);
+                if (x < 0 || y < 0 || x >= __instance.m_width || y >= __instance.m_height)
+                {
+                    __result = false;
+                    return false;
+                }
+                bool flag = false;
+                ItemDrop.ItemData itemAt = __instance.GetItemAt(x, y);
+                if (itemAt != null)
+                {
+                    if (itemAt.m_shared.m_name != item.m_shared.m_name || itemAt.m_worldLevel != item.m_worldLevel || (itemAt.m_shared.m_maxQuality > 1 && itemAt.m_quality != item.m_quality))
+                    {
+                        __result = false;
+                        return false;
+                    }
+                    int num = itemAt.m_shared.m_maxStackSize - itemAt.m_stack;
+                    if (num <= 0)
+                    {
+                        __result = false;
+                        return false;
+                    }
+                    int num2 = Mathf.Min(num, amount);
+                    itemAt.m_stack += num2;
+                    item.m_stack -= num2;
+                    flag = num2 == amount;
+                    ZLog.Log((object)("Added to stack" + itemAt.m_stack + " " + item.m_stack));
+                }
+                else
+                {
+                    ItemDrop.ItemData itemData = item.Clone();
+                    ConvertMetalOresIfNecessary(ref itemData);
+                    itemData.m_stack = amount;
+                    itemData.m_gridPos = new Vector2i(x, y);
+                    __instance.m_inventory.Add(itemData);
+                    item.m_stack -= amount;
+                    flag = true;
+                }
+
+                __instance.Changed();
+
+                __result = flag;
+
+                return false;
+            }
+            /* TESTING SHORTCUT OF LOGIC
+            static bool Prefix(Inventory __instance, ref ItemDrop.ItemData item, int amount, int x, int y, ref bool __result)
+            {
+                if (__instance != null && Player.m_localPlayer != null
+                    && __instance == Player.m_localPlayer.GetInventory())
+                {
+                    ConvertMetalOresIfNecessary(ref item);
+                    __result = false;
+                }
+
+                return true;
+            }
+            */
+
+            /* ORIGINAL FUNCTION
+            static bool Prefix(Inventory __instance, ItemDrop.ItemData item, int amount, int x, int y, ref bool __result)
+            {
+                amount = Mathf.Min(amount, item.m_stack);
+                if (x < 0 || y < 0 || x >= __instance.m_width || y >= __instance.m_height)
+                {
+                    __result = false;
+                    return false;
+                }
+                bool flag = false;
+                ItemDrop.ItemData itemAt = __instance.GetItemAt(x, y);
+                if (itemAt != null)
+                {
+                    if (itemAt.m_shared.m_name != item.m_shared.m_name || itemAt.m_worldLevel != item.m_worldLevel || (itemAt.m_shared.m_maxQuality > 1 && itemAt.m_quality != item.m_quality))
+                    {
+                        __result = false;
+                        return false;
+                    }
+                    int num = itemAt.m_shared.m_maxStackSize - itemAt.m_stack;
+                    if (num <= 0)
+                    {
+                        __result = false;
+                        return false;
+                    }
+                    int num2 = Mathf.Min(num, amount);
+                    itemAt.m_stack += num2;
+                    item.m_stack -= num2;
+                    flag = num2 == amount;
+                    ZLog.Log((object)("Added to stack" + itemAt.m_stack + " " + item.m_stack));
+                }
+                else
+                {
+                    ItemDrop.ItemData itemData = item.Clone();
+                    itemData.m_stack = amount;
+                    itemData.m_gridPos = new Vector2i(x, y);
+                    __instance.m_inventory.Add(itemData);
+                    item.m_stack -= amount;
+                    flag = true;
+                }
+                __instance.Changed();
+                __result = flag;
+                
+                return false;
+            }
+            */
+        }
         // This is called when items are upgraded, so need to log upgrades as well as pickups
         [HarmonyPatch(typeof(Inventory), nameof(Inventory.AddItem), new[] { typeof(string), typeof(int), typeof(int), typeof(int), typeof(long), typeof(string), typeof(Vector2i), typeof(bool) })]
-        public class UpgradeItemPatch
+        public class Inventory_AddItem_2_Patch
         {
             static void Postfix(Inventory __instance, string name, int stack, int quality, int variant, long crafterID, string crafterName, Vector2i position, bool pickedUp)
             {
-                //                    Debug.LogWarning("Inventory.AddItem() 2");
+
+                Debug.LogWarning($"Inventory.AddItem2() {name}");
 
                 if (__instance != null)
                 {
@@ -4395,6 +4562,8 @@ namespace TrophyHuntMod
             }
         }
 
+
+
         // Trick "CanAddItem" into thinking the ores are bars if you have bars in your inventory already, this fixes an auto-pickup bug
         [HarmonyPatch(typeof(Inventory), nameof(Inventory.CanAddItem), new[] { typeof(ItemDrop.ItemData), typeof(int) })]
         public static class Inventory_CanAddItem_Patch
@@ -4404,6 +4573,9 @@ namespace TrophyHuntMod
                 if (__instance != null && Player.m_localPlayer != null
                     && __instance == Player.m_localPlayer.GetInventory())
                 {
+//                    Debug.LogWarning($"Inventory.CanAddItem() {item.m_dropPrefab.name}");
+
+
                     if (IsSagaMode())
                     {
                         // Item successfully added to inventory
@@ -4474,9 +4646,9 @@ namespace TrophyHuntMod
                                     SpecialSagaDrop sagaDrop = merbDrop[i];
                                     if (sagaDrop.m_itemName == itemName && sagaDrop.m_stopDroppingOnPickup)
                                     {
-                                        Debug.LogError($"Humanoid.Pickup() SpecialSagaDrop for {itemName} found in list for {merbName}");
+//                                        Debug.LogError($"Humanoid.Pickup() SpecialSagaDrop for {itemName} found in list for {merbName}");
 
-                                        Debug.LogError($"Player has picked up {sagaDrop.m_numPickedUp} {itemName}");
+//                                        Debug.LogError($"Player has picked up {sagaDrop.m_numPickedUp} {itemName}");
 
                                         sagaDrop.m_numPickedUp++;
                                     }
@@ -4490,7 +4662,7 @@ namespace TrophyHuntMod
                                 {
                                     if (sd.m_itemName == itemName && sd.m_stopDroppingOnPickup)
                                     {
-                                        Debug.LogError($"{merbName} m_numPickedUp for {sd.m_itemName} is {sd.m_numPickedUp}");
+//                                        Debug.LogError($"{merbName} m_numPickedUp for {sd.m_itemName} is {sd.m_numPickedUp}");
 
                                     }
                                 }
@@ -4560,7 +4732,7 @@ namespace TrophyHuntMod
             rectTransform.anchorMin = new Vector2(1.0f, 0.0f);
             rectTransform.anchorMax = new Vector2(1.0f, 0.0f);
             rectTransform.pivot = new Vector2(1.0f, 0.0f);
-            rectTransform.anchoredPosition = new Vector2(-80, -140); // Position below the logo
+            rectTransform.anchoredPosition = new Vector2(-70, -200); // Position below the logo
             rectTransform.sizeDelta = new Vector2(200, 25);
 
             // Add the Button component
@@ -4593,7 +4765,7 @@ namespace TrophyHuntMod
             //TextMeshProUGUI buttonText = textObject.AddComponent<TextMeshProUGUI>();
             TextMeshProUGUI buttonText = AddTextMeshProComponent(textObject);
 
-            buttonText.text = "<b>Toggle Game Mode<b>";
+            buttonText.text = "<b>Switch Game Mode<b>";
             buttonText.fontSize = 18;
             buttonText.color = Color.black;
             buttonText.alignment = TextAlignmentOptions.Center;
@@ -4615,7 +4787,7 @@ namespace TrophyHuntMod
             rectTransform.anchorMin = new Vector2(1.0f, 0.0f);
             rectTransform.anchorMax = new Vector2(1.0f, 0.0f);
             rectTransform.pivot = new Vector2(1.0f, 0.0f);
-            rectTransform.anchoredPosition = new Vector2(-140, -180); // Position below the logo
+            rectTransform.anchoredPosition = new Vector2(-140, -240); // Position below the logo
             rectTransform.sizeDelta = new Vector2(140, 22);
 
             // Add the Button component
@@ -4674,7 +4846,7 @@ namespace TrophyHuntMod
             statusRectTransform.anchorMin = new Vector2(1.0f, 0.0f);
             statusRectTransform.anchorMax = new Vector2(1.0f, 0.0f);
             statusRectTransform.pivot = new Vector2(1.0f, 0.0f);
-            statusRectTransform.anchoredPosition = new Vector2(-5, -180);
+            statusRectTransform.anchoredPosition = new Vector2(-5, -240);
             statusRectTransform.sizeDelta = new Vector2(140, 22);
 
             // Change the button's text
@@ -4696,7 +4868,7 @@ namespace TrophyHuntMod
             usernameRectTransform.anchorMin = new Vector2(1.0f, 0.0f);
             usernameRectTransform.anchorMax = new Vector2(1.0f, 0.0f);
             usernameRectTransform.pivot = new Vector2(1.0f, 0.0f);
-            usernameRectTransform.anchoredPosition = new Vector2(-40, -205);
+            usernameRectTransform.anchoredPosition = new Vector2(-40, -265);
             usernameRectTransform.sizeDelta = new Vector2(250, 20);
 
             // Change the button's text
@@ -5042,6 +5214,7 @@ namespace TrophyHuntMod
 
         public static void PostTrackLogs(bool force = false)
         {
+//            Debug.LogError($"POST TRACK LOGS, force = {force}");
             if (!__m_loggedInWithDiscord)
             {
                 return;
@@ -5085,7 +5258,7 @@ namespace TrophyHuntMod
 
             //                Debug.LogWarning(json);
 
-            string url = "https://valheim.help/api/track/standings";
+            string url = "https://valheim.help/api/track/logs";
 
             __m_trophyHuntMod.StartCoroutine(UnityPostRequest(url, json));
         }
@@ -5119,7 +5292,7 @@ namespace TrophyHuntMod
 
             //                Debug.LogWarning($"PostTrackLogEntry: {json}");
 
-            string url = "https://valhelp.azurewebsites.net/api/track/log";
+            string url = "https://valheim.help/api/track/log";
 
             __m_trophyHuntMod.StartCoroutine(UnityPostRequest(url, json));
         }
@@ -5355,13 +5528,13 @@ namespace TrophyHuntMod
 
                         RectTransform discordTransform = discordBackground.AddComponent<RectTransform>();
                         discordTransform.sizeDelta = new Vector2(300, 78);
-                        discordTransform.anchoredPosition = new Vector2(0, -275);
+                        discordTransform.anchoredPosition = new Vector2(0, -335);
                         discordTransform.localScale = Vector3.one;
 
                         __m_discordBackgroundImage = discordBackground.AddComponent<UnityEngine.UI.Image>();
                         __m_discordBackgroundImage.raycastTarget = false;
                         __m_discordBackgroundImage.color = Color.black;
-                        __m_discordBackgroundImage.CrossFadeAlpha(0.9f, 10.0f, true);
+                        __m_discordBackgroundImage.CrossFadeAlpha(1.0f, 10.0f, true);
 
                         AddLoginWithDiscordButton(textObject.transform);
 
@@ -5962,7 +6135,7 @@ namespace TrophyHuntMod
                 {
                     if (__instance.name.Contains("Hen"))
                     {
-                        Debug.LogWarning($"Procreation.Start: {__instance.name} {__instance.m_character.name}");
+//                        Debug.LogWarning($"Procreation.Start: {__instance.name} {__instance.m_character.name}");
                         __instance.m_pregnancyDuration = 0.1f;
                         __instance.m_pregnancyChance = 0;
                         __instance.m_updateInterval = 1;
