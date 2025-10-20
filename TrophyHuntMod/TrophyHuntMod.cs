@@ -40,7 +40,7 @@ namespace TrophyHuntMod
 
 
 #endif
-        public const string PluginVersion = "0.9.15";
+        public const string PluginVersion = "0.9.16";
         private readonly Harmony harmony = new Harmony(PluginGUID);
 
         // Configuration variables
@@ -1106,6 +1106,16 @@ namespace TrophyHuntMod
                 // Cache already discovered trophies
                 __m_trophyCache = Player.m_localPlayer.GetTrophies();
 
+
+                // If this is a different character, gamemode, or world seed, clear all in-memory stats
+                if (__m_storedPlayerID != Player.m_localPlayer.GetPlayerID() ||
+                    __m_storedGameMode != __m_trophyGameMode ||
+                    __m_storedWorldSeed != WorldGenerator.instance.m_world.m_seedName)
+                {
+                    InitializeTrackedDataForNewPlayer();
+                }
+
+
                 if (__m_showAllTrophyStats ||
                     __m_ignoreLogouts ||
                     GetGameMode() == TrophyGameMode.TrophyFiesta ||
@@ -1115,6 +1125,8 @@ namespace TrophyHuntMod
                      Game.instance.GetPlayerProfile().m_playerStats[PlayerStatType.Cheats] > 0)
                 {
                     __m_invalidForTournamentPlay = true;
+
+//                    Debug.LogError($"INVALID FOR TOURNAMENT PLAY!: showstats={__m_showAllTrophyStats}, Mode={GetGameMode().ToString()}, usedCheats={Game.instance.GetPlayerProfile().m_usedCheats}, cheats={Game.instance.GetPlayerProfile().m_playerStats[PlayerStatType.Cheats]}");
                 }
 
                 __m_fiestaFlashing = false;
@@ -1133,13 +1145,6 @@ namespace TrophyHuntMod
 
                 //                Debug.LogWarning($"Stored PlayerID: {__m_currentPlayerID}, m_localPlayer PlayerID: {Player.m_localPlayer.GetPlayerID()}");
 
-                // If this is a different character, gamemode, or world seed, clear all in-memory stats
-                if (__m_storedPlayerID != Player.m_localPlayer.GetPlayerID() ||
-                    __m_storedGameMode != __m_trophyGameMode ||
-                    __m_storedWorldSeed != WorldGenerator.instance.m_world.m_seedName)
-                {
-                    InitializeTrackedDataForNewPlayer();
-                }
 
                 //                Debug.LogWarning($"Total Logouts: {__m_logoutCount}");
 
@@ -1235,6 +1240,8 @@ namespace TrophyHuntMod
 
         public static void InitializeTrackedDataForNewPlayer()
         {
+//            Debug.LogError("INITIALIZING TRACKED DATA FOR NEW PLAYER");
+
             // Saga mode tracking, drop only one megingjord per session-player
             if (IsSagaMode())
             {
@@ -1401,17 +1408,6 @@ namespace TrophyHuntMod
                     __m_scoreTextElement = CreateScoreTextElement(healthPanelTransform);
                 }
 
-
-                if (!__m_onlyModRunning)
-                {
-                    SetScoreTextElementColor(Color.cyan);
-                }
-
-                if (__m_showAllTrophyStats || __m_invalidForTournamentPlay)
-                {
-                    SetScoreTextElementColor(Color.green);
-                }
-
                 __m_iconList = new List<GameObject>();
 
                 if (GetGameMode() != TrophyGameMode.CasualSaga)
@@ -1453,6 +1449,19 @@ namespace TrophyHuntMod
                         __m_standingsElement = CreateStandingsElements(healthPanelTransform);
                         __m_standingsElement.SetActive(false);
                     }
+                }
+
+                SetScoreTextElementColor(Color.yellow);
+
+                if (!__m_onlyModRunning)
+                {
+                    SetScoreTextElementColor(Color.cyan);
+                }
+
+                if (__m_showAllTrophyStats || __m_invalidForTournamentPlay)
+                {
+//                    Debug.LogError("SETTING SCORE GREEN!");
+                    SetScoreTextElementColor(Color.green);
                 }
 
                 CreateScoreTooltip();
@@ -2387,12 +2396,33 @@ namespace TrophyHuntMod
                     {
                         // Flash it with a CoRoutine
                         __m_trophyHuntMod.StartCoroutine(FlashImage(image, imageRect));
+                        __m_trophyHuntMod.StartCoroutine(DoFlashScore());
                     }
                 }
             }
             else
             {
                 Debug.LogError($"Unable to find {trophyName} in __m_iconList");
+            }
+        }
+
+        static IEnumerator DoFlashScore()
+        {
+            if (__m_scoreTextElement != null)
+            {
+                TMPro.TextMeshProUGUI tmText = __m_scoreTextElement.GetComponent<TMPro.TextMeshProUGUI>();
+                float origSize = tmText.fontSize;
+
+                for (int count=0; count < 4; count++)
+                {
+                    for (float x = 0.0f; x < 4.0f; x += 0.1f)
+                    {
+                        float scale = 1.0f + (float)Math.Sin((double)x) * 0.25f;
+                        tmText.fontSize = origSize * scale;
+                        yield return null;
+                    }
+                }
+                tmText.fontSize = origSize;            
             }
         }
 
@@ -2616,17 +2646,6 @@ namespace TrophyHuntMod
             // Start the coroutine to post the data
             __m_trophyHuntMod.StartCoroutine(PostLeaderboardDataCoroutine(LEADERBOARD_URL, leaderboardData));
         }
-
-        // HACK: use API key to communicate with server instead of viciously bypassing security.
-        // Valheim configured Unity to require secure connections
-        //
-        //private class BypassCertificateHandler : CertificateHandler
-        //{
-        //    protected override bool ValidateCertificate(byte[] certificateData)
-        //    {
-        //        return true; // Always return true to bypass validation
-        //    }
-        //}
 
         private static IEnumerator PostLeaderboardDataCoroutine(string url, LeaderboardData data)
         {
@@ -3701,7 +3720,7 @@ namespace TrophyHuntMod
                                                     new SpecialSagaDrop("Flint",            8,  1, 3, false),
                                                     new SpecialSagaDrop("LeatherScraps",    10, 2, 3, false),
                                                     new SpecialSagaDrop("DeerHide",         4,  1, 3, false),
-                                                    new SpecialSagaDrop("Feathers",         6,  1, 2, false),
+                                                    new SpecialSagaDrop("Feathers",         15, 4, 8, false),
 //                                                    new SpecialSagaDrop("CookedDeerMeat",   8,  1, 2, false),
                                                     new SpecialSagaDrop("Acorn",            3,  1, 2, false),
                                                     new SpecialSagaDrop("CarrotSeeds",      4,  1, 3, false),
@@ -5214,7 +5233,13 @@ namespace TrophyHuntMod
 
         public static void PostTrackLogs(bool force = false)
         {
-//            Debug.LogError($"POST TRACK LOGS, force = {force}");
+
+            if (__m_invalidForTournamentPlay)
+            {
+                return;
+            }
+
+            Debug.LogError($"POST TRACK LOGS, force = {force}");
             if (!__m_loggedInWithDiscord)
             {
                 return;
@@ -5299,6 +5324,11 @@ namespace TrophyHuntMod
 
         public static void PostTrackHunt()
         {
+            if (__m_invalidForTournamentPlay)
+            {
+                return;
+            }
+
             if (!__m_loggedInWithDiscord)
             {
                 return;
@@ -5459,6 +5489,11 @@ namespace TrophyHuntMod
 
         public static void PostStandingsRequest()
         {
+            if (__m_invalidForTournamentPlay)
+            {
+                return;
+            }
+
             if (!__m_loggedInWithDiscord)
             {
                 return;
@@ -5699,6 +5734,19 @@ namespace TrophyHuntMod
                     }
                     if (args.Length > 0 && args[0] == "devcommands")
                     {
+                        Debug.LogError($"INVALID FOR TOURNAMENT PLAY!: devcommands USED");
+
+                        __m_invalidForTournamentPlay = true;
+
+                        SetScoreTextElementColor(Color.green);
+
+                        UpdateModUI(Player.m_localPlayer);
+                    }
+                    if (Game.instance.GetPlayerProfile().m_usedCheats == true ||
+                     Game.instance.GetPlayerProfile().m_playerStats[PlayerStatType.Cheats] > 0)
+                    {
+                        Debug.LogError($"INVALID FOR TOURNAMENT PLAY!: cheats USED");
+
                         __m_invalidForTournamentPlay = true;
 
                         SetScoreTextElementColor(Color.green);

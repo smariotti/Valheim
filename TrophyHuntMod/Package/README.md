@@ -236,6 +236,11 @@ You can find the github at: https://github.com/smariotti/Valheim/tree/master/Tro
 
 
 ## Change Log
+v0.9.16
+- Fixed a bug where Score would be green (invalid for tournament play, cheats used) when it shouldn't be
+- Fixed a bug where invalid scores would be sent to the Tracker when they shouldn't be
+- Maybe now everything isn't as it shouldn't be?
+
 v0.9.15
 - Fixed a bug where ores wouldn't Insta-Smelt in Saga modes when splitting stacks of ore out of chests
 - Disabled CheatDeath(tm) for vanilla Trophy Hunt, but remains enabled in all other modes (Trophy Rush, Trophy Saga, Culinary Saga, Casual Saga).
