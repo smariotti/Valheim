@@ -3712,7 +3712,7 @@ namespace TrophyHuntMod
                     "$enemy_greyling",          new List<SpecialSagaDrop>
                                                 {
                                                     new SpecialSagaDrop("FineWood",        50,  3, 10, false),
-                                                    new SpecialSagaDrop("Coal",             2,  1, 2, false),
+                                                    new SpecialSagaDrop("Coal",             5,  4, 4, false),
                                                     new SpecialSagaDrop("TrophyDeer",       5,  1, 1, false),
                                                     new SpecialSagaDrop("RoundLog",        10,  2, 7, false),
                                                     new SpecialSagaDrop("ArrowFlint",       5,  2, 4, false),
@@ -3725,7 +3725,7 @@ namespace TrophyHuntMod
                                                     new SpecialSagaDrop("Acorn",            3,  1, 2, false),
                                                     new SpecialSagaDrop("CarrotSeeds",      4,  1, 3, false),
                                                     new SpecialSagaDrop("QueenBee",         6,  1, 1, false),
-                                                    new SpecialSagaDrop("Honey",            8,  1, 2, false),
+                                                    new SpecialSagaDrop("Honey",            8,  2, 3, false),
                                                     new SpecialSagaDrop("Blueberries",      7,  2, 4, false),
 
                                                     new SpecialSagaDrop("BeltStrength",     15,  1, 1, false, true)
@@ -4977,7 +4977,7 @@ namespace TrophyHuntMod
             else
             {
                 onlineText = "<color=red>Offline</color>";
-                __m_onlineUsernameText.text = "";
+                __m_onlineUsernameText.text = $"Discord User: <color=grey>n/a</color>";
                 __m_discordLoginButtonText.text = "Discord Login";
 
                 //if (__m_discordBackgroundImage != null)
@@ -5562,14 +5562,14 @@ namespace TrophyHuntMod
                         discordBackground.transform.SetParent(textObject.transform);
 
                         RectTransform discordTransform = discordBackground.AddComponent<RectTransform>();
-                        discordTransform.sizeDelta = new Vector2(300, 78);
-                        discordTransform.anchoredPosition = new Vector2(0, -335);
+                        discordTransform.sizeDelta = new Vector2(320, 78);
+                        discordTransform.anchoredPosition = new Vector2(30, -335);
                         discordTransform.localScale = Vector3.one;
 
                         __m_discordBackgroundImage = discordBackground.AddComponent<UnityEngine.UI.Image>();
                         __m_discordBackgroundImage.raycastTarget = false;
                         __m_discordBackgroundImage.color = Color.black;
-                        __m_discordBackgroundImage.CrossFadeAlpha(1.0f, 10.0f, true);
+                        __m_discordBackgroundImage.CrossFadeAlpha(1.0f, 20.0f, false);
 
                         AddLoginWithDiscordButton(textObject.transform);
 
