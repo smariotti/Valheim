@@ -236,6 +236,11 @@ You can find the github at: https://github.com/smariotti/Valheim/tree/master/Tro
 
 
 ## Change Log
+v0.9.17
+- Some UI tweaks
+- Minor drop changes for Greylings to avoid clutter
+- Throbbing score
+
 v0.9.16
 - Fixed a bug where Score would be green (invalid for tournament play, cheats used) when it shouldn't be
 - Fixed a bug where invalid scores would be sent to the Tracker when they shouldn't be

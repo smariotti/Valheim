@@ -21,6 +21,9 @@ using Newtonsoft.Json;
 using System.Security.Policy;
 using System.Net.Http;
 using System.Timers;
+using static Player;
+using static TrophyHuntMod.TrophyHuntMod;
+using static UnityEngine.Networking.UnityWebRequest;
 
 namespace TrophyHuntMod
 {
@@ -40,7 +43,7 @@ namespace TrophyHuntMod
 
 
 #endif
-        public const string PluginVersion = "0.9.16";
+        public const string PluginVersion = "0.9.17";
         private readonly Harmony harmony = new Harmony(PluginGUID);
 
         // Configuration variables
@@ -134,11 +137,17 @@ namespace TrophyHuntMod
         const int TROPHY_SAGA_DEATH_PENALTY = -30;
         const int TROPHY_SAGA_LOGOUT_PENALTY = -10;
 
+        const int TROPHY_BLITZ_DEATH_PENALTY = 0;
+        const int TROPHY_BLITZ_LOGOUT_PENALTY = 0;
+
         const int CULINARY_SAGA_DEATH_PENALTY = -30;
         const int CULINARY_SAGA_LOGOUT_PENALTY = -10;
 
         static float __m_sagaSailingSpeedMultiplier = 2.5f;
         static float __m_sagaPaddlingSpeedMultiplier = 2.0f;
+
+        static float __m_blitzSailingSpeedMultiplier = 7.0f;
+        static float __m_blitzPaddlingSpeedMultiplier = 4.0f;
 
         const float TROPHY_SAGA_TROPHY_DROP_MULTIPLIER = 2f;
         const float TROPHY_SAGA_BASE_SKILL_LEVEL = 20.0f;
@@ -359,6 +368,7 @@ namespace TrophyHuntMod
             CasualSaga,
 #endif
             TrophySaga,
+            TrophyBlitz,
             CulinarySaga,
 #if !SAGA_STANDALONE
             CasualSaga,
@@ -403,6 +413,8 @@ namespace TrophyHuntMod
 
         // If enabled, Elder power
         static bool __m_elderPowerCutsAllTrees = false;
+
+        static bool __m_everythingUnlocked = false;
 
         // For tracking the unique ID for this user/player combo (unique to a given player character)
         static long __m_storedPlayerID = 0;
@@ -899,6 +911,9 @@ namespace TrophyHuntMod
                 case TrophyGameMode.TrophySaga:
                     gameModeText = "Trophy Saga";
                     break;
+                case TrophyGameMode.TrophyBlitz:
+                    gameModeText = "Trophy Blitz";
+                    break;
                 case TrophyGameMode.CulinarySaga:
                     gameModeText = "Culinary Saga";
                     break;
@@ -956,6 +971,16 @@ namespace TrophyHuntMod
                     hasBiomeBonuses = false;
                     timeLimit = "4 Hours";
                     break;
+                case TrophyGameMode.TrophyBlitz:
+                    text += "\n<align=\"left\"><size=18>Game Mode: <color=yellow>Trophy</color> <color=red>B</color><color=orange>li</color><color=yellow>tz</color></size>";
+                    text += $"<align=\"left\"><size=14><color=red>                EXPERIMENTAL!</color></size>\n";
+                    text += $"<align=\"center\"><size=12> <color=yellow>NOTE:</color> To use existing world, change World Modifiers manually!</size>\n";
+                    resourceMultiplier = 2.0f;
+                    combatDifficulty = "Normal";
+                    dropRate = "100%";
+                    hasBiomeBonuses = true;
+                    timeLimit = "2 Hours";
+                    break;
                 case TrophyGameMode.CulinarySaga:
                     text += $"\n<align=\"left\"><size=18>Game Mode: <color=#8080FF>Culinary Saga</color></size>\n";
                     text += $"<align=\"left\"><size=14><color=red>                EXPERIMENTAL!</color></size>\n";
@@ -1011,6 +1036,21 @@ namespace TrophyHuntMod
                     text += $"<align=\"left\">      * <color=orange>CheatDeath(tm)</color> within 3 sec.\n";
 
                 }
+
+                if (GetGameMode() == TrophyGameMode.TrophyBlitz)
+                {
+                    text += $"\n<align=\"left\">      * <color=yellow>NO BEDS!</color>\n";
+                    text += $"<align=\"left\">      * No Build Cost\n";
+                    text += $"<align=\"left\">      * All Recipes Unlocked\n";
+                    text += $"<align=\"left\">      * Dangerously fast boats\n";
+                    text += $"<align=\"left\">      * Boss Locations Revealed\n";
+                    text += $"<align=\"left\">      * Keep Equipment on death\n";
+                    text += $"<align=\"left\">      * Unrestricted Portals\n";
+                    text += $"<align=\"left\">      * No Skill Loss\n";
+                    text += $"<align=\"left\">      * No Raids\n";
+                    text += $"<align=\"left\">      * <color=orange>CheatDeath(tm)</color> within 3 sec.\n";
+                }
+
                 if (GetGameMode() == TrophyGameMode.CasualSaga)
                 {
                     text += GetSagaRulesText();
@@ -1186,12 +1226,21 @@ namespace TrophyHuntMod
                 {
                     //                    TrophyFiesta.Initialize();
                 }
+                else if (GetGameMode() == TrophyGameMode.TrophyBlitz)
+                {
+                    if (!__m_everythingUnlocked)
+                    {
+                        UnlockEverything(Player.m_localPlayer);
+                    }
+                }
 
                 __m_refreshLogsAndStandings = true;
 
                 PostStandingsRequest();
 
                 StartPeriodicTimer();
+
+
             }
         }
         public static void RaiseAllPlayerSkills(float skillLevel)
@@ -1340,6 +1389,8 @@ namespace TrophyHuntMod
                 deathCost = TROPHY_SAGA_DEATH_PENALTY;
             else if (GetGameMode() == TrophyGameMode.CulinarySaga)
                 deathCost = CULINARY_SAGA_DEATH_PENALTY;
+            else if (GetGameMode() == TrophyGameMode.TrophyBlitz)
+                deathCost = TROPHY_BLITZ_DEATH_PENALTY;
 
             return deathCost;
         }
@@ -1373,7 +1424,8 @@ namespace TrophyHuntMod
                 logoutCost = TROPHY_SAGA_LOGOUT_PENALTY;
             else if (GetGameMode() == TrophyGameMode.CulinarySaga)
                 logoutCost = CULINARY_SAGA_LOGOUT_PENALTY;
-
+            else if (GetGameMode() == TrophyGameMode.TrophyBlitz)
+                logoutCost = TROPHY_BLITZ_LOGOUT_PENALTY;
             return logoutCost;
         }
 
@@ -3715,15 +3767,15 @@ namespace TrophyHuntMod
                                                     new SpecialSagaDrop("Coal",             5,  4, 4, false),
                                                     new SpecialSagaDrop("TrophyDeer",       5,  1, 1, false),
                                                     new SpecialSagaDrop("RoundLog",        10,  2, 7, false),
-                                                    new SpecialSagaDrop("ArrowFlint",       5,  2, 4, false),
+//                                                    new SpecialSagaDrop("ArrowFlint",       5,  2, 4, false),
                                                     new SpecialSagaDrop("BoneFragments",    8,  1, 3, false),
                                                     new SpecialSagaDrop("Flint",            8,  1, 3, false),
                                                     new SpecialSagaDrop("LeatherScraps",    10, 2, 3, false),
                                                     new SpecialSagaDrop("DeerHide",         4,  1, 3, false),
-                                                    new SpecialSagaDrop("Feathers",         15, 4, 8, false),
+                                                    new SpecialSagaDrop("Feathers",         20, 4, 8, false),
 //                                                    new SpecialSagaDrop("CookedDeerMeat",   8,  1, 2, false),
                                                     new SpecialSagaDrop("Acorn",            3,  1, 2, false),
-                                                    new SpecialSagaDrop("CarrotSeeds",      4,  1, 3, false),
+                                                    new SpecialSagaDrop("TurnipSeeds",      4,  1, 3, false),
                                                     new SpecialSagaDrop("QueenBee",         6,  1, 1, false),
                                                     new SpecialSagaDrop("Honey",            8,  2, 3, false),
                                                     new SpecialSagaDrop("Blueberries",      7,  2, 4, false),
@@ -4722,6 +4774,22 @@ namespace TrophyHuntMod
         [HarmonyPatch(typeof(Player), "PlacePiece")]
         public class PlacePiecePatch
         {
+            static bool Prefix(Player __instance, Piece piece)
+            {
+                if (GetGameMode() == TrophyGameMode.TrophyBlitz)
+                {
+                    if (piece.m_name.ToLower().Contains("bed"))
+                    {
+                        Debug.LogError($"Player {__instance.GetPlayerName()} tried to make bed: {piece.m_name}");
+
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+
+
             static void Postfix(Player __instance, Piece piece)
             {
                 if (__instance == null)
@@ -5018,6 +5086,210 @@ namespace TrophyHuntMod
             }
 
             UpdateOnlineStatus();
+        }
+
+        private static void UnlockItems(Player player, ItemDrop.ItemData.ItemType itemType)
+        {
+            List<ItemDrop> items = ObjectDB.instance.GetAllItems(itemType, "");
+            foreach (var item in items)
+            {
+               if (item != null && item.m_itemData != null)
+                {
+                    Debug.LogWarning($"AddKnownItem: {item.name}");
+
+                    player.AddKnownItem(item.m_itemData);
+                }
+            }
+        }
+        public class BossDetails
+        {
+            public BossDetails(string bossId, string bossName)
+            {
+                m_bossId = bossId;
+                m_bossName = bossName;
+            }
+
+            public string m_bossId;
+            public string m_bossName;
+        }
+
+        private static void LabelAllBosses(Player player)
+        {
+            // Add boss pins to minimap
+            var zs = ZoneSystem.instance;
+            var mm = Minimap.instance;
+
+            if (zs == null || mm == null)
+            {
+                Debug.LogWarning("RevealBossLocations: ZoneSystem or Minimap not initialized.");
+                return;
+            }
+
+            BossDetails[] bossNames = new BossDetails[]
+            {
+                new BossDetails("Eikthyrnir", "Eikthyr"),
+                new BossDetails("GDKing", "Elder"),
+                new BossDetails("Bonemass", "Bonemass"),
+                new BossDetails("Dragonqueen", "Moder"),
+                new BossDetails("GoblinKing", "Yagluth"),
+                new BossDetails("Mistlands_DvergrBossEntrance1", "The Queen"),
+                new BossDetails("FaderLocation", "Fader")
+            };
+
+            foreach (var pair in zs.m_locationInstances)
+            {
+                var loc = pair.Value.m_location;
+                if (loc == null) continue;
+
+                string prefabName = loc.m_prefabName;
+
+                for (int index = 0; index < bossNames.Length; index++)
+                {
+                    if (bossNames[index].m_bossId == prefabName)
+                    {
+                        mm.DiscoverLocation(pair.Value.m_position, Minimap.PinType.Boss, bossNames[index].m_bossName, true);
+                        mm.Explore(pair.Value.m_position, 500);
+                    }
+                }
+            }
+        }
+
+        private static void UnlockEverything(Player player)
+        {
+            MessageHud.instance.enabled = false;
+
+            // Unlock all recipes
+//            foreach (var recipe in ObjectDB.instance.m_recipes)
+//            {
+//                if (recipe != null && recipe.m_item != null)
+//                {
+//                    Debug.LogWarning($"AddKnownRecipe: {recipe.name}");
+
+//                    player.m_knownRecipes.Add(recipe.m_item.m_itemData.m_shared.m_name);
+////                    player.AddKnownRecipe(recipe);
+//                }
+//            }
+
+            player.SetNoPlacementCost(true);
+
+            List<PieceTable> tempOwnedPieceTables = new List<PieceTable>();
+            player.m_inventory.GetAllPieceTables(tempOwnedPieceTables);
+            foreach (PieceTable tempOwnedPieceTable in tempOwnedPieceTables)
+            {
+                foreach (GameObject pieceObj in tempOwnedPieceTable.m_pieces)
+                {
+                    Piece piece = pieceObj.GetComponent<Piece>();
+//                    player.AddKnownPiece(piece);
+                    player.m_knownRecipes.Add(piece.m_name);
+                }
+            }
+
+            //foreach (GameObject piece in m_pieces)
+            //{
+            //    Piece component = piece.GetComponent<Piece>();
+            //    if (component.m_category == Piece.PieceCategory.All)
+            //    {
+            //        for (int j = 0; j < 8; j++)
+            //        {
+            //            m_availablePieces[j].Add(component);
+            //        }
+            //    }
+            //    else
+            //    {
+            //        m_availablePieces[(int)component.m_category].Add(component);
+            //    }
+            //}
+
+
+
+            //if (player.m_buildPieces != null)
+
+            //{
+            //    Debug.LogWarning($"Add Build Pieces for known recipes");
+            //    player.m_buildPieces.UpdateAvailable(player.m_knownRecipes, player, false, true);
+            //}
+
+            //foreach (CraftingStation station in CraftingStation.m_allStations)
+            //{
+            //    Debug.LogWarning($"AddKnownStation: {station.name}");
+
+            //    player.AddKnownStation(station);
+            //}
+
+
+            //UnlockItems(player, ItemDrop.ItemData.ItemType.None);
+            //UnlockItems(player, ItemDrop.ItemData.ItemType.Material);
+            //UnlockItems(player, ItemDrop.ItemData.ItemType.Consumable);
+            //UnlockItems(player, ItemDrop.ItemData.ItemType.OneHandedWeapon);
+            //UnlockItems(player, ItemDrop.ItemData.ItemType.Bow);
+            //UnlockItems(player, ItemDrop.ItemData.ItemType.Shield);
+            //UnlockItems(player, ItemDrop.ItemData.ItemType.Helmet);
+            //UnlockItems(player, ItemDrop.ItemData.ItemType.Chest);
+            //UnlockItems(player, ItemDrop.ItemData.ItemType.Ammo);
+            //UnlockItems(player, ItemDrop.ItemData.ItemType.Customization);
+            //UnlockItems(player, ItemDrop.ItemData.ItemType.Legs);
+            //UnlockItems(player, ItemDrop.ItemData.ItemType.Hands);
+            //UnlockItems(player, ItemDrop.ItemData.ItemType.Trophy);
+            //UnlockItems(player, ItemDrop.ItemData.ItemType.TwoHandedWeapon);
+            //UnlockItems(player, ItemDrop.ItemData.ItemType.Torch);
+            //UnlockItems(player, ItemDrop.ItemData.ItemType.Misc);
+            //UnlockItems(player, ItemDrop.ItemData.ItemType.Shoulder);
+            //UnlockItems(player, ItemDrop.ItemData.ItemType.Utility);
+            //UnlockItems(player, ItemDrop.ItemData.ItemType.Tool);
+            //UnlockItems(player, ItemDrop.ItemData.ItemType.Attach_Atgeir);
+            //UnlockItems(player, ItemDrop.ItemData.ItemType.Fish);
+            //UnlockItems(player, ItemDrop.ItemData.ItemType.TwoHandedWeaponLeft);
+            //UnlockItems(player, ItemDrop.ItemData.ItemType.AmmoNonEquipable);
+            //UnlockItems(player, ItemDrop.ItemData.ItemType.Trinket);
+
+
+            // Unlock all items
+            //foreach (var item in ObjectDB.instance.m_items)
+            //{
+            //    if (item != null && item.name != null)
+            //    {
+            //        GameObject itemPrefab = ObjectDB.instance.GetItemPrefab(item.name);
+            //        if (itemPrefab == null)
+            //        {
+            //            Debug.LogError($"Prefab '{itemPrefab}' not found.");
+            //            continue;
+            //        }
+            //        ItemDrop itemDrop = item.GetComponent<ItemDrop>();
+            //        if (itemDrop != null && itemDrop.m_itemData != null)
+            //        {
+            //            player.AddKnownItem(itemDrop.m_itemData);
+            //        }
+            //    }
+            //}
+
+            // Unlock all stations
+            //foreach (var station in ObjectDB.instance.m_recipes)
+            //{
+            //    if (station != null && station.m_craftingStation != null)
+            //    {
+            //        player.AddKnownStation(recipe.m_craftingStation);
+            //    }
+            //}
+
+            // Unlock all build pieces
+            //foreach (var piece in ObjectDB.instance.m_buildPieces.m_pieces)
+            //{
+            //    if (piece != null && piece.name != null)
+            //    {
+            //        player.AddPiece(piece.name);
+            //    }
+            //}
+
+//            Minimap.instance.ExploreAll();
+
+            LabelAllBosses(player);
+
+            __m_everythingUnlocked = true;
+
+            MessageHud.instance.enabled = true;
+
+            player.Message(MessageHud.MessageType.TopLeft, "Blitz mode engaged!");
+
         }
 
         // Player Log
@@ -5668,12 +5940,22 @@ namespace TrophyHuntMod
                         FejdStartup.m_instance.m_world.SaveWorldMetaData(DateTime.Now);
                         __instance.UpdateWorldList(centerSelection: true);
                     }
+                    else if (GetGameMode() == TrophyGameMode.TrophyBlitz)
+                    {
+                        FejdStartup.m_instance.m_world.m_startingGlobalKeys.Clear();
+                        FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("deathkeepequip");
+                        FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("skillreductionrate 15");
+                        FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("resourcerate 200");
+                        FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("eventrate 0");
+                        FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("teleportall");
+                        FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("nobuildcost");
+                        FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("preset combat_default:deathpenalty_casual: resources_muchmore: raids_none: portals_casual");
+                    }
                 }
             }
         }
-
+/*
         // Uncomment to inspect current world modifiers when hitting World Modifiers button
-        /*           
                                [HarmonyPatch (typeof(FejdStartup), nameof(FejdStartup.OnServerOptions))]
                                public class ServerOptionsGUI_Initizalize_Patch
                                {
@@ -5716,8 +5998,7 @@ namespace TrophyHuntMod
                                        }
                                    }
                                }
-       */
-
+*/
         // Catch /die console command to track it
         [HarmonyPatch(typeof(ConsoleCommand), nameof(ConsoleCommand.RunAction), new[] { typeof(ConsoleEventArgs) })]
         public static class ConsoleCommand_RunAction_Patch
@@ -5781,6 +6062,10 @@ namespace TrophyHuntMod
                 {
                     __result *= __m_sagaSailingSpeedMultiplier;
                 }
+                else if (GetGameMode() == TrophyGameMode.TrophyBlitz)
+                {
+                    __result *= __m_blitzSailingSpeedMultiplier;
+                }
             }
         }
 
@@ -5792,6 +6077,10 @@ namespace TrophyHuntMod
                 if (IsSagaMode())
                 {
                     __instance.m_backwardForce *= __m_sagaPaddlingSpeedMultiplier;
+                }
+                else if (GetGameMode() == TrophyGameMode.TrophyBlitz)
+                {
+                    __instance.m_backwardForce *= __m_blitzPaddlingSpeedMultiplier;
                 }
             }
         }
