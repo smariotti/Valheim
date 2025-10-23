@@ -149,7 +149,17 @@ namespace TrophyHuntMod
                 }
 
                 ShowPlayerPath(!__m_pathAddedToMinimap);
-            });
+            }, true);
+
+            ConsoleCommand showBossesCommand = new ConsoleCommand("showbosses", "Show all potential boss locations", delegate (ConsoleEventArgs args)
+            {
+                if (!Game.instance)
+                {
+                    PrintToConsole("'showbosses' console command can only be used in-game.");
+                }
+
+                RevealAllBosses(Player.m_localPlayer);
+            }, true);
 
             /*
             ConsoleCommand instaSmelt = new ConsoleCommand("instasmelt", "Toggle Insta-Smelt", delegate (ConsoleEventArgs args)

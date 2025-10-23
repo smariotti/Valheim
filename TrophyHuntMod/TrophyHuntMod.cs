@@ -153,6 +153,8 @@ namespace TrophyHuntMod
         const float TROPHY_SAGA_BASE_SKILL_LEVEL = 20.0f;
         const int TROPHY_SAGA_MINING_MULTIPLIER = 2;
 
+        const float TROPHY_BLITZ_BASE_SKILL_LEVEL = 100.0f;
+
         const string TROPHY_SAGA_INTRO_TEXT = "You were once a great warrior, though your memory of deeds past has long grown dim, shrouded by eons slumbering in the lands beyond death…\n\n\n\n" +
             "Ragnarok looms and the tenth world remains only for a few scant hours. You are reborn with one purpose: collect the heads of Odin's enemies before this cycle ends…\n\n\n\n" +
             "Odin will cast these heads into the well of Mimir where his lost eye still resides. With knowledge of the Forsaken he can finally banish them forever…\n\n\n" +
@@ -163,6 +165,20 @@ namespace TrophyHuntMod
             "Ragnarok looms and the tenth world remains only for a few scant hours. You are reborn with one purpose: cook a whole bunch of delicious meals to appease Odin's insatiable hunger?\n\n\n\n" +
             "Yes. Somehow. Bring Odin what he desires or be forced to repeat the cycle for eternity…\n\n\n\n" +
             "…in VALHEIM!";
+
+        const string TROPHY_BLITZ_INTRO_TEXT = 
+            "onglay agoyay, ethay allfatheryay odinyay unitedyay ethay orldsway . ehay ewthray down\n\n" + 
+            "his oesfay andyay astcay emthay intoyay ethay enthtay orldway, enthay itsplay the\n\n" + 
+            "boughs atthay eldhay eirthay isonpray otay ethay orld-treeway, andyay eftlay ityay to\n\n" + 
+            "drift unanchoredyay , ayay aceplay ofyay exileyay...\n\n" + 
+            "for enturiescay , isthay orldway umberedslay uneasilyyay , utbay ityay idday not\n\n" +
+            "die... asyay acialglay agesyay assedpay , ingdomskay oseray andyay ellfay outyay ofyay sight\n\n" + 
+            "of ethay odsgay.\n\n" + 
+            "when odinyay eardhay ishay enemiesyay ereway owinggray onceyay againyay in\n\n" + 
+            "strength , ehay ookedlay otay idgardmay andyay entsay ishay alkyriesvay otay scour\n\n" + 
+            "the attlefieldsbay orfay ethay eatestgray ofyay eirthay arriorsway . eadday to\n\n" +
+            "the orldway, eythay ouldway ebay ornbay againyay...\n\n" +
+            "... inyay alheimvay.";
 
         const string LEADERBOARD_URL = "https://valheim.help/api/trackhunt";
 
@@ -398,6 +414,8 @@ namespace TrophyHuntMod
             Color.magenta,
             Color.yellow,
         };
+
+        static bool __m_blitzFlashing = false;
 
         // Track all enemy deaths and trophies flag
         static bool __m_showAllTrophyStats = false;
@@ -737,7 +755,8 @@ namespace TrophyHuntMod
             "org.bepinex.valheim.displayinfo",
             "com.oathorse.TrophyHuntMod",
             "com.oathorse.Tuba",
-            "wearable_trophies"
+            "wearable_trophies",
+//            "AzuAntiArthriticCrafting"
         };
 
         private void Start()
@@ -972,7 +991,7 @@ namespace TrophyHuntMod
                     timeLimit = "4 Hours";
                     break;
                 case TrophyGameMode.TrophyBlitz:
-                    text += "\n<align=\"left\"><size=18>Game Mode: <color=yellow>Trophy</color> <color=red>B</color><color=orange>li</color><color=yellow>tz</color></size>";
+                    text += "\n<align=\"left\"><size=18>Game Mode: <color=yellow>Tr</color><color=orange>op</color><color=red>hy</color> <color=red>B</color><color=orange>li</color><color=yellow>tz</color></size>";
                     text += $"<align=\"left\"><size=14><color=red>                EXPERIMENTAL!</color></size>\n";
                     text += $"<align=\"center\"><size=12> <color=yellow>NOTE:</color> To use existing world, change World Modifiers manually!</size>\n";
                     resourceMultiplier = 2.0f;
@@ -1039,15 +1058,13 @@ namespace TrophyHuntMod
 
                 if (GetGameMode() == TrophyGameMode.TrophyBlitz)
                 {
-                    text += $"\n<align=\"left\">      * <color=yellow>NO BEDS!</color>\n";
-                    text += $"<align=\"left\">      * No Build Cost\n";
-                    text += $"<align=\"left\">      * All Recipes Unlocked\n";
+                    text += $"<align=\"left\">      * <color=yellow>NO BEDS ALLOWED!</color>\n";
+                    text += $"<align=\"left\">      * Free-Build/No Cost\n";
+                    text += $"<align=\"left\">      * Sequential Boss Reveals\n";
                     text += $"<align=\"left\">      * Dangerously fast boats\n";
-                    text += $"<align=\"left\">      * Boss Locations Revealed\n";
                     text += $"<align=\"left\">      * Keep Equipment on death\n";
-                    text += $"<align=\"left\">      * Unrestricted Portals\n";
-                    text += $"<align=\"left\">      * No Skill Loss\n";
-                    text += $"<align=\"left\">      * No Raids\n";
+                    text += $"<align=\"left\">      * Portal Everything\n";
+                    text += $"<align=\"left\">      * No Raids/No Skill Loss\n";
                     text += $"<align=\"left\">      * <color=orange>CheatDeath(tm)</color> within 3 sec.\n";
                 }
 
@@ -1240,7 +1257,7 @@ namespace TrophyHuntMod
 
                 StartPeriodicTimer();
 
-
+//                PostTrackHunt();
             }
         }
         public static void RaiseAllPlayerSkills(float skillLevel)
@@ -1271,18 +1288,27 @@ namespace TrophyHuntMod
         {
             static void Postfix(Skills.Skill __instance, SkillType skillType, ref Skill __result)
             {
-                if (!IsSagaMode())
+                if (IsSagaMode())
                 {
-                    return;
+                    // Get the specific skill that was just learned or updated^
+                    if (__result.m_level < TROPHY_SAGA_BASE_SKILL_LEVEL)
+                    {
+                        __result.m_level = TROPHY_SAGA_BASE_SKILL_LEVEL;
+                        __result.m_accumulator = 0f;
+
+                        //                        Debug.Log($"Setting skill {__result.m_info.m_skill.ToString()} to {TROPHY_SAGA_BASE_SKILL_LEVEL}");
+                    }
                 }
-
-                // Get the specific skill that was just learned or updated^
-                if (__result.m_level < TROPHY_SAGA_BASE_SKILL_LEVEL)
+                else if (GetGameMode() == TrophyGameMode.TrophyBlitz)
                 {
-                    __result.m_level = TROPHY_SAGA_BASE_SKILL_LEVEL;
-                    __result.m_accumulator = 0f;
+                    // Get the specific skill that was just learned or updated^
+                    if (__result.m_level < TROPHY_BLITZ_BASE_SKILL_LEVEL)
+                    {
+                        __result.m_level = TROPHY_BLITZ_BASE_SKILL_LEVEL;
+                        __result.m_accumulator = 0f;
 
-                    //                        Debug.Log($"Setting skill {__result.m_info.m_skill.ToString()} to {TROPHY_SAGA_BASE_SKILL_LEVEL}");
+                        //                        Debug.Log($"Setting skill {__result.m_info.m_skill.ToString()} to {TROPHY_BLITZ_BASE_SKILL_LEVEL}");
+                    }
                 }
             }
         }
@@ -1302,6 +1328,11 @@ namespace TrophyHuntMod
                 {
                     __m_cookedFoods.Clear();
                 }
+            }
+
+            if (GetGameMode() == TrophyGameMode.TrophyBlitz)
+            {
+                RaiseAllPlayerSkills(TROPHY_BLITZ_BASE_SKILL_LEVEL);
             }
 
             // In-Game Timer 
@@ -1876,6 +1907,10 @@ namespace TrophyHuntMod
             {
                 iconImage.color = new Color(0f, 0f, 0.5f);
             }
+            else if (GetGameMode() == TrophyGameMode.TrophyBlitz)
+            {
+                iconImage.color = new Color(0.25f, 0.25f, 0.0f);
+            }
 
             AddTooltipTriggersToTrophyIcon(iconElement);
 
@@ -1914,6 +1949,11 @@ namespace TrophyHuntMod
             {
                 __m_fiestaFlashing = true;
                 __m_trophyHuntMod.StartCoroutine(FlashTrophyFiesta());
+            } 
+            else if (GetGameMode() == TrophyGameMode.TrophyBlitz)
+            {
+//                __m_blitzFlashing = true;
+//                __m_trophyHuntMod.StartCoroutine(FlashTrophyBlitz());
             }
         }
 
@@ -2373,6 +2413,40 @@ namespace TrophyHuntMod
             imageRect.rotation = originalRotation;
         }
 
+        static IEnumerator FlashTrophyBlitz()
+        {
+            float elapsedTime = 0f;
+            float flashInterval = 2.0f;
+
+            while (__m_blitzFlashing)
+            {
+                elapsedTime += Time.deltaTime;
+                if (elapsedTime > flashInterval)
+                {
+                    elapsedTime = 0f;
+
+                    int iconIndex = 0;
+                    foreach (GameObject go in __m_iconList)
+                    {
+                        if (go != null)
+                        {
+                            UnityEngine.UI.Image image = go.GetComponent<UnityEngine.UI.Image>();
+
+                            if (image != null)
+                            {
+                                float brightness = ((float)Math.Sin((double)elapsedTime) + 1.0f) * 0.25f;
+                                Color color = new Color(brightness, brightness, 0.0f);
+                                image.color = color;
+                            }
+                        }
+
+                        iconIndex++;
+                    }
+                }
+
+                yield return null;
+            }
+        }
 
         static IEnumerator FlashTrophyFiesta()
         {
@@ -4219,6 +4293,23 @@ namespace TrophyHuntMod
                 }
             }
         }
+        [HarmonyPatch(typeof(Character), nameof(Character.Damage), new[] { typeof(HitData) })]
+        public class Character_Damage_Patch
+        {
+            static void Postfix(Character __instance, HitData hit)
+            {
+                if (__instance == null || hit == null || hit.GetAttacker() == null)
+                {
+                    return;
+                }
+
+                if (!__instance.IsDead() && __instance.GetHealth() <= 0.0f)
+                {
+                    // Died
+                    Debug.LogError($"DEATH! Character {__instance.name} killed by {hit.GetAttacker().name}");
+                }
+            }
+        }
 
         [HarmonyPatch(typeof(Character), nameof(Character.OnDeath))]
         public class Character_OnDeath_Patch
@@ -4251,9 +4342,14 @@ namespace TrophyHuntMod
                         RecordTrophyCapableKill(characterName, true);
                     }
                 }
+
+                if (GetGameMode() == TrophyGameMode.TrophyBlitz)
+                {
+                    // Check for bosses dying and unlock future boss locations
+                    RevealNextBoss(__instance.m_name);
+                }
             }
         }
-
 
         //
         // Trophy Saga Insta-Smelt
@@ -5103,18 +5199,42 @@ namespace TrophyHuntMod
         }
         public class BossDetails
         {
-            public BossDetails(string bossId, string bossName)
+            public BossDetails(string bossCharacterId, string bossLocationName, string bossName)
             {
-                m_bossId = bossId;
+                m_bossCharacterId = bossCharacterId;
+                m_bossLocationName = bossLocationName;
                 m_bossName = bossName;
             }
 
-            public string m_bossId;
+            public string m_bossCharacterId;    // ex: "$enemy_eikthyr"
+            public string m_bossLocationName;
             public string m_bossName;
         }
 
-        private static void LabelAllBosses(Player player)
+        static public BossDetails[] __m_bossNames = new BossDetails[]
         {
+                new BossDetails("$enemy_eikthyr","Eikthyrnir", "Eikthyr"),
+                new BossDetails("$enemy_gdking","GDKing", "Elder"),
+                new BossDetails("$enemy_bonemass","Bonemass", "Bonemass"),
+                new BossDetails("$enemy_dragon","Dragonqueen", "Moder"),
+                new BossDetails("$enemy_goblinking","GoblinKing", "Yagluth"),
+                new BossDetails("$enemy_seekerqueen","Mistlands_DvergrBossEntrance1", "The Queen"),
+                new BossDetails("$enemy_fader","FaderLocation", "Fader")
+        };
+
+        private static void RevealBoss(string bossCharacterId)
+        {
+            Debug.Log("RevealBoss: " + bossCharacterId);
+            BossDetails foundDetails = __m_bossNames.FirstOrDefault<BossDetails>(t => t.m_bossCharacterId == bossCharacterId);
+            if (foundDetails == default)
+            {
+                Debug.Log("RevealBoss: Did not find details.");
+
+                return;
+            }
+
+            Debug.Log("RevealBoss: Found details for " + foundDetails.m_bossName + " at " + foundDetails.m_bossLocationName + " with id" + foundDetails.m_bossCharacterId);
+
             // Add boss pins to minimap
             var zs = ZoneSystem.instance;
             var mm = Minimap.instance;
@@ -5125,17 +5245,6 @@ namespace TrophyHuntMod
                 return;
             }
 
-            BossDetails[] bossNames = new BossDetails[]
-            {
-                new BossDetails("Eikthyrnir", "Eikthyr"),
-                new BossDetails("GDKing", "Elder"),
-                new BossDetails("Bonemass", "Bonemass"),
-                new BossDetails("Dragonqueen", "Moder"),
-                new BossDetails("GoblinKing", "Yagluth"),
-                new BossDetails("Mistlands_DvergrBossEntrance1", "The Queen"),
-                new BossDetails("FaderLocation", "Fader")
-            };
-
             foreach (var pair in zs.m_locationInstances)
             {
                 var loc = pair.Value.m_location;
@@ -5143,14 +5252,46 @@ namespace TrophyHuntMod
 
                 string prefabName = loc.m_prefabName;
 
-                for (int index = 0; index < bossNames.Length; index++)
+                if (foundDetails.m_bossLocationName == prefabName)
                 {
-                    if (bossNames[index].m_bossId == prefabName)
-                    {
-                        mm.DiscoverLocation(pair.Value.m_position, Minimap.PinType.Boss, bossNames[index].m_bossName, true);
-                        mm.Explore(pair.Value.m_position, 500);
-                    }
+                    Debug.Log("RevealBoss: Found boss location name " + prefabName);
+
+                    mm.DiscoverLocation(pair.Value.m_position, Minimap.PinType.Boss, foundDetails.m_bossName, true);
+                    mm.Explore(pair.Value.m_position, 500);
                 }
+            }
+        }
+
+        private static void RevealNextBoss(string bossKilled)
+        {
+            switch (bossKilled)
+            {
+                case "$enemy_eikthyr":
+                    RevealBoss("$enemy_gdking");
+                    break;
+                case "$enemy_gdking":
+                    RevealBoss("$enemy_bonemass");
+                    break;
+                case "$enemy_bonemass":
+                    RevealBoss("$enemy_dragon");
+                    break;
+                case "$enemy_dragon":
+                    RevealBoss("$enemy_goblinking");
+                    break;
+                case "$enemy_goblinking":
+                    RevealBoss("$enemy_seekerqueen");
+                    break;
+                case "$enemy_seekerqueen":
+                    RevealBoss("$enemy_fader");
+                    break;
+            }
+        }
+
+        private static void RevealAllBosses(Player player)
+        {
+            foreach (BossDetails bossDetails in __m_bossNames)
+            {
+                RevealBoss(bossDetails.m_bossCharacterId);
             }
         }
 
@@ -5282,7 +5423,7 @@ namespace TrophyHuntMod
 
 //            Minimap.instance.ExploreAll();
 
-            LabelAllBosses(player);
+//            RevealAllBosses(player);
 
             __m_everythingUnlocked = true;
 
@@ -5435,6 +5576,44 @@ namespace TrophyHuntMod
             PostTrackLogEntry(eventName, __m_playerCurrentScore);
         }
 
+        static public bool CanPostToTracker(bool force = false)
+        {
+            if (__m_invalidForTournamentPlay)
+            {
+                return false;
+            }
+
+            if (!__m_loggedInWithDiscord)
+            {
+                return false;
+            }
+
+            if (force == false)
+            {
+                if (__m_tournamentStatus != TournamentStatus.Live)
+                {
+                    return false;
+                }
+
+                if (DateTime.Now > __m_tournamentEndTime)
+                {
+                    return false;
+                }
+            }
+
+            switch (GetGameMode())
+            {
+                case TrophyGameMode.TrophyBlitz:
+                case TrophyGameMode.CasualSaga:
+                case TrophyGameMode.CulinarySaga:
+                case TrophyGameMode.TrophyFiesta:
+                    return false;
+                    break;
+            }
+   
+            return true;
+        }
+
         // Tracker Logs
 
         // Single Log update
@@ -5505,33 +5684,9 @@ namespace TrophyHuntMod
 
         public static void PostTrackLogs(bool force = false)
         {
-
-            if (__m_invalidForTournamentPlay)
+            if (!CanPostToTracker(force))
             {
                 return;
-            }
-
-            Debug.LogError($"POST TRACK LOGS, force = {force}");
-            if (!__m_loggedInWithDiscord)
-            {
-                return;
-            }
-
-            if (force == false)
-            {
-                if (__m_tournamentStatus != TournamentStatus.Live)
-                {
-                    return;
-                }
-
-                if (DateTime.Now > __m_tournamentEndTime)
-                {
-                    return;
-                }
-            }
-            else
-            {
-                //                    Debug.LogWarning("PostTrackLogs: Forced track log request");
             }
 
             TrackLogs trackLogs = new TrackLogs();
@@ -5562,20 +5717,8 @@ namespace TrophyHuntMod
 
         public static void PostTrackLogEntry(string eventName, int score)
         {
-            if (!__m_loggedInWithDiscord)
-            {
+            if (!CanPostToTracker())
                 return;
-            }
-
-            if (__m_tournamentStatus != TournamentStatus.Live)
-            {
-                return;
-            }
-
-            if (DateTime.Now > __m_tournamentEndTime)
-            {
-                return;
-            }
 
             TrackLogEntry entry = new TrackLogEntry();
 
@@ -5630,7 +5773,7 @@ namespace TrophyHuntMod
 
             string json = JsonConvert.SerializeObject(trackHunt);
 
-            string url = "https://valhelp.azurewebsites.net/api/track/hunt";
+            string url = "https://valheim.help/api/track/hunt";
 
             __m_trophyHuntMod.StartCoroutine(UnityPostRequest(url, json));
         }
@@ -5761,15 +5904,11 @@ namespace TrophyHuntMod
 
         public static void PostStandingsRequest()
         {
-            if (__m_invalidForTournamentPlay)
+            if (!CanPostToTracker())
             {
                 return;
             }
 
-            if (!__m_loggedInWithDiscord)
-            {
-                return;
-            }
             string standingsUrl = "https://valhelp.azurewebsites.net/api/track/standings";
 
             string seed = __m_storedWorldSeed;

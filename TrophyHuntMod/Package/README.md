@@ -193,6 +193,10 @@ CheatDeath(tm) feature in all but vanilla Trophy Hunt allows you to press ESC an
 
 	This will display pins on the in-game Map showing the path that the Player has traveled during the session. One pin every 100 meters or so.
 
+`/showbosses`
+
+	Puts map pins on the world map for all potential boss spawn locations
+
 `/trophyscale`
 
 	This allows the user to scale the trophy sizes (1.0 is default) for better readability at some screen resolutions. 
@@ -237,9 +241,12 @@ You can find the github at: https://github.com/smariotti/Valheim/tree/master/Tro
 
 ## Change Log
 v0.9.17
+- Added `/showbosses` command line command which shows all potential boss locations for post-run analysis
 - Some UI tweaks
-- Minor drop changes for Greylings to avoid clutter
+- Trophy Saga: Minor drop changes for Greylings to reduce inventory clutter
 - Throbbing score
+- Added experimental Trophy Blitz game mode
+
 
 v0.9.16
 - Fixed a bug where Score would be green (invalid for tournament play, cheats used) when it shouldn't be
