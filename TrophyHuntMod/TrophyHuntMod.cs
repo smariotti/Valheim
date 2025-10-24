@@ -146,8 +146,8 @@ namespace TrophyHuntMod
         static float __m_sagaSailingSpeedMultiplier = 2.5f;
         static float __m_sagaPaddlingSpeedMultiplier = 2.0f;
 
-        static float __m_blitzSailingSpeedMultiplier = 7.0f;
-        static float __m_blitzPaddlingSpeedMultiplier = 4.0f;
+        static float __m_blitzSailingSpeedMultiplier = 10.0f;
+        static float __m_blitzPaddlingSpeedMultiplier = 8.0f;
 
         const float TROPHY_SAGA_TROPHY_DROP_MULTIPLIER = 2f;
         const float TROPHY_SAGA_BASE_SKILL_LEVEL = 20.0f;
@@ -187,6 +187,7 @@ namespace TrophyHuntMod
         const float DEFAULT_SCORE_FONT_SIZE = 25;
 
         const long NUM_SECONDS_IN_FOUR_HOURS = 4 * 60 * 60;
+        const long NUM_SECONDS_IN_TWO_HOURS = 2 * 60 * 60;
 
 
         //
@@ -1059,6 +1060,7 @@ namespace TrophyHuntMod
                 if (GetGameMode() == TrophyGameMode.TrophyBlitz)
                 {
                     text += $"<align=\"left\">      * <color=yellow>NO BEDS ALLOWED!</color>\n";
+                    text += $"<align=\"left\">      * Fast Fermenters\n";
                     text += $"<align=\"left\">      * Free-Build/No Cost\n";
                     text += $"<align=\"left\">      * Sequential Boss Reveals\n";
                     text += $"<align=\"left\">      * Dangerously fast boats\n";
@@ -1566,9 +1568,16 @@ namespace TrophyHuntMod
                         long timerValue = __m_gameTimerElapsedSeconds;
                         if (__m_gameTimerCountdown)
                         {
-                            timerValue = NUM_SECONDS_IN_FOUR_HOURS - timerValue;
-
+                            if (GetGameMode() == TrophyGameMode.TrophyBlitz)
+                            {
+                                timerValue = NUM_SECONDS_IN_TWO_HOURS - timerValue;
+                            }
+                            else
+                            {
+                                timerValue = NUM_SECONDS_IN_FOUR_HOURS - timerValue;
+                            }
                         }
+
                         TimeSpan elapsed = TimeSpan.FromSeconds(timerValue);
 
                         if (__m_gameTimerVisible)
@@ -4166,7 +4175,7 @@ namespace TrophyHuntMod
                         {
                             float dropPercentage = 0f;
 
-                            if (GetGameMode() == TrophyGameMode.TrophyRush || (IsSagaMode() && GetGameMode() != TrophyGameMode.CasualSaga))
+                            if (GetGameMode() == TrophyGameMode.TrophyRush || GetGameMode() == TrophyGameMode.TrophyBlitz || (IsSagaMode() && GetGameMode() != TrophyGameMode.CasualSaga))
                             {
                                 string trophyName = EnemyNameToTrophyName(characterName);
                                 if (!__m_trophyCache.Contains(trophyName) || trophyName == "TrophyDeer")
@@ -5256,7 +5265,7 @@ namespace TrophyHuntMod
                 {
                     Debug.Log("RevealBoss: Found boss location name " + prefabName);
 
-                    mm.DiscoverLocation(pair.Value.m_position, Minimap.PinType.Boss, foundDetails.m_bossName, true);
+                    mm.DiscoverLocation(pair.Value.m_position, Minimap.PinType.Boss, foundDetails.m_bossName, false);
                     mm.Explore(pair.Value.m_position, 500);
                 }
             }
@@ -5603,7 +5612,7 @@ namespace TrophyHuntMod
 
             switch (GetGameMode())
             {
-                case TrophyGameMode.TrophyBlitz:
+//                case TrophyGameMode.TrophyBlitz:
                 case TrophyGameMode.CasualSaga:
                 case TrophyGameMode.CulinarySaga:
                 case TrophyGameMode.TrophyFiesta:
@@ -6089,6 +6098,9 @@ namespace TrophyHuntMod
                         FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("teleportall");
                         FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("nobuildcost");
                         FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("preset combat_default:deathpenalty_casual: resources_muchmore: raids_none: portals_casual");
+
+                        FejdStartup.m_instance.m_world.SaveWorldMetaData(DateTime.Now);
+                        __instance.UpdateWorldList(centerSelection: true);
                     }
                 }
             }
@@ -6272,10 +6284,8 @@ namespace TrophyHuntMod
         {
             static void Postfix(Fermenter __instance)
             {
-                if (__instance != null && (IsSagaMode()))
+                if (__instance != null && (IsSagaMode() || GetGameMode() == TrophyGameMode.TrophyBlitz))
                 {
-                    //                        Debug.LogWarning("Fermenter.Awake()");
-
                     __instance.m_fermentationDuration = 10;
                 }
             }
@@ -6288,7 +6298,7 @@ namespace TrophyHuntMod
         {
             static void Prefix(Fermenter __instance)
             {
-                if (__instance != null && IsSagaMode())
+                if (__instance != null && (IsSagaMode() || GetGameMode() == TrophyGameMode.TrophyBlitz))
                 {
 
                     Fermenter.ItemConversion itemConversion = __instance.GetItemConversion(__instance.m_delayedTapItem);
