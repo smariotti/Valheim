@@ -82,6 +82,9 @@ namespace TrophyHuntMod
 
         static public TrophyHuntDataScoreOverride[] __m_trophyHuntScoreOverrides = new TrophyHuntDataScoreOverride[]
         {
+            new TrophyHuntDataScoreOverride(TrophyGameMode.TrophyBlitz, "TrophyFader", 260),
+            new TrophyHuntDataScoreOverride(TrophyGameMode.TrophyBlitz, "TrophySeekerQueen", 200),
+
             new TrophyHuntDataScoreOverride(TrophyGameMode.TrophySaga, "TrophyFader", 400),
             new TrophyHuntDataScoreOverride(TrophyGameMode.CasualSaga, "TrophyFader", 400),
             new TrophyHuntDataScoreOverride(TrophyGameMode.CulinarySaga, "TrophyFader", 400),
@@ -2422,38 +2425,41 @@ namespace TrophyHuntMod
             imageRect.rotation = originalRotation;
         }
 
+        static float blitzFlashTimer = 0.0f;
+
         static IEnumerator FlashTrophyBlitz()
         {
-            float elapsedTime = 0f;
-            float flashInterval = 2.0f;
+            blitzFlashTimer += 0.16f;
 
             while (__m_blitzFlashing)
             {
-                elapsedTime += Time.deltaTime;
-                if (elapsedTime > flashInterval)
+                int iconIndex = 0;
+                foreach (GameObject go in __m_iconList)
                 {
-                    elapsedTime = 0f;
-
-                    int iconIndex = 0;
-                    foreach (GameObject go in __m_iconList)
+                    if (__m_trophyCache.Find(trophyName => trophyName == go.name) == go.name)
                     {
-                        if (go != null)
-                        {
-                            UnityEngine.UI.Image image = go.GetComponent<UnityEngine.UI.Image>();
-
-                            if (image != null)
-                            {
-                                float brightness = ((float)Math.Sin((double)elapsedTime) + 1.0f) * 0.25f;
-                                Color color = new Color(brightness, brightness, 0.0f);
-                                image.color = color;
-                            }
-                        }
-
-                        iconIndex++;
+                        continue;
                     }
+
+                    if (go != null)
+                    {
+                        UnityEngine.UI.Image image = go.GetComponent<UnityEngine.UI.Image>();
+
+                        if (image != null)
+                        {
+                            float brightness = (float)Math.Sin((double)blitzFlashTimer) + 1.0f;
+                            
+//                            brightness = __m_gameTimerElapsedSeconds % 2 == 0 ? 1.0f : 0.0f;
+
+                            Color color = new Color(brightness, brightness, 0.0f);
+                            image.color = color;
+                        }
+                    }
+
+                    iconIndex++;
                 }
 
-                yield return null;
+                yield return new WaitForSeconds(0.16f);
             }
         }
 
