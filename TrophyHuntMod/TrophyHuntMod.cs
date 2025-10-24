@@ -2288,7 +2288,7 @@ namespace TrophyHuntMod
                 score += CalculateLogoutPenalty();
             }
 
-            if (GetGameMode() == TrophyGameMode.TrophyRush)
+            if (GetGameMode() == TrophyGameMode.TrophyRush || GetGameMode() == TrophyGameMode.TrophyBlitz)
             {
                 score += CalculateBiomeBonusScore(player);
             }
