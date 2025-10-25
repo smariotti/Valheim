@@ -5233,7 +5233,7 @@ namespace TrophyHuntMod
                 new BossDetails("$enemy_fader","FaderLocation", "Fader")
         };
 
-        private static void RevealByName(string locationName, string pinName)
+        private static void RevealByName(string locationName, string pinName, Minimap.PinType pinType, float distance)
         {
             // Add boss pins to minimap
             var zs = ZoneSystem.instance;
@@ -5256,8 +5256,8 @@ namespace TrophyHuntMod
                 {
                     Debug.Log("RevealBoss: Found boss location name " + prefabName);
 
-                    mm.DiscoverLocation(pair.Value.m_position, Minimap.PinType.Boss, pinName, false);
-                    mm.Explore(pair.Value.m_position, 500);
+                    mm.DiscoverLocation(pair.Value.m_position, pinType, pinName, false);
+                    mm.Explore(pair.Value.m_position, distance);
                 }
             }
         }
@@ -5275,7 +5275,7 @@ namespace TrophyHuntMod
 
             Debug.Log("RevealBoss: Found details for " + foundDetails.m_bossName + " at " + foundDetails.m_bossLocationName + " with id" + foundDetails.m_bossCharacterId);
 
-            RevealByName(foundDetails.m_bossLocationName, foundDetails.m_bossName);
+            RevealByName(foundDetails.m_bossLocationName, foundDetails.m_bossName, Minimap.PinType.Boss, 500);
         }
 
         private static void RevealNextBoss(string bossKilled)
@@ -5284,21 +5284,21 @@ namespace TrophyHuntMod
             {
                 case "$enemy_eikthyr":
                     RevealBoss("$enemy_gdking");
+                    RevealByName("Vendor_BlackForest", "Haldor", Minimap.PinType.Icon3, 100);
                     break;
                 case "$enemy_gdking":
                     RevealBoss("$enemy_bonemass");
-                    RevealByName("Vendor_BlackForest", "Haldor");
+                    RevealByName("BogWitch_Camp", "BogWitch", Minimap.PinType.Icon3, 100);
                     break;
                 case "$enemy_bonemass":
                     RevealBoss("$enemy_dragon");
-                    RevealByName("BogWitch_Camp", "BogWitch");
+                    RevealByName("Hildir_camp", "Hildir", Minimap.PinType.Icon3, 100);
                     break;
                 case "$enemy_dragon":
                     RevealBoss("$enemy_goblinking");
                     break;
                 case "$enemy_goblinking":
                     RevealBoss("$enemy_seekerqueen");
-                    RevealByName("Hildir_camp", "Hildir");
                     break;
                 case "$enemy_seekerqueen":
                     RevealBoss("$enemy_fader");
@@ -5341,42 +5341,42 @@ namespace TrophyHuntMod
             ZoneSystem.instance.SetGlobalKey(GlobalKeys.NoWorkbench);
             ZoneSystem.instance.SetGlobalKey(GlobalKeys.AllPiecesUnlocked);
             ZoneSystem.instance.SetGlobalKey(GlobalKeys.NoCraftCost);
-            
-            //            foreach (var prefab in ObjectDB.instance.m_items)
-            //            {
-            //                var drop = prefab.GetComponent<ItemDrop>();
-            //                if (drop == null) 
-            //                    continue;
 
-            //                ItemDrop.ItemData itemData = drop.m_itemData;
-            //                if (itemData == null)
-            //                    continue;
+            foreach (var prefab in ObjectDB.instance.m_items)
+            {
+                var drop = prefab.GetComponent<ItemDrop>();
+                if (drop == null)
+                    continue;
 
-            //                if (!player.m_knownMaterial.Contains(itemData.m_shared.m_name))
-            //                {
-            //                    player.m_knownMaterial.Add(itemData.m_shared.m_name);
-            //                }
-            //            }
+                ItemDrop.ItemData itemData = drop.m_itemData;
+                if (itemData == null)
+                    continue;
 
-            //            // Unlock all recipes
-            //            foreach (var recipe in ObjectDB.instance.m_recipes)
-            //            {
-            //                if (recipe == null)
-            //                    continue;
+                if (!player.m_knownMaterial.Contains(itemData.m_shared.m_name))
+                {
+                    player.m_knownMaterial.Add(itemData.m_shared.m_name);
+                }
+            }
 
-            //                if (!player.m_knownRecipes.Contains(recipe.name))
-            //                {
-            //                    player.m_knownRecipes.Add(recipe.name);
-            //                }
-            //            }
-            
+            // Unlock all recipes
+            foreach (var recipe in ObjectDB.instance.m_recipes)
+            {
+                if (recipe == null)
+                    continue;
 
-            //player.UpdateKnownRecipesList();
-            //player.UpdateAvailablePiecesList();
+                if (!player.m_knownRecipes.Contains(recipe.name))
+                {
+                    player.m_knownRecipes.Add(recipe.name);
+                }
+            }
+
+
+            player.UpdateKnownRecipesList();
+            player.UpdateAvailablePiecesList();
 
             // Clear notification queue to prevent pop-up message spam
- //           MessageHud.instance.m_unlockMsgQueue.Clear();
- //           MessageHud.instance.m_unlockMsgCount = 0;
+                       MessageHud.instance.m_unlockMsgQueue.Clear();
+                       MessageHud.instance.m_unlockMsgCount = 0;
 
             __m_everythingUnlocked = true;
 
