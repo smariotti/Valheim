@@ -46,7 +46,7 @@ namespace TrophyHuntMod
 
 
 #endif
-        public const string PluginVersion = "0.9.17";
+        public const string PluginVersion = "0.10.0";
         private readonly Harmony harmony = new Harmony(PluginGUID);
 
         // Configuration variables
@@ -5325,7 +5325,6 @@ namespace TrophyHuntMod
                 {
                     __result = true;
 
-//                    Debug.LogWarning($"Player.HaveRequirements() Blitz mode - allowing crafting of {recipe.name}");
                     return false;
                 }
 

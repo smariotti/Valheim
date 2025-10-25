@@ -240,7 +240,7 @@ You can find the github at: https://github.com/smariotti/Valheim/tree/master/Tro
 
 
 ## Change Log
-v0.9.17
+v0.10.0
 - Added `/showbosses` command line command which shows all potential boss locations for post-run analysis
 - Some UI tweaks
 - Trophy Saga: Minor drop changes for Greylings to reduce inventory clutter
