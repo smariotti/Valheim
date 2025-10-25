@@ -5314,20 +5314,51 @@ namespace TrophyHuntMod
             }
         }
 
-        //[HarmonyPatch(typeof(Player), nameof(Player.HaveRequirements), new[] { typeof(Recipe), typeof(bool), typeof(int), typeof(int) })]
-        //public static class Player_HaveRequirements_Patch
-        //{
-        //    static bool Prefix(Player __instance, Recipe recipe, bool discover, int qualityLevel, int amount, ref bool __result)
-        //    {
-        //        if (GetGameMode() == TrophyGameMode.TrophyBlitz)
-        //        {
-        //            __result = true;
-        //            return false;
-        //        }
+        // Enable to build all items at level 1 workbenches
+        //
+        [HarmonyPatch(typeof(Player), nameof(Player.HaveRequirements), new[] { typeof(Recipe), typeof(bool), typeof(int), typeof(int) })]
+        public static class Player_HaveRequirements_Patch
+        {
+            static bool Prefix(Player __instance, Recipe recipe, bool discover, int qualityLevel, int amount, ref bool __result)
+            {
+                if (GetGameMode() == TrophyGameMode.TrophyBlitz)
+                {
+                    __result = true;
 
-        //        return true;
-        //    }
-        //}
+//                    Debug.LogWarning($"Player.HaveRequirements() Blitz mode - allowing crafting of {recipe.name}");
+                    return false;
+                }
+
+                return true;
+            }
+        }
+
+        [HarmonyPatch(typeof(InventoryGui), nameof(InventoryGui.CanRepair), new[] { typeof(ItemDrop.ItemData) })]
+        public static class InventoryGui_CanRepair_Patch
+        {
+            static bool Prefix(InventoryGui __instance, ItemDrop.ItemData item, ref bool __result)
+            {
+                if (GetGameMode() == TrophyGameMode.TrophyBlitz)
+                {
+                    CraftingStation currentCraftingStation = Player.m_localPlayer.GetCurrentCraftingStation();
+                    if (currentCraftingStation == null)
+                    {
+                        return true;
+                    }
+                    
+                    Recipe recipe = ObjectDB.instance.GetRecipe(item); 
+                    if ((recipe.m_repairStation != null && recipe.m_repairStation.m_name == currentCraftingStation.m_name) ||
+                        (recipe.m_craftingStation != null && recipe.m_craftingStation.m_name == currentCraftingStation.m_name) || 
+                        item.m_worldLevel < Game.m_worldLevel)
+                    {
+                        __result = true;
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+        }
 
         private static void UnlockEverything(Player player)
         {
@@ -5342,6 +5373,9 @@ namespace TrophyHuntMod
             ZoneSystem.instance.SetGlobalKey(GlobalKeys.AllPiecesUnlocked);
             ZoneSystem.instance.SetGlobalKey(GlobalKeys.NoCraftCost);
 
+            // This adds EVERYTHING to the tab menu
+            // player.m_noPlacementCost = true;
+            
             foreach (var prefab in ObjectDB.instance.m_items)
             {
                 var drop = prefab.GetComponent<ItemDrop>();
@@ -5352,6 +5386,15 @@ namespace TrophyHuntMod
                 if (itemData == null)
                     continue;
 
+                ItemDrop.ItemData.ItemType itemType = itemData.m_shared.m_itemType;
+
+                //if (itemType != ItemDrop.ItemData.ItemType.Material &&
+                //    itemType != ItemDrop.ItemData.ItemType.Consumable &&
+                //    itemType != ItemDrop.ItemData.ItemType.Customization &&
+                //    itemType != ItemDrop.ItemData.ItemType.Misc &&
+                //    itemType != ItemDrop.ItemData.ItemType.Utility)
+                //    continue;
+
                 if (!player.m_knownMaterial.Contains(itemData.m_shared.m_name))
                 {
                     player.m_knownMaterial.Add(itemData.m_shared.m_name);
@@ -5359,24 +5402,24 @@ namespace TrophyHuntMod
             }
 
             // Unlock all recipes
-            foreach (var recipe in ObjectDB.instance.m_recipes)
-            {
-                if (recipe == null)
-                    continue;
+            //foreach (var recipe in ObjectDB.instance.m_recipes)
+            //{
+            //    if (recipe == null)
+            //        continue;
 
-                if (!player.m_knownRecipes.Contains(recipe.name))
-                {
-                    player.m_knownRecipes.Add(recipe.name);
-                }
-            }
+            //    if (!player.m_knownRecipes.Contains(recipe.name))
+            //    {
+            //        player.m_knownRecipes.Add(recipe.name);
+            //    }
+            //}
 
 
             player.UpdateKnownRecipesList();
             player.UpdateAvailablePiecesList();
 
             // Clear notification queue to prevent pop-up message spam
-                       MessageHud.instance.m_unlockMsgQueue.Clear();
-                       MessageHud.instance.m_unlockMsgCount = 0;
+            MessageHud.instance.m_unlockMsgQueue.Clear();
+            MessageHud.instance.m_unlockMsgCount = 0;
 
             __m_everythingUnlocked = true;
 
