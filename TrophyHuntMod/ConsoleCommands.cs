@@ -149,7 +149,7 @@ namespace TrophyHuntMod
                 }
 
                 ShowPlayerPath(!__m_pathAddedToMinimap);
-            }, true);
+            });
 
             ConsoleCommand showBossesCommand = new ConsoleCommand("showbosses", "Show all potential boss locations", delegate (ConsoleEventArgs args)
             {
@@ -159,7 +159,7 @@ namespace TrophyHuntMod
                 }
 
                 RevealAllBosses(Player.m_localPlayer);
-            }, true);
+            });
 
             /*
             ConsoleCommand instaSmelt = new ConsoleCommand("instasmelt", "Toggle Insta-Smelt", delegate (ConsoleEventArgs args)

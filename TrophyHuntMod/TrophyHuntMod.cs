@@ -24,6 +24,9 @@ using System.Timers;
 using static Player;
 using static TrophyHuntMod.TrophyHuntMod;
 using static UnityEngine.Networking.UnityWebRequest;
+using System.Reflection;
+using static Heightmap;
+using System.Runtime.Remoting.Messaging;
 
 namespace TrophyHuntMod
 {
@@ -1069,7 +1072,8 @@ namespace TrophyHuntMod
                     text += $"<align=\"left\">      * Dangerously fast boats\n";
                     text += $"<align=\"left\">      * Keep Equipment on death\n";
                     text += $"<align=\"left\">      * Portal Everything\n";
-                    text += $"<align=\"left\">      * No Raids/No Skill Loss\n";
+                    text += $"<align=\"left\">      * No Raids\n";
+                    text += $"<align=\"left\">      * Skills at 100\n";
                     text += $"<align=\"left\">      * <color=orange>CheatDeath(tm)</color> within 3 sec.\n";
                 }
 
@@ -1108,6 +1112,8 @@ namespace TrophyHuntMod
 
         public static void ShowPlayerPath(bool showPlayerPath)
         {
+            Debug.LogError("ShowPlayerPath: " + showPlayerPath.ToString());
+
             if (!showPlayerPath)
             {
                 foreach (Minimap.PinData pinData in __m_pathPins)
@@ -1129,6 +1135,9 @@ namespace TrophyHuntMod
                     Minimap.PinData newPin = Minimap.instance.AddPin(pathPos, pinType, "", save: false, isChecked: false);
 
                     __m_pathPins.Add(newPin);
+
+                    Debug.LogError("ShowPlayerPath: AddedPin: " + pathPos.ToString());
+
                 }
 
                 __m_pathAddedToMinimap = true;
@@ -1250,7 +1259,7 @@ namespace TrophyHuntMod
                 }
                 else if (GetGameMode() == TrophyGameMode.TrophyBlitz)
                 {
-                    if (!__m_everythingUnlocked)
+//                    if (!__m_everythingUnlocked)
                     {
                         UnlockEverything(Player.m_localPlayer);
                     }
@@ -2614,7 +2623,7 @@ namespace TrophyHuntMod
                         // Update Trophy cache
                         __m_trophyCache = player.GetTrophies();
 
-                        if (GetGameMode() == TrophyGameMode.TrophyRush)
+                        if (GetGameMode() == TrophyGameMode.TrophyRush || GetGameMode() == TrophyGameMode.TrophyBlitz)
                         {
                             // Did we complete a biome bonus with this trophy?
                             if (UpdateBiomeBonusTrophies(name))
@@ -2647,7 +2656,7 @@ namespace TrophyHuntMod
         {
             if (!__m_collectingPlayerPath)
             {
-                //                    Debug.Log("Starting Player Path collection");
+                                    Debug.LogError("Starting Player Path collection");
 
                 //                   AddPlayerPathUI();
 
@@ -5199,19 +5208,6 @@ namespace TrophyHuntMod
             UpdateOnlineStatus();
         }
 
-        private static void UnlockItems(Player player, ItemDrop.ItemData.ItemType itemType)
-        {
-            List<ItemDrop> items = ObjectDB.instance.GetAllItems(itemType, "");
-            foreach (var item in items)
-            {
-               if (item != null && item.m_itemData != null)
-                {
-                    Debug.LogWarning($"AddKnownItem: {item.name}");
-
-                    player.AddKnownItem(item.m_itemData);
-                }
-            }
-        }
         public class BossDetails
         {
             public BossDetails(string bossCharacterId, string bossLocationName, string bossName)
@@ -5237,19 +5233,8 @@ namespace TrophyHuntMod
                 new BossDetails("$enemy_fader","FaderLocation", "Fader")
         };
 
-        private static void RevealBoss(string bossCharacterId)
+        private static void RevealByName(string locationName, string pinName)
         {
-            Debug.Log("RevealBoss: " + bossCharacterId);
-            BossDetails foundDetails = __m_bossNames.FirstOrDefault<BossDetails>(t => t.m_bossCharacterId == bossCharacterId);
-            if (foundDetails == default)
-            {
-                Debug.Log("RevealBoss: Did not find details.");
-
-                return;
-            }
-
-            Debug.Log("RevealBoss: Found details for " + foundDetails.m_bossName + " at " + foundDetails.m_bossLocationName + " with id" + foundDetails.m_bossCharacterId);
-
             // Add boss pins to minimap
             var zs = ZoneSystem.instance;
             var mm = Minimap.instance;
@@ -5267,14 +5252,30 @@ namespace TrophyHuntMod
 
                 string prefabName = loc.m_prefabName;
 
-                if (foundDetails.m_bossLocationName == prefabName)
+                if (locationName == prefabName)
                 {
                     Debug.Log("RevealBoss: Found boss location name " + prefabName);
 
-                    mm.DiscoverLocation(pair.Value.m_position, Minimap.PinType.Boss, foundDetails.m_bossName, false);
+                    mm.DiscoverLocation(pair.Value.m_position, Minimap.PinType.Boss, pinName, false);
                     mm.Explore(pair.Value.m_position, 500);
                 }
             }
+        }
+
+        private static void RevealBoss(string bossCharacterId)
+        {
+            Debug.Log("RevealBoss: " + bossCharacterId);
+            BossDetails foundDetails = __m_bossNames.FirstOrDefault<BossDetails>(t => t.m_bossCharacterId == bossCharacterId);
+            if (foundDetails == default)
+            {
+                Debug.Log("RevealBoss: Did not find details.");
+
+                return;
+            }
+
+            Debug.Log("RevealBoss: Found details for " + foundDetails.m_bossName + " at " + foundDetails.m_bossLocationName + " with id" + foundDetails.m_bossCharacterId);
+
+            RevealByName(foundDetails.m_bossLocationName, foundDetails.m_bossName);
         }
 
         private static void RevealNextBoss(string bossKilled)
@@ -5286,15 +5287,18 @@ namespace TrophyHuntMod
                     break;
                 case "$enemy_gdking":
                     RevealBoss("$enemy_bonemass");
+                    RevealByName("Vendor_BlackForest", "Haldor");
                     break;
                 case "$enemy_bonemass":
                     RevealBoss("$enemy_dragon");
+                    RevealByName("BogWitch_Camp", "BogWitch");
                     break;
                 case "$enemy_dragon":
                     RevealBoss("$enemy_goblinking");
                     break;
                 case "$enemy_goblinking":
                     RevealBoss("$enemy_seekerqueen");
+                    RevealByName("Hildir_camp", "Hildir");
                     break;
                 case "$enemy_seekerqueen":
                     RevealBoss("$enemy_fader");
@@ -5310,135 +5314,69 @@ namespace TrophyHuntMod
             }
         }
 
+        //[HarmonyPatch(typeof(Player), nameof(Player.HaveRequirements), new[] { typeof(Recipe), typeof(bool), typeof(int), typeof(int) })]
+        //public static class Player_HaveRequirements_Patch
+        //{
+        //    static bool Prefix(Player __instance, Recipe recipe, bool discover, int qualityLevel, int amount, ref bool __result)
+        //    {
+        //        if (GetGameMode() == TrophyGameMode.TrophyBlitz)
+        //        {
+        //            __result = true;
+        //            return false;
+        //        }
+
+        //        return true;
+        //    }
+        //}
+
         private static void UnlockEverything(Player player)
         {
-            MessageHud.instance.enabled = false;
-
-            // Unlock all recipes
-//            foreach (var recipe in ObjectDB.instance.m_recipes)
-//            {
-//                if (recipe != null && recipe.m_item != null)
-//                {
-//                    Debug.LogWarning($"AddKnownRecipe: {recipe.name}");
-
-//                    player.m_knownRecipes.Add(recipe.m_item.m_itemData.m_shared.m_name);
-////                    player.AddKnownRecipe(recipe);
-//                }
-//            }
-
-            player.SetNoPlacementCost(true);
-
-            List<PieceTable> tempOwnedPieceTables = new List<PieceTable>();
-            player.m_inventory.GetAllPieceTables(tempOwnedPieceTables);
-            foreach (PieceTable tempOwnedPieceTable in tempOwnedPieceTables)
+            if (player == null)
             {
-                foreach (GameObject pieceObj in tempOwnedPieceTable.m_pieces)
-                {
-                    Piece piece = pieceObj.GetComponent<Piece>();
-//                    player.AddKnownPiece(piece);
-                    player.m_knownRecipes.Add(piece.m_name);
-                }
+                return;
             }
 
-            //foreach (GameObject piece in m_pieces)
-            //{
-            //    Piece component = piece.GetComponent<Piece>();
-            //    if (component.m_category == Piece.PieceCategory.All)
-            //    {
-            //        for (int j = 0; j < 8; j++)
-            //        {
-            //            m_availablePieces[j].Add(component);
-            //        }
-            //    }
-            //    else
-            //    {
-            //        m_availablePieces[(int)component.m_category].Add(component);
-            //    }
-            //}
+            MessageHud.instance.enabled = false;
 
+            ZoneSystem.instance.SetGlobalKey(GlobalKeys.NoWorkbench);
+            ZoneSystem.instance.SetGlobalKey(GlobalKeys.AllPiecesUnlocked);
+            ZoneSystem.instance.SetGlobalKey(GlobalKeys.NoCraftCost);
+            
+            //            foreach (var prefab in ObjectDB.instance.m_items)
+            //            {
+            //                var drop = prefab.GetComponent<ItemDrop>();
+            //                if (drop == null) 
+            //                    continue;
 
+            //                ItemDrop.ItemData itemData = drop.m_itemData;
+            //                if (itemData == null)
+            //                    continue;
 
-            //if (player.m_buildPieces != null)
+            //                if (!player.m_knownMaterial.Contains(itemData.m_shared.m_name))
+            //                {
+            //                    player.m_knownMaterial.Add(itemData.m_shared.m_name);
+            //                }
+            //            }
 
-            //{
-            //    Debug.LogWarning($"Add Build Pieces for known recipes");
-            //    player.m_buildPieces.UpdateAvailable(player.m_knownRecipes, player, false, true);
-            //}
+            //            // Unlock all recipes
+            //            foreach (var recipe in ObjectDB.instance.m_recipes)
+            //            {
+            //                if (recipe == null)
+            //                    continue;
 
-            //foreach (CraftingStation station in CraftingStation.m_allStations)
-            //{
-            //    Debug.LogWarning($"AddKnownStation: {station.name}");
+            //                if (!player.m_knownRecipes.Contains(recipe.name))
+            //                {
+            //                    player.m_knownRecipes.Add(recipe.name);
+            //                }
+            //            }
+            
 
-            //    player.AddKnownStation(station);
-            //}
+            //player.UpdateKnownRecipesList();
+            //player.UpdateAvailablePiecesList();
 
-
-            //UnlockItems(player, ItemDrop.ItemData.ItemType.None);
-            //UnlockItems(player, ItemDrop.ItemData.ItemType.Material);
-            //UnlockItems(player, ItemDrop.ItemData.ItemType.Consumable);
-            //UnlockItems(player, ItemDrop.ItemData.ItemType.OneHandedWeapon);
-            //UnlockItems(player, ItemDrop.ItemData.ItemType.Bow);
-            //UnlockItems(player, ItemDrop.ItemData.ItemType.Shield);
-            //UnlockItems(player, ItemDrop.ItemData.ItemType.Helmet);
-            //UnlockItems(player, ItemDrop.ItemData.ItemType.Chest);
-            //UnlockItems(player, ItemDrop.ItemData.ItemType.Ammo);
-            //UnlockItems(player, ItemDrop.ItemData.ItemType.Customization);
-            //UnlockItems(player, ItemDrop.ItemData.ItemType.Legs);
-            //UnlockItems(player, ItemDrop.ItemData.ItemType.Hands);
-            //UnlockItems(player, ItemDrop.ItemData.ItemType.Trophy);
-            //UnlockItems(player, ItemDrop.ItemData.ItemType.TwoHandedWeapon);
-            //UnlockItems(player, ItemDrop.ItemData.ItemType.Torch);
-            //UnlockItems(player, ItemDrop.ItemData.ItemType.Misc);
-            //UnlockItems(player, ItemDrop.ItemData.ItemType.Shoulder);
-            //UnlockItems(player, ItemDrop.ItemData.ItemType.Utility);
-            //UnlockItems(player, ItemDrop.ItemData.ItemType.Tool);
-            //UnlockItems(player, ItemDrop.ItemData.ItemType.Attach_Atgeir);
-            //UnlockItems(player, ItemDrop.ItemData.ItemType.Fish);
-            //UnlockItems(player, ItemDrop.ItemData.ItemType.TwoHandedWeaponLeft);
-            //UnlockItems(player, ItemDrop.ItemData.ItemType.AmmoNonEquipable);
-            //UnlockItems(player, ItemDrop.ItemData.ItemType.Trinket);
-
-
-            // Unlock all items
-            //foreach (var item in ObjectDB.instance.m_items)
-            //{
-            //    if (item != null && item.name != null)
-            //    {
-            //        GameObject itemPrefab = ObjectDB.instance.GetItemPrefab(item.name);
-            //        if (itemPrefab == null)
-            //        {
-            //            Debug.LogError($"Prefab '{itemPrefab}' not found.");
-            //            continue;
-            //        }
-            //        ItemDrop itemDrop = item.GetComponent<ItemDrop>();
-            //        if (itemDrop != null && itemDrop.m_itemData != null)
-            //        {
-            //            player.AddKnownItem(itemDrop.m_itemData);
-            //        }
-            //    }
-            //}
-
-            // Unlock all stations
-            //foreach (var station in ObjectDB.instance.m_recipes)
-            //{
-            //    if (station != null && station.m_craftingStation != null)
-            //    {
-            //        player.AddKnownStation(recipe.m_craftingStation);
-            //    }
-            //}
-
-            // Unlock all build pieces
-            //foreach (var piece in ObjectDB.instance.m_buildPieces.m_pieces)
-            //{
-            //    if (piece != null && piece.name != null)
-            //    {
-            //        player.AddPiece(piece.name);
-            //    }
-            //}
-
-//            Minimap.instance.ExploreAll();
-
-//            RevealAllBosses(player);
+            // Clear notification queue to prevent pop-up message spam
+ //           MessageHud.instance.m_unlockMsgQueue.Clear();
+ //           MessageHud.instance.m_unlockMsgCount = 0;
 
             __m_everythingUnlocked = true;
 
