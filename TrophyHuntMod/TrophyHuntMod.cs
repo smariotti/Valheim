@@ -1068,26 +1068,26 @@ namespace TrophyHuntMod
                 {
                     text += $"<align=\"left\">      * <color=yellow>NO BEDS ALLOWED!</color>\n";
                     text += $"<align=\"left\">      * Fast Fermenters\n";
-                    text += $"<align=\"left\">      * Free-Build/No Cost\n";
+                    text += $"<align=\"left\">      * No Craft or Build Cost\n";
                     text += $"<align=\"left\">      * Sequential Boss Reveals\n";
                     text += $"<align=\"left\">      * Dangerously fast boats\n";
                     text += $"<align=\"left\">      * Keep Equipment on death\n";
                     text += $"<align=\"left\">      * Portal Everything\n";
-                    text += $"<align=\"left\">      * No Raids\n";
                     text += $"<align=\"left\">      * Skills at 100\n";
+                    text += $"<align=\"left\">      * Automatic Portal map pins\n";
                     text += $"<align=\"left\">      * <color=orange>CheatDeath(tm)</color> within 3 sec.\n";
                 }
 
                 if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
                 {
                     text += $"<align=\"left\">      * Fast Fermenters\n";
-                    text += $"<align=\"left\">      * Free-Build/No Cost\n";
+                    text += $"<align=\"left\">      * No Craft or Build Cost\n";
                     text += $"<align=\"left\">      * Sequential Boss Reveals\n";
                     text += $"<align=\"left\">      * Dangerously fast boats\n";
                     text += $"<align=\"left\">      * Keep Equipment on death\n";
                     text += $"<align=\"left\">      * Portal Everything\n";
-                    text += $"<align=\"left\">      * No Raids\n";
                     text += $"<align=\"left\">      * Skills at 100\n";
+                    text += $"<align=\"left\">      * Automatic Portal map pins\n";
                     text += $"<align=\"left\">      * <color=orange>CheatDeath(tm)</color> within 3 sec.\n";
                 }
 
@@ -5480,7 +5480,7 @@ namespace TrophyHuntMod
             }
 
             ZoneSystem.instance.SetGlobalKey(GlobalKeys.NoWorkbench);
-            ZoneSystem.instance.SetGlobalKey(GlobalKeys.AllPiecesUnlocked);
+//            ZoneSystem.instance.SetGlobalKey(GlobalKeys.AllPiecesUnlocked);
             ZoneSystem.instance.SetGlobalKey(GlobalKeys.NoCraftCost);
 
             __m_everythingUnlocked = true;
@@ -6852,6 +6852,82 @@ namespace TrophyHuntMod
             //new ConsumableData("StaminaUpgrade_Troll",     "Stamina Troll",                 "Stamina Troll",                  Biome.Meadows,   0,   0,   0,   0,   0),
             //new ConsumableData("StaminaUpgrade_Wraith",    "Stamina Wraith",                "Stamina Wraith",                 Biome.Meadows,   0,   0,   0,   0,   0),
         };
+
+
+
+        static void AddPortalPin(Vector3 pos, string text = "")
+        {
+
+            Minimap.PinData newPin = Minimap.instance.AddPin(pos, Minimap.PinType.Icon4, text, save: true, isChecked: false);
+        }
+
+        static void RemovePortalPin(Vector3 pos)
+        {
+            Minimap.instance.RemovePin(pos, 0.1f);
+        }
+
+        static void RenamePortalPin(Vector3 pos, string text)
+        {
+            RemovePortalPin(pos);
+            AddPortalPin(pos, text);
+        }
+
+        [HarmonyPatch(typeof(Player), nameof(Player.PlacePiece), new[] { typeof(Piece), typeof(Vector3), typeof(Quaternion), typeof(bool) })]
+        public static class Player_PlacePiece_Patch
+        {
+            public static void Postfix(Player __instance, Piece piece, Vector3 pos, Quaternion rot, bool doAttack)
+            {
+                if (GetGameMode() != TrophyGameMode.TrophyBlitz && GetGameMode() != TrophyGameMode.TrophyTrailblazer)
+                {
+                    return;
+                }
+
+                if (piece != null && (piece.name == "portal_wood" || piece.name == "portal_stone"))
+                {
+                    //                    Debug.LogWarning($"Placed Portal name: {piece.name} Pos: {pos}");
+
+                    AddPortalPin(pos);
+                }
+            }
+        }
+
+        [HarmonyPatch(typeof(Piece), nameof(Piece.DropResources))]
+        public static class Piece_DropResources_Patch
+        {
+            public static void Postfix(Piece __instance)
+            {
+                if (GetGameMode() != TrophyGameMode.TrophyBlitz && GetGameMode() != TrophyGameMode.TrophyTrailblazer)
+                {
+                    return;
+                }
+
+                Vector3 pos = __instance.transform.position;
+                TeleportWorld tpWorld = __instance.GetComponent<TeleportWorld>();
+                if (tpWorld != null)
+                {
+                    //                    Debug.LogWarning($"Piece.DropResources(): name: {__instance.name} Pos: {pos}");
+                    RemovePortalPin(pos);
+                }
+            }
+        }
+
+        [HarmonyPatch(typeof(TeleportWorld), nameof(TeleportWorld.SetText))]
+        public static class TeleportWorld_SetText_Patch
+        {
+            public static void Postfix(TeleportWorld __instance, string text)
+            {
+                if (GetGameMode() != TrophyGameMode.TrophyBlitz && GetGameMode() != TrophyGameMode.TrophyTrailblazer)
+                {
+                    return;
+                }
+
+                if (__instance != null)
+                {
+                    //                    Debug.LogWarning($"TeleportWorld.SetText(): name: {__instance.name} Pos: {__instance.transform.position} text: '{text}' ");
+                    RenamePortalPin(__instance.transform.position, text);
+                }
+            }
+        }
     }
 }
 
