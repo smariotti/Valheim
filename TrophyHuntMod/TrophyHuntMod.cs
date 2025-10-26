@@ -2564,7 +2564,8 @@ namespace TrophyHuntMod
                     {
                         float scale = 1.0f + (float)Math.Sin((double)x) * 0.25f;
                         tmText.fontSize = origSize * scale;
-                        yield return null;
+
+                        yield return new WaitForSeconds(0.16f);
                     }
                 }
                 tmText.fontSize = origSize;            
@@ -2654,7 +2655,7 @@ namespace TrophyHuntMod
         {
             if (!__m_collectingPlayerPath)
             {
-                                    Debug.LogError("Starting Player Path collection");
+//                                    Debug.LogError("Starting Player Path collection");
 
                 //                   AddPlayerPathUI();
 
@@ -4301,7 +4302,7 @@ namespace TrophyHuntMod
                                         {
                                             __result.Add(newDropItem);
 
-                                            Debug.LogWarning($"{characterName} dropping {itemCount} {sagaDrop.m_itemName}");
+//                                            Debug.LogWarning($"{characterName} dropping {itemCount} {sagaDrop.m_itemName}");
 
                                             sagaDrop.m_numDropped += itemCount;
 
@@ -4328,7 +4329,7 @@ namespace TrophyHuntMod
                 if (!__instance.IsDead() && __instance.GetHealth() <= 0.0f)
                 {
                     // Died
-                    Debug.LogError($"DEATH! Character {__instance.name} killed by {hit.GetAttacker().name}");
+//                    Debug.LogError($"DEATH! Character {__instance.name} killed by {hit.GetAttacker().name}");
                 }
             }
         }
@@ -4735,7 +4736,7 @@ namespace TrophyHuntMod
             static void Postfix(Inventory __instance, string name, int stack, int quality, int variant, long crafterID, string crafterName, Vector2i position, bool pickedUp)
             {
 
-                Debug.LogWarning($"Inventory.AddItem2() {name}");
+//                Debug.LogWarning($"Inventory.AddItem2() {name}");
 
                 if (__instance != null)
                 {
@@ -4894,11 +4895,18 @@ namespace TrophyHuntMod
         {
             static bool Prefix(Player __instance, Piece piece)
             {
+                if (__instance == null || piece == null)
+                {
+                    return true;
+                }
+
                 if (GetGameMode() == TrophyGameMode.TrophyBlitz)
                 {
                     if (piece.m_name.ToLower().Contains("bed"))
                     {
-                        Debug.LogError($"Player {__instance.GetPlayerName()} tried to make bed: {piece.m_name}");
+//                        Debug.LogError($"Player {__instance.GetPlayerName()} tried to make bed: {piece.m_name}");
+                        
+                        __instance.Message(MessageHud.MessageType.Center, "Beds are not allowed in Trophy Blitz!");
 
                         return false;
                     }
@@ -5422,7 +5430,7 @@ namespace TrophyHuntMod
 
             MessageHud.instance.enabled = true;
 
-            player.Message(MessageHud.MessageType.TopLeft, "Blitz mode engaged!");
+            player.Message(MessageHud.MessageType.Center, "Blitz mode engaged!");
 
         }
 
