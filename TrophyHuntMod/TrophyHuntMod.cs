@@ -2165,7 +2165,7 @@ namespace TrophyHuntMod
         }
 
         // Returns TRUE if the trophy completes the set for a biome and adds that biome to the list of completed ones
-        public static bool UpdateBiomeBonusTrophies(string trophyName)
+        public static bool UpdateBiomeBonusTrophies(string trophyName, ref Biome biome)
         {
             TrophyHuntData trophyHuntData = Array.Find(__m_trophyHuntData, element => element.m_name == trophyName);
 
@@ -2564,9 +2564,9 @@ namespace TrophyHuntMod
                     {
                         float scale = 1.0f + (float)Math.Sin((double)x) * 0.25f;
                         tmText.fontSize = origSize * scale;
-
-                        yield return new WaitForSeconds(0.16f);
                     }
+
+                    yield return new WaitForSeconds(0.16f);
                 }
                 tmText.fontSize = origSize;            
             }
@@ -2622,10 +2622,14 @@ namespace TrophyHuntMod
                         if (GetGameMode() == TrophyGameMode.TrophyRush || GetGameMode() == TrophyGameMode.TrophyBlitz)
                         {
                             // Did we complete a biome bonus with this trophy?
-                            if (UpdateBiomeBonusTrophies(name))
+                            Biome biome = Biome.Meadows;
+                            if (UpdateBiomeBonusTrophies(name, ref biome))
                             {
                                 MessageHud.instance.ShowBiomeFoundMsg("Biome Bonus", playStinger: true);
 
+                                string bonusString = "Bonus" + biome.ToString();
+                                AddPlayerEvent(PlayerEventType.Misc, bonusString, __instance.transform.position);
+                                Debug.LogError("BIOME BONUS: " + bonusString);
                                 FlashBiomeTrophies(name);
                             }
                         }
