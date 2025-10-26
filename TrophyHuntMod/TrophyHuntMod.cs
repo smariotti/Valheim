@@ -2560,13 +2560,13 @@ namespace TrophyHuntMod
 
                 for (int count=0; count < 4; count++)
                 {
-                    for (float x = 0.0f; x < 4.0f; x += 0.1f)
+                    for (float x = 0.0f; x < 6.0f; x += 0.1f)
                     {
-                        float scale = 1.0f + (float)Math.Sin((double)x) * 0.25f;
+                        float scale = 1.0f + (float)Math.Sin((double)x) * 0.33f;
                         tmText.fontSize = origSize * scale;
-                    }
 
-                    yield return new WaitForSeconds(0.16f);
+                        yield return new WaitForSeconds(0.033f);
+                    }
                 }
                 tmText.fontSize = origSize;            
             }
