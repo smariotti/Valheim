@@ -246,6 +246,7 @@ v0.10.0
 - Throbbing score.
 - Small trophy icon pinned to map where trophy was acquired
 - Added experimental Trophy Blitz game mode
+- Added experimental Trailblazer! game mode
 - Some UI tweaks
 
 

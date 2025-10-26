@@ -33,20 +33,13 @@ namespace TrophyHuntMod
     [BepInPlugin(PluginGUID, PluginName, PluginVersion)]
     public partial class TrophyHuntMod : BaseUnityPlugin
     {
-#if SAGA_STANDALONE
-        public const string PluginGUID = "com.oathorse.SagaMode";
-        public const string PluginName = "SagaMode";
-        private const Boolean UPDATE_LEADERBOARD = false;
-#else
         public const string PluginGUID = "com.oathorse.TrophyHuntMod";
         public const string PluginName = "TrophyHuntMod";
 
 
         private const Boolean UPDATE_LEADERBOARD = false; // SET TO TRUE WHEN PTB IS LIVE
 
-
-#endif
-        public const string PluginVersion = "0.10.0";
+        public const string PluginVersion = "0.10.1";
         private readonly Harmony harmony = new Harmony(PluginGUID);
 
         // Configuration variables
@@ -85,15 +78,20 @@ namespace TrophyHuntMod
 
         static public TrophyHuntDataScoreOverride[] __m_trophyHuntScoreOverrides = new TrophyHuntDataScoreOverride[]
         {
+
+            new TrophyHuntDataScoreOverride(TrophyGameMode.TrophySaga, "TrophyFader", 400),
+            new TrophyHuntDataScoreOverride(TrophyGameMode.TrophySaga, "TrophySeekerQueen", 400),
+
             new TrophyHuntDataScoreOverride(TrophyGameMode.TrophyBlitz, "TrophyFader", 260),
             new TrophyHuntDataScoreOverride(TrophyGameMode.TrophyBlitz, "TrophySeekerQueen", 200),
 
-            new TrophyHuntDataScoreOverride(TrophyGameMode.TrophySaga, "TrophyFader", 400),
-            new TrophyHuntDataScoreOverride(TrophyGameMode.CasualSaga, "TrophyFader", 400),
-            new TrophyHuntDataScoreOverride(TrophyGameMode.CulinarySaga, "TrophyFader", 400),
+            new TrophyHuntDataScoreOverride(TrophyGameMode.TrophyTrailblazer, "TrophyFader", 400),
+            new TrophyHuntDataScoreOverride(TrophyGameMode.TrophyTrailblazer, "TrophySeekerQueen", 400),
 
-            new TrophyHuntDataScoreOverride(TrophyGameMode.TrophySaga, "TrophySeekerQueen", 400),
+            new TrophyHuntDataScoreOverride(TrophyGameMode.CasualSaga, "TrophyFader", 400),
             new TrophyHuntDataScoreOverride(TrophyGameMode.CasualSaga, "TrophySeekerQueen", 400),
+
+            new TrophyHuntDataScoreOverride(TrophyGameMode.CulinarySaga, "TrophyFader", 400),
             new TrophyHuntDataScoreOverride(TrophyGameMode.CulinarySaga, "TrophySeekerQueen", 400)
         };
 
@@ -146,6 +144,9 @@ namespace TrophyHuntMod
         const int TROPHY_BLITZ_DEATH_PENALTY = 0;
         const int TROPHY_BLITZ_LOGOUT_PENALTY = 0;
 
+        const int TROPHY_TRAILBLAZER_DEATH_PENALTY = -20;
+        const int TROPHY_TRAILBLAZER_LOGOUT_PENALTY = -10;
+
         const int CULINARY_SAGA_DEATH_PENALTY = -30;
         const int CULINARY_SAGA_LOGOUT_PENALTY = -10;
 
@@ -155,11 +156,15 @@ namespace TrophyHuntMod
         static float __m_blitzSailingSpeedMultiplier = 10.0f;
         static float __m_blitzPaddlingSpeedMultiplier = 8.0f;
 
+        static float __m_trailblazerSailingSpeedMultiplier = 10.0f;
+        static float __m_trailblazerPaddlingSpeedMultiplier = 8.0f;
+
         const float TROPHY_SAGA_TROPHY_DROP_MULTIPLIER = 2f;
         const float TROPHY_SAGA_BASE_SKILL_LEVEL = 20.0f;
         const int TROPHY_SAGA_MINING_MULTIPLIER = 2;
 
         const float TROPHY_BLITZ_BASE_SKILL_LEVEL = 100.0f;
+        const float TROPHY_TRAILBLAZER_BASE_SKILL_LEVEL = 100.0f;
 
         const string TROPHY_SAGA_INTRO_TEXT = "You were once a great warrior, though your memory of deeds past has long grown dim, shrouded by eons slumbering in the lands beyond death…\n\n\n\n" +
             "Ragnarok looms and the tenth world remains only for a few scant hours. You are reborn with one purpose: collect the heads of Odin's enemies before this cycle ends…\n\n\n\n" +
@@ -387,15 +392,11 @@ namespace TrophyHuntMod
         {
             TrophyHunt,
             TrophyRush,
-#if SAGA_STANDALONE
-            CasualSaga,
-#endif
             TrophySaga,
             TrophyBlitz,
+            TrophyTrailblazer,
             CulinarySaga,
-#if !SAGA_STANDALONE
             CasualSaga,
-#endif
             TrophyFiesta,
             Max
         }
@@ -403,11 +404,7 @@ namespace TrophyHuntMod
         //        static bool __m_trophyRushEnabled = false;
 
         // TrophyHuntMod current Game Mode
-#if SAGA_STANDALONE
-        static TrophyGameMode __m_trophyGameMode = TrophyGameMode.CasualSaga;
-#else
         static TrophyGameMode __m_trophyGameMode = TrophyGameMode.TrophyHunt;
-#endif
         static public TrophyGameMode GetGameMode() { return __m_trophyGameMode; }
         static public bool IsSagaMode() { return __m_trophyGameMode == TrophyGameMode.CasualSaga || __m_trophyGameMode == TrophyGameMode.CulinarySaga || __m_trophyGameMode == TrophyGameMode.TrophySaga; }
 
@@ -775,7 +772,6 @@ namespace TrophyHuntMod
 
             __m_onlyModRunning = true;
 
-#if !SAGA_STANDALONE
             foreach (var plugin in loadedPlugins)
             {
                 //               Debug.LogError($"{plugin.Key} : {plugin.Value.ToString()} : {plugin.Value.Metadata.Name}, {plugin.Value.Metadata.GUID}, {plugin.Value.Metadata.Version}, {plugin.Value.Metadata.TypeId}");
@@ -795,7 +791,6 @@ namespace TrophyHuntMod
             {
                 Debug.LogError($"[TrophyHuntMod] v{PluginVersion} found unauthorized mods. Score will be cyan colored, indicating invalid entry.");
             }
-#endif
         }
         public static void InitializeTrophyDropInfo()
         {
@@ -856,17 +851,10 @@ namespace TrophyHuntMod
         public static void ToggleGameMode()
         {
             __m_trophyGameMode += 1;
-#if SAGA_STANDALONE
-            if (__m_trophyGameMode > TrophyGameMode.CulinarySaga)
-            {
-                __m_trophyGameMode = TrophyGameMode.CasualSaga;
-            }
-#else
             if (__m_trophyGameMode >= TrophyGameMode.TrophyFiesta)
             {
                 __m_trophyGameMode = TrophyGameMode.TrophyHunt;
             }
-#endif
             if (__m_trophyHuntMainMenuText != null)
             {
                 __m_trophyHuntMainMenuText.text = GetTrophyHuntMainMenuText();
@@ -940,6 +928,9 @@ namespace TrophyHuntMod
                 case TrophyGameMode.TrophyBlitz:
                     gameModeText = "Trophy Blitz";
                     break;
+                case TrophyGameMode.TrophyTrailblazer:
+                    gameModeText = "Trailblazer";
+                    break;
                 case TrophyGameMode.CulinarySaga:
                     gameModeText = "Culinary Saga";
                     break;
@@ -1006,6 +997,16 @@ namespace TrophyHuntMod
                     dropRate = "100%";
                     hasBiomeBonuses = true;
                     timeLimit = "2 Hours";
+                    break;
+                case TrophyGameMode.TrophyTrailblazer:
+                    text += "\n<align=\"left\"><size=18>Game Mode: <color=#E000C0>Trailblazer!</color></size>";
+                    text += $"<align=\"left\"><size=14><color=red>                EXPERIMENTAL!</color></size>\n";
+                    text += $"<align=\"center\"><size=12> <color=yellow>NOTE:</color> To use existing world, change World Modifiers manually!</size>\n";
+                    resourceMultiplier = 2.0f;
+                    combatDifficulty = "Normal";
+                    dropRate = "100%";
+                    hasBiomeBonuses = true;
+                    timeLimit = "3 Hours";
                     break;
                 case TrophyGameMode.CulinarySaga:
                     text += $"\n<align=\"left\"><size=18>Game Mode: <color=#8080FF>Culinary Saga</color></size>\n";
@@ -1077,6 +1078,19 @@ namespace TrophyHuntMod
                     text += $"<align=\"left\">      * <color=orange>CheatDeath(tm)</color> within 3 sec.\n";
                 }
 
+                if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
+                {
+                    text += $"<align=\"left\">      * Fast Fermenters\n";
+                    text += $"<align=\"left\">      * Free-Build/No Cost\n";
+                    text += $"<align=\"left\">      * Sequential Boss Reveals\n";
+                    text += $"<align=\"left\">      * Dangerously fast boats\n";
+                    text += $"<align=\"left\">      * Keep Equipment on death\n";
+                    text += $"<align=\"left\">      * Portal Everything\n";
+                    text += $"<align=\"left\">      * No Raids\n";
+                    text += $"<align=\"left\">      * Skills at 100\n";
+                    text += $"<align=\"left\">      * <color=orange>CheatDeath(tm)</color> within 3 sec.\n";
+                }
+
                 if (GetGameMode() == TrophyGameMode.CasualSaga)
                 {
                     text += GetSagaRulesText();
@@ -1094,11 +1108,7 @@ namespace TrophyHuntMod
 
         public static string GetTrophyHuntMainMenuText()
         {
-#if SAGA_STANDALONE
-            string textStr = $"<b><size=50><color=#FFB75B>      Saga</color></size></b>\n<size=18>           (Version: {PluginVersion})</size>";
-#else
             string textStr = $"<b><size=34><color=#FFB75B>TrophyHuntMod</color></size></b>\n<size=18>           (Version: {PluginVersion})</size>";
-#endif
             textStr += GetGameModeText();
 
             //if (__m_showAllTrophyStats)
@@ -1230,11 +1240,7 @@ namespace TrophyHuntMod
                 }
                 else
                 {
-#if SAGA_STANDALONE
-                    __m_gameTimerVisible = true;
-#else
                     __m_gameTimerVisible = false;
-#endif
                 }
 
                 // Load persistent data
@@ -1254,10 +1260,14 @@ namespace TrophyHuntMod
                 }
                 else if (GetGameMode() == TrophyGameMode.TrophyBlitz)
                 {
-//                    if (!__m_everythingUnlocked)
+                    //                    if (!__m_everythingUnlocked)
                     {
-                        UnlockEverything(Player.m_localPlayer);
+                        UnlockEverythingBlitz(Player.m_localPlayer);
                     }
+                }
+                else if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
+                {
+                    UnlockEverythingTrailblazer(Player.m_localPlayer);
                 }
 
                 __m_refreshLogsAndStandings = true;
@@ -1319,6 +1329,17 @@ namespace TrophyHuntMod
                         //                        Debug.Log($"Setting skill {__result.m_info.m_skill.ToString()} to {TROPHY_BLITZ_BASE_SKILL_LEVEL}");
                     }
                 }
+                else if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
+                {
+                    // Get the specific skill that was just learned or updated^
+                    if (__result.m_level < TROPHY_TRAILBLAZER_BASE_SKILL_LEVEL)
+                    {
+                        __result.m_level = TROPHY_TRAILBLAZER_BASE_SKILL_LEVEL;
+                        __result.m_accumulator = 0f;
+
+                        //                        Debug.Log($"Setting skill {__result.m_info.m_skill.ToString()} to {TROPHY_BLITZ_BASE_SKILL_LEVEL}");
+                    }
+                }
             }
         }
 
@@ -1342,6 +1363,11 @@ namespace TrophyHuntMod
             if (GetGameMode() == TrophyGameMode.TrophyBlitz)
             {
                 RaiseAllPlayerSkills(TROPHY_BLITZ_BASE_SKILL_LEVEL);
+            }
+
+            if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
+            {
+                RaiseAllPlayerSkills(TROPHY_TRAILBLAZER_BASE_SKILL_LEVEL);
             }
 
             // In-Game Timer 
@@ -1431,6 +1457,8 @@ namespace TrophyHuntMod
                 deathCost = CULINARY_SAGA_DEATH_PENALTY;
             else if (GetGameMode() == TrophyGameMode.TrophyBlitz)
                 deathCost = TROPHY_BLITZ_DEATH_PENALTY;
+            else if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
+                deathCost = TROPHY_TRAILBLAZER_DEATH_PENALTY;
 
             return deathCost;
         }
@@ -1466,6 +1494,8 @@ namespace TrophyHuntMod
                 logoutCost = CULINARY_SAGA_LOGOUT_PENALTY;
             else if (GetGameMode() == TrophyGameMode.TrophyBlitz)
                 logoutCost = TROPHY_BLITZ_LOGOUT_PENALTY;
+            else if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
+                logoutCost = TROPHY_TRAILBLAZER_LOGOUT_PENALTY;
             return logoutCost;
         }
 
@@ -1927,6 +1957,10 @@ namespace TrophyHuntMod
             {
                 iconImage.color = new Color(0.2f, 0.2f, 0.0f);
             }
+            else if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
+            {
+                iconImage.color = new Color(0.0f, 0.2f, 0.2f);
+            }
 
             AddTooltipTriggersToTrophyIcon(iconElement);
 
@@ -2292,7 +2326,7 @@ namespace TrophyHuntMod
                 score += CalculateLogoutPenalty();
             }
 
-            if (GetGameMode() == TrophyGameMode.TrophyRush || GetGameMode() == TrophyGameMode.TrophyBlitz)
+            if (GetGameMode() == TrophyGameMode.TrophyRush || GetGameMode() == TrophyGameMode.TrophyBlitz || GetGameMode() == TrophyGameMode.TrophyTrailblazer)
             {
                 score += CalculateBiomeBonusScore(player);
             }
@@ -2619,7 +2653,7 @@ namespace TrophyHuntMod
                         // Update Trophy cache
                         __m_trophyCache = player.GetTrophies();
 
-                        if (GetGameMode() == TrophyGameMode.TrophyRush || GetGameMode() == TrophyGameMode.TrophyBlitz)
+                        if (GetGameMode() == TrophyGameMode.TrophyRush || GetGameMode() == TrophyGameMode.TrophyBlitz || GetGameMode() == TrophyGameMode.TrophyTrailblazer)
                         {
                             // Did we complete a biome bonus with this trophy?
                             Biome biome = Biome.Meadows;
@@ -4193,7 +4227,7 @@ namespace TrophyHuntMod
                         {
                             float dropPercentage = 0f;
 
-                            if (GetGameMode() == TrophyGameMode.TrophyRush || GetGameMode() == TrophyGameMode.TrophyBlitz || (IsSagaMode() && GetGameMode() != TrophyGameMode.CasualSaga))
+                            if (GetGameMode() == TrophyGameMode.TrophyRush || GetGameMode() == TrophyGameMode.TrophyBlitz || GetGameMode() == TrophyGameMode.TrophyTrailblazer || (IsSagaMode() && GetGameMode() != TrophyGameMode.CasualSaga))
                             {
                                 string trophyName = EnemyNameToTrophyName(characterName);
                                 if (!__m_trophyCache.Contains(trophyName) || trophyName == "TrophyDeer")
@@ -4370,7 +4404,7 @@ namespace TrophyHuntMod
                     }
                 }
 
-                if (GetGameMode() == TrophyGameMode.TrophyBlitz)
+                if (GetGameMode() == TrophyGameMode.TrophyBlitz || GetGameMode() == TrophyGameMode.TrophyTrailblazer)
                 {
                     // Check for bosses dying and unlock future boss locations
                     RevealNextBoss(__instance.m_name);
@@ -5369,7 +5403,7 @@ namespace TrophyHuntMod
             }
         }
 
-        private static void UnlockEverything(Player player)
+        private static void UnlockEverythingBlitz(Player player)
         {
             if (player == null)
             {
@@ -5384,7 +5418,7 @@ namespace TrophyHuntMod
 
             // This adds EVERYTHING to the tab menu
             // player.m_noPlacementCost = true;
-            
+
             foreach (var prefab in ObjectDB.instance.m_items)
             {
                 var drop = prefab.GetComponent<ItemDrop>();
@@ -5436,6 +5470,22 @@ namespace TrophyHuntMod
 
             player.Message(MessageHud.MessageType.Center, "Blitz mode engaged!");
 
+        }
+
+        private static void UnlockEverythingTrailblazer(Player player)
+        {
+            if (player == null)
+            {
+                return;
+            }
+
+            ZoneSystem.instance.SetGlobalKey(GlobalKeys.NoWorkbench);
+            ZoneSystem.instance.SetGlobalKey(GlobalKeys.AllPiecesUnlocked);
+            ZoneSystem.instance.SetGlobalKey(GlobalKeys.NoCraftCost);
+
+            __m_everythingUnlocked = true;
+
+            player.Message(MessageHud.MessageType.Center, "Blaze a trail, Trailblazer!");
         }
 
         // Player Log
@@ -5608,7 +5658,6 @@ namespace TrophyHuntMod
 
             switch (GetGameMode())
             {
-//                case TrophyGameMode.TrophyBlitz:
                 case TrophyGameMode.CasualSaga:
                 case TrophyGameMode.CulinarySaga:
                 case TrophyGameMode.TrophyFiesta:
@@ -6098,6 +6147,20 @@ namespace TrophyHuntMod
                         FejdStartup.m_instance.m_world.SaveWorldMetaData(DateTime.Now);
                         __instance.UpdateWorldList(centerSelection: true);
                     }
+                    else if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
+                    {
+                        FejdStartup.m_instance.m_world.m_startingGlobalKeys.Clear();
+                        FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("deathkeepequip");
+                        FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("skillreductionrate 15");
+                        FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("resourcerate 200");
+                        FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("eventrate 0");
+                        FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("teleportall");
+                        FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("nobuildcost");
+                        FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("preset combat_default:deathpenalty_casual: resources_muchmore: raids_none: portals_casual");
+
+                        FejdStartup.m_instance.m_world.SaveWorldMetaData(DateTime.Now);
+                        __instance.UpdateWorldList(centerSelection: true);
+                    }
                 }
             }
         }
@@ -6213,6 +6276,10 @@ namespace TrophyHuntMod
                 {
                     __result *= __m_blitzSailingSpeedMultiplier;
                 }
+                else if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
+                {
+                    __result *= __m_trailblazerSailingSpeedMultiplier;
+                }
             }
         }
 
@@ -6228,6 +6295,10 @@ namespace TrophyHuntMod
                 else if (GetGameMode() == TrophyGameMode.TrophyBlitz)
                 {
                     __instance.m_backwardForce *= __m_blitzPaddlingSpeedMultiplier;
+                }
+                else if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
+                {
+                    __instance.m_backwardForce *= __m_trailblazerPaddlingSpeedMultiplier;
                 }
             }
         }
@@ -6280,7 +6351,7 @@ namespace TrophyHuntMod
         {
             static void Postfix(Fermenter __instance)
             {
-                if (__instance != null && (IsSagaMode() || GetGameMode() == TrophyGameMode.TrophyBlitz))
+                if (__instance != null && (IsSagaMode() || GetGameMode() == TrophyGameMode.TrophyBlitz) || GetGameMode() == TrophyGameMode.TrophyTrailblazer)
                 {
                     __instance.m_fermentationDuration = 10;
                 }
@@ -6294,7 +6365,7 @@ namespace TrophyHuntMod
         {
             static void Prefix(Fermenter __instance)
             {
-                if (__instance != null && (IsSagaMode() || GetGameMode() == TrophyGameMode.TrophyBlitz))
+                if (__instance != null && (IsSagaMode() || GetGameMode() == TrophyGameMode.TrophyBlitz) || GetGameMode() == TrophyGameMode.TrophyTrailblazer)
                 {
 
                     Fermenter.ItemConversion itemConversion = __instance.GetItemConversion(__instance.m_delayedTapItem);
@@ -6470,10 +6541,6 @@ namespace TrophyHuntMod
             {
                 if (__instance != null)
                 {
-#if SAGA_STANDALONE
-                        __instance.m_spinner.color = new Color(255f / 255f, 215f / 255f, 0, 1);
-                        __instance.m_spinnerOriginalColor = __instance.m_spinner.color;
-#else
                     //                        Debug.LogWarning($"LoadingIndicator.Awake() {__instance.m_spinner.name} {__instance.m_spinner.sprite.name}");
                     IEnumerable<AssetBundle> loadedBundles = AssetBundle.GetAllLoadedAssetBundles();
 
@@ -6502,7 +6569,6 @@ namespace TrophyHuntMod
                             break;
                         }
                     }
-#endif
                 }
 
                 Texture2D CreateReadableTextureCopy(Texture2D texture)
