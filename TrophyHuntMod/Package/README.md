@@ -242,10 +242,11 @@ You can find the github at: https://github.com/smariotti/Valheim/tree/master/Tro
 ## Change Log
 v0.10.0
 - Added `/showbosses` command line command which shows all potential boss locations for post-run analysis
-- Some UI tweaks
 - Trophy Saga: Minor drop changes for Greylings to reduce inventory clutter
-- Throbbing score
+- Throbbing score.
+- Small trophy icon pinned to map where trophy was acquired
 - Added experimental Trophy Blitz game mode
+- Some UI tweaks
 
 
 v0.9.16

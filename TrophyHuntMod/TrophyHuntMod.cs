@@ -1112,8 +1112,6 @@ namespace TrophyHuntMod
 
         public static void ShowPlayerPath(bool showPlayerPath)
         {
-            Debug.LogError("ShowPlayerPath: " + showPlayerPath.ToString());
-
             if (!showPlayerPath)
             {
                 foreach (Minimap.PinData pinData in __m_pathPins)
@@ -1135,9 +1133,6 @@ namespace TrophyHuntMod
                     Minimap.PinData newPin = Minimap.instance.AddPin(pathPos, pinType, "", save: false, isChecked: false);
 
                     __m_pathPins.Add(newPin);
-
-                    Debug.LogError("ShowPlayerPath: AddedPin: " + pathPos.ToString());
-
                 }
 
                 __m_pathAddedToMinimap = true;
@@ -1930,7 +1925,7 @@ namespace TrophyHuntMod
             }
             else if (GetGameMode() == TrophyGameMode.TrophyBlitz)
             {
-                iconImage.color = new Color(0.25f, 0.25f, 0.0f);
+                iconImage.color = new Color(0.2f, 0.2f, 0.0f);
             }
 
             AddTooltipTriggersToTrophyIcon(iconElement);
@@ -2644,6 +2639,9 @@ namespace TrophyHuntMod
                         UpdateModUI(player);
 
                         AddPlayerEvent(PlayerEventType.Trophy, name, player.transform.position);
+
+                        Minimap.PinData pin = Minimap.instance.AddPin(player.transform.position, Minimap.PinType.Boss, "", true, false);
+                        pin.m_icon = GetTrophySprite(name);
                     }
                 }
             }
