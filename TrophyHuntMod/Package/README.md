@@ -9,6 +9,10 @@ It offers three modes, details are provided below.
   - This is an advanced version of the Trophy Hunt. Combat Difficulty is set to Very Hard, Resources drop at 2x rate and all Trophy-bearing enemies drop them 100% of the time.
 - **Trophy Saga**
   - This is a highly modified Trophy Hunt where many game mechanics are altered to speed up progression such as production building speeds, enemy drops, and crop growth times
+- **Trophy Blitz**
+  - Free Build/Craft with all recipes and materials unlocked. Crafting stations can create and repair all recipes at level 1. Fast Fermenters, Sequential Boss Reveals on map, Trader reveals on map after some bosses, Dangerously fast boats, Keep Equipment on death, Portal Everything, Skills at 100, Automatic Portal map pins, CheatDeath(tm) (allows you to respawn at place of death instead of base if you immediately ESC + Logout)
+- **Trailblazer!**
+  - Similar to Blitz, but you must discover each resource, skills start at 0 but increase rapidly
 - **Culinary Saga**
   - Trophy Saga game modifiers, but you score by creating one of each cooked food.
 - **Casual Saga**
@@ -148,6 +152,36 @@ This Trophy Hunt variant implements a good number of modifications to standard V
 ## Culinary Saga
 - Like Trophy Saga, but you score by making food.
 
+## Trophy Blitz
+
+This is like "New Game Plus" except you outfit yourself using fully unlocked recipes and build pieces.
+
+- Free-craft and Free-build with all materials and recipes unlocked
+ - Crafting stations can create and repair all recipes at level 1
+- Fast Fermenters
+- Sequential Boss Reveals on map
+- Trader reveals on map after some bosses
+- Dangerously fast boats
+- Keep Equipment on death
+- Portal Everything
+- Skills at 100
+- Automatic Portal map pins
+- CheatDeath(tm) (allows you to respawn at place of death instead of base if you immediately ESC + Logout)
+ 
+## Trailblazer!
+
+You can craft or build anything for free once you've touched all the materials required to craft it.
+
+- Free-craft and Free-build once materials are known
+- Fast Fermenters and Plantings
+- Sequential Boss Reveals on map
+- Trader reveals on map after some bosses
+- Dangerously fast boats
+- Keep Equipment on death
+- Portal Everything
+- Skills at 100
+- Automatic Portal map pins
+- CheatDeath(tm) (allows you to respawn at place of death instead of base if you immediately ESC + Logout)
 
 ## Trophy Hunt Mod Features
 
@@ -240,14 +274,22 @@ You can find the github at: https://github.com/smariotti/Valheim/tree/master/Tro
 
 
 ## Change Log
-v0.10.0
-- Added `/showbosses` command line command which shows all potential boss locations for post-run analysis
+v0.10.2
+- Disabled stupid Score Throbbing
+- Bug fix for Trophy icons on minimap
+- Trailblazer!
+ - Skills start at 0, but with greatly increased skill gain rate
+
+## Change Log
+v0.10.1
+- Added experimental Trophy Blitz game mode (see Readme for details)
+- Added experimental Trailblazer! game mode (see Readme for details)
 - Trophy Saga: Minor drop changes for Greylings to reduce inventory clutter
 - Throbbing score.
-- Small trophy icon pinned to map where trophy was acquired
-- Added experimental Trophy Blitz game mode
-- Added experimental Trailblazer! game mode
+- Small trophy icon pinned to map where trophy was acquired (buggy)
+- Added `/showbosses` command line command which shows all potential boss locations for post-run analysis
 - Some UI tweaks
+- Dude, Where's My Portal functionality added for Blitz and Trailblazer! game modes (auto portal map pins)
 
 
 v0.9.16

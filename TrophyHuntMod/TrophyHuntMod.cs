@@ -27,6 +27,8 @@ using static UnityEngine.Networking.UnityWebRequest;
 using System.Reflection;
 using static Heightmap;
 using System.Runtime.Remoting.Messaging;
+using static System.Net.Mime.MediaTypeNames;
+using Newtonsoft.Json.Linq;
 
 namespace TrophyHuntMod
 {
@@ -39,7 +41,7 @@ namespace TrophyHuntMod
 
         private const Boolean UPDATE_LEADERBOARD = false; // SET TO TRUE WHEN PTB IS LIVE
 
-        public const string PluginVersion = "0.10.1";
+        public const string PluginVersion = "0.10.2";
         private readonly Harmony harmony = new Harmony(PluginGUID);
 
         // Configuration variables
@@ -141,8 +143,8 @@ namespace TrophyHuntMod
         const int TROPHY_SAGA_DEATH_PENALTY = -30;
         const int TROPHY_SAGA_LOGOUT_PENALTY = -10;
 
-        const int TROPHY_BLITZ_DEATH_PENALTY = 0;
-        const int TROPHY_BLITZ_LOGOUT_PENALTY = 0;
+        const int TROPHY_BLITZ_DEATH_PENALTY = -40;
+        const int TROPHY_BLITZ_LOGOUT_PENALTY = -20;
 
         const int TROPHY_TRAILBLAZER_DEATH_PENALTY = -20;
         const int TROPHY_TRAILBLAZER_LOGOUT_PENALTY = -10;
@@ -164,7 +166,8 @@ namespace TrophyHuntMod
         const int TROPHY_SAGA_MINING_MULTIPLIER = 2;
 
         const float TROPHY_BLITZ_BASE_SKILL_LEVEL = 100.0f;
-        const float TROPHY_TRAILBLAZER_BASE_SKILL_LEVEL = 100.0f;
+        const float TROPHY_TRAILBLAZER_BASE_SKILL_LEVEL = 1.0f;
+        const float TROPHY_TRAILBLAZER_SKILL_GAIN_RATE = 4.0f;
 
         const string TROPHY_SAGA_INTRO_TEXT = "You were once a great warrior, though your memory of deeds past has long grown dim, shrouded by eons slumbering in the lands beyond death…\n\n\n\n" +
             "Ragnarok looms and the tenth world remains only for a few scant hours. You are reborn with one purpose: collect the heads of Odin's enemies before this cycle ends…\n\n\n\n" +
@@ -177,19 +180,19 @@ namespace TrophyHuntMod
             "Yes. Somehow. Bring Odin what he desires or be forced to repeat the cycle for eternity…\n\n\n\n" +
             "…in VALHEIM!";
 
-        const string TROPHY_BLITZ_INTRO_TEXT = 
-            "onglay agoyay, ethay allfatheryay odinyay unitedyay ethay orldsway . ehay ewthray down\n\n" + 
-            "his oesfay andyay astcay emthay intoyay ethay enthtay orldway, enthay itsplay the\n\n" + 
-            "boughs atthay eldhay eirthay isonpray otay ethay orld-treeway, andyay eftlay ityay to\n\n" + 
-            "drift unanchoredyay , ayay aceplay ofyay exileyay...\n\n" + 
-            "for enturiescay , isthay orldway umberedslay uneasilyyay , utbay ityay idday not\n\n" +
-            "die... asyay acialglay agesyay assedpay , ingdomskay oseray andyay ellfay outyay ofyay sight\n\n" + 
-            "of ethay odsgay.\n\n" + 
-            "when odinyay eardhay ishay enemiesyay ereway owinggray onceyay againyay in\n\n" + 
-            "strength , ehay ookedlay otay idgardmay andyay entsay ishay alkyriesvay otay scour\n\n" + 
-            "the attlefieldsbay orfay ethay eatestgray ofyay eirthay arriorsway . eadday to\n\n" +
+        const string TROPHY_BLITZ_INTRO_TEXT =
+            "Onglay agoyay, ethay allfatheryay odinyay unitedyay ethay orldsway. Ehay ewthray down\n\n" +
+            "his oesfay andyay astcay emthay intoyay ethay enthtay orldway, enthay itsplay the\n\n" +
+            "boughs atthay eldhay eirthay isonpray otay ethay orld-treeway, andyay eftlay ityay to\n\n" +
+            "drift unanchoredyay, ayay aceplay ofyay exileyay...\n\n" +
+            "For enturiescay, isthay orldway umberedslay uneasilyyay, utbay ityay idday not\n\n" +
+            "die... Asyay acialglay agesyay assedpay, ingdomskay oseray andyay ellfay outyay ofyay sight\n\n" +
+            "of ethay odsgay.\n\n" +
+            "When odinyay eardhay ishay enemiesyay ereway owinggray onceyay againyay in\n\n" +
+            "strength, ehay ookedlay otay idgardmay andyay entsay ishay alkyriesvay otay scour\n\n" +
+            "the attlefieldsbay orfay ethay eatestgray ofyay eirthay arriorsway. Eadday to\n\n" +
             "the orldway, eythay ouldway ebay ornbay againyay...\n\n" +
-            "... inyay alheimvay.";
+            "... inyay Alheimvay.";
 
         const string LEADERBOARD_URL = "https://valheim.help/api/trackhunt";
 
@@ -384,6 +387,15 @@ namespace TrophyHuntMod
         static float __m_minPathPlayerMoveDistance = 30.0f;                     // the min distance the player has to have moved to consider storing the new path position
         static Vector3 __m_previousPlayerPos;                                   // last player position stored
 
+        // Trophy Pins
+        public class TrophyPin
+        {
+            public Vector3 m_pos;
+            public string m_trophyName;
+        }
+
+        static List<TrophyPin> __m_trophyPins = new List<TrophyPin>();
+
         // Only mod running flag
         static bool __m_onlyModRunning = false;
 
@@ -496,7 +508,7 @@ namespace TrophyHuntMod
             }
         }
 
-        static public string __m_saveDataVersionNumber = "4";
+        static public string __m_saveDataVersionNumber = "5";
 
         // WARNING!
         //
@@ -521,6 +533,8 @@ namespace TrophyHuntMod
             public List<THMSaveDataDropInfo> m_allTrophyDropInfos = null;
 
             public List<Vector3> m_playerPathData = null;
+
+            public List<TrophyPin> m_trophyPins;
 
             public long m_gameTimerElapsedSeconds;
             public bool m_gameTimerActive;
@@ -606,6 +620,8 @@ namespace TrophyHuntMod
             // The /showpath path
             saveData.m_playerPathData = __m_playerPathData;
 
+            saveData.m_trophyPins = __m_trophyPins;
+
             // Game timer settings
             saveData.m_gameTimerElapsedSeconds = __m_gameTimerElapsedSeconds;
             saveData.m_gameTimerActive = __m_gameTimerActive;
@@ -659,6 +675,12 @@ namespace TrophyHuntMod
             if (__m_playerPathData != null && saveData.m_playerPathData != null && __m_playerPathData.Count < saveData.m_playerPathData.Count)
             {
                 __m_playerPathData = saveData.m_playerPathData;
+            }
+
+            // The trophy map pins
+            if (__m_trophyPins != null)
+            {
+                __m_trophyPins = saveData.m_trophyPins;
             }
 
             // Game timer settings
@@ -1066,7 +1088,7 @@ namespace TrophyHuntMod
 
                 if (GetGameMode() == TrophyGameMode.TrophyBlitz)
                 {
-                    text += $"<align=\"left\">      * <color=yellow>NO BEDS ALLOWED!</color>\n";
+                    text += $"<align=\"left\">      * NO BEDS ALLOWED!\n";
                     text += $"<align=\"left\">      * Fast Fermenters\n";
                     text += $"<align=\"left\">      * No Craft or Build Cost\n";
                     text += $"<align=\"left\">      * Sequential Boss Reveals\n";
@@ -1080,13 +1102,13 @@ namespace TrophyHuntMod
 
                 if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
                 {
-                    text += $"<align=\"left\">      * Fast Fermenters\n";
-                    text += $"<align=\"left\">      * No Craft or Build Cost\n";
+                    text += $"<align=\"left\">      * Fast Fermenters and Plantings\n";
+                    text += $"<align=\"left\">      * No Craft or Build Cost for known recipes\n";
                     text += $"<align=\"left\">      * Sequential Boss Reveals\n";
                     text += $"<align=\"left\">      * Dangerously fast boats\n";
                     text += $"<align=\"left\">      * Keep Equipment on death\n";
                     text += $"<align=\"left\">      * Portal Everything\n";
-                    text += $"<align=\"left\">      * Skills at 100\n";
+                    text += $"<align=\"left\">      * Skills increase very rapidly\n";
                     text += $"<align=\"left\">      * Automatic Portal map pins\n";
                     text += $"<align=\"left\">      * <color=orange>CheatDeath(tm)</color> within 3 sec.\n";
                 }
@@ -1276,9 +1298,21 @@ namespace TrophyHuntMod
 
                 StartPeriodicTimer();
 
-//                PostTrackHunt();
+                //                PostTrackHunt();
+
+                // Scan through minimap pins and fix them if they're trophy pins
+                foreach (Minimap.PinData pin in Minimap.instance.m_pins)
+                {
+                    if (pin.m_name.StartsWith("Trophy"))
+                    {
+                        pin.m_icon = GetTrophySprite(pin.m_name);
+                    }
+                }
+
+                FixTrophyPins();
             }
         }
+
         public static void RaiseAllPlayerSkills(float skillLevel)
         {
             // Access the player's skills
@@ -1340,6 +1374,20 @@ namespace TrophyHuntMod
                         //                        Debug.Log($"Setting skill {__result.m_info.m_skill.ToString()} to {TROPHY_BLITZ_BASE_SKILL_LEVEL}");
                     }
                 }
+            }
+        }
+
+        [HarmonyPatch(typeof(Skill), nameof(Skill.Raise))]
+        public class Skills_RaiseSkill_Patch
+        {
+            static bool Prefix(Skill __instance, ref float factor, bool __result)
+            {
+                if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
+                {
+                    factor = factor * TROPHY_TRAILBLAZER_SKILL_GAIN_RATE;
+                }
+
+                return true;
             }
         }
 
@@ -1406,6 +1454,7 @@ namespace TrophyHuntMod
                 __m_playerEventLog = new List<PlayerEventLog>();
             }
 
+            __m_trophyPins.Clear();
         }
 
         public static int CalculateCookingPoints(bool displayToLog = false)
@@ -1894,7 +1943,10 @@ namespace TrophyHuntMod
             tmText.fontMaterial.EnableKeyword("OUTLINE_ON");
             tmText.outlineColor = Color.black;
             tmText.outlineWidth = 0.125f; // Adjust the thickness
-                                          //                tmText.enableAutoSizing = true;
+                                          //               text.enableAutoSizing = true;
+            tmText.enableAutoSizing = true;
+            tmText.fontSizeMin = DEFAULT_SCORE_FONT_SIZE * 0.75f;
+            tmText.fontSizeMax = DEFAULT_SCORE_FONT_SIZE + 2.0f;
 
             AddTooltipTriggersToScoreObject(scoreTextElement);
 
@@ -2575,7 +2627,7 @@ namespace TrophyHuntMod
                     {
                         // Flash it with a CoRoutine
                         __m_trophyHuntMod.StartCoroutine(FlashImage(image, imageRect));
-                        __m_trophyHuntMod.StartCoroutine(DoFlashScore());
+//                        __m_trophyHuntMod.StartCoroutine(DoFlashScore());
                     }
                 }
             }
@@ -2589,20 +2641,22 @@ namespace TrophyHuntMod
         {
             if (__m_scoreTextElement != null)
             {
-                TMPro.TextMeshProUGUI tmText = __m_scoreTextElement.GetComponent<TMPro.TextMeshProUGUI>();
-                float origSize = tmText.fontSize;
+ //               TMPro.TextMeshProUGUI tmText = __m_scoreTextElement.GetComponent<TMPro.TextMeshProUGUI>();
+//                float origSize = tmText.fontSize;
 
                 for (int count=0; count < 4; count++)
                 {
                     for (float x = 0.0f; x < 6.0f; x += 0.1f)
                     {
-                        float scale = 1.0f + (float)Math.Sin((double)x) * 0.33f;
-                        tmText.fontSize = origSize * scale;
-
-                        yield return new WaitForSeconds(0.033f);
+                        float scale = 1.0f + (float)Math.Sin((double)x) * 0.25f;
+//                        tmText.fontSize = origSize * scale;
+                        __m_scoreTextElement.transform.localScale.Set(scale, scale, 0.0f);
+                           
+            yield return new WaitForSeconds(0.033f);
                     }
                 }
-                tmText.fontSize = origSize;            
+                //                tmText.fontSize = origSize;
+                __m_scoreTextElement.transform.localScale = Vector3.one;
             }
         }
 
@@ -2679,8 +2733,7 @@ namespace TrophyHuntMod
 
                         AddPlayerEvent(PlayerEventType.Trophy, name, player.transform.position);
 
-                        Minimap.PinData pin = Minimap.instance.AddPin(player.transform.position, Minimap.PinType.Boss, "", true, false);
-                        pin.m_icon = GetTrophySprite(name);
+                        AddTrophyPin(player.transform.position, name);
                     }
                 }
             }
@@ -2737,6 +2790,41 @@ namespace TrophyHuntMod
             }
         }
         #endregion
+
+        public static void AddTrophyPin(Vector3 position, string trophyName)
+        {
+            Minimap.PinData pin = Minimap.instance.AddPin(position, Minimap.PinType.Boss, "", true, false);
+            pin.m_icon = GetTrophySprite(trophyName);
+            TrophyPin newPin = new TrophyPin();
+            newPin.m_pos = position;
+            newPin.m_trophyName = trophyName;
+            __m_trophyPins.Add(newPin);
+        }
+
+        public static void FixTrophyPins()
+        {
+            if (Minimap.instance == null)
+            {
+                return;
+            }
+
+            foreach (var trophyPin in __m_trophyPins)
+            {
+                foreach (var pinData in Minimap.instance.m_pins)
+                {
+                    if (Vector3.Distance(pinData.m_pos, trophyPin.m_pos) < 1.0f)
+                    {
+                        Minimap.instance.RemovePin(pinData);
+                        break;
+                    }
+                }
+            }
+
+            foreach(var trophyPin in __m_trophyPins)
+            {
+                Minimap.instance.AddPin(trophyPin.m_pos, Minimap.PinType.Boss, "", true, false).m_icon = GetTrophySprite(trophyPin.m_trophyName);
+            }
+        }
 
         // Periodic Timer
         #region Periodic Timer
@@ -5403,6 +5491,23 @@ namespace TrophyHuntMod
             }
         }
 
+        static bool __m_overrideGlobalKeysForPieceDrops = false;
+
+        [HarmonyPatch(typeof(Piece), nameof(Piece.FreeBuildKey))]
+        public static class Piece_FreeBuildKey_Patch
+        {
+            static bool Prefix(ref GlobalKeys __result)
+            {
+                if (GetGameMode() == TrophyGameMode.TrophyTrailblazer && __m_overrideGlobalKeysForPieceDrops)
+                {
+                    __result = GlobalKeys.NoPortals; // return something guaranteed to not be found in this mode
+                    return false;
+                }
+
+                return true;
+            }
+        }
+
         private static void UnlockEverythingBlitz(Player player)
         {
             if (player == null)
@@ -6384,11 +6489,18 @@ namespace TrophyHuntMod
         {
             static void Postfix(Plant __instance, ref double __result)
             {
-                if (__instance != null && (IsSagaMode()))
+                if (__instance != null)
                 {
-                    //                        Debug.LogWarning("Plant.TimeSincePlanted()");
+                    if (IsSagaMode())
+                    {
+                        //                        Debug.LogWarning("Plant.TimeSincePlanted()");
 
-                    __result = (double)__instance.m_growTimeMax + 1;
+                        __result = (double)__instance.m_growTimeMax + 1;
+                    }
+                    else if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
+                    {
+                        __result = (double)__instance.m_growTimeMax + 1;
+                    }
                 }
             }
         }
@@ -6797,6 +6909,7 @@ namespace TrophyHuntMod
                 new ConsumableData("DeerStew",                 "$item_deerstew",                "Deer Stew",                      Biome.Forest,    20,   45,  15,  0,   3),
                 new ConsumableData("CarrotSoup",               "$item_carrotsoup",              "Carrot Soup",                    Biome.Forest,    20,   15,  45,  0,   2),
                 new ConsumableData("MinceMeatSauce",           "$item_mincemeatsauce",          "Minced Meat Sauce",              Biome.Forest,    20,   40,  13,  0,   3),
+                new ConsumableData("CookedBjornMeat",          "$item_bjorn_meat_cooked",       "Cooked Bear Meat",               Biome.Forest,    20,   40,  13,  0,   2),
 
                 new ConsumableData("Sausages",                 "$item_sausages",                "Sausages",                       Biome.Swamp,     30,   55,  18,  0,   3),
                 new ConsumableData("ShocklateSmoothie",        "$item_shocklatesmoothie",       "Muckshake",                      Biome.Swamp,     30,   16,  50,  0,   1),
@@ -6894,11 +7007,28 @@ namespace TrophyHuntMod
         [HarmonyPatch(typeof(Piece), nameof(Piece.DropResources))]
         public static class Piece_DropResources_Patch
         {
+            public static bool Prefix(Piece __instance, HitData hitData)
+            {
+                if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
+                {
+                    if (!__instance.IsPlacedByPlayer())
+                    {
+                        __m_overrideGlobalKeysForPieceDrops = true;
+                    }
+                }
+                return true;
+            }
+
             public static void Postfix(Piece __instance)
             {
                 if (GetGameMode() != TrophyGameMode.TrophyBlitz && GetGameMode() != TrophyGameMode.TrophyTrailblazer)
                 {
                     return;
+                }
+
+                if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
+                {
+                    __m_overrideGlobalKeysForPieceDrops = false;
                 }
 
                 Vector3 pos = __instance.transform.position;
