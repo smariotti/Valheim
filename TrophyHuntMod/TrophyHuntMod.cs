@@ -41,7 +41,7 @@ namespace TrophyHuntMod
 
         private const Boolean UPDATE_LEADERBOARD = false; // SET TO TRUE WHEN PTB IS LIVE
 
-        public const string PluginVersion = "0.10.2";
+        public const string PluginVersion = "0.10.3";
         private readonly Harmony harmony = new Harmony(PluginGUID);
 
         // Configuration variables
@@ -439,6 +439,8 @@ namespace TrophyHuntMod
         static bool __m_ignoreLogouts = false;
 
         static bool __m_ignoreInvalidateUIChanges = false;
+
+        static bool __m_introMessageDisplayed = false;
 
         // Used by TrophySaga, true if all ores turn into bars when entering inventory
         // also treats all ore weights as their bar weights across the game
@@ -1455,6 +1457,8 @@ namespace TrophyHuntMod
             }
 
             __m_trophyPins.Clear();
+
+            __m_introMessageDisplayed = false;
         }
 
         public static int CalculateCookingPoints(bool displayToLog = false)
@@ -5573,11 +5577,14 @@ namespace TrophyHuntMod
 
             MessageHud.instance.enabled = true;
 
-            player.Message(MessageHud.MessageType.Center, "Blitz mode engaged!");
-
+            if (!__m_introMessageDisplayed)
+            {
+                player.Message(MessageHud.MessageType.Center, "Blitz mode engaged!");
+                __m_introMessageDisplayed = true;
+            }
         }
 
-        private static void UnlockEverythingTrailblazer(Player player)
+            private static void UnlockEverythingTrailblazer(Player player)
         {
             if (player == null)
             {
@@ -5590,7 +5597,11 @@ namespace TrophyHuntMod
 
             __m_everythingUnlocked = true;
 
-            player.Message(MessageHud.MessageType.Center, "Blaze a trail, Trailblazer!");
+            if (!__m_introMessageDisplayed)
+            {
+                player.Message(MessageHud.MessageType.Center, "Blaze a trail, Trailblazer!");
+                __m_introMessageDisplayed = true;
+            }
         }
 
         // Player Log

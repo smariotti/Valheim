@@ -272,15 +272,16 @@ You can learn more on the Valheim Speedrun Discord channel here: https://discord
 ## Where to Find
 You can find the github at: https://github.com/smariotti/Valheim/tree/master/TrophyHuntMod
 
-
 ## Change Log
+v0.10.3
+- Culinary Saga: added Cooked Bear Meat to the food list for scoring
+
 v0.10.2
 - Disabled stupid Score Throbbing
 - Bug fix for Trophy icons on minimap
 - Trailblazer!
  - Skills start at 0, but with greatly increased skill gain rate
 
-## Change Log
 v0.10.1
 - Added experimental Trophy Blitz game mode (see Readme for details)
 - Added experimental Trailblazer! game mode (see Readme for details)
