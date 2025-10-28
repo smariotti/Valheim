@@ -29,6 +29,7 @@ using static Heightmap;
 using System.Runtime.Remoting.Messaging;
 using static System.Net.Mime.MediaTypeNames;
 using Newtonsoft.Json.Linq;
+using static ClutterSystem;
 
 namespace TrophyHuntMod
 {
@@ -1257,15 +1258,6 @@ namespace TrophyHuntMod
                 __m_storedPlayerID = Player.m_localPlayer.GetPlayerID();
                 __m_storedGameMode = __m_trophyGameMode;
                 __m_storedWorldSeed = WorldGenerator.instance.m_world.m_seedName;
-
-                if (!IsSagaMode())
-                {
-                    __m_gameTimerVisible = false;
-                }
-                else
-                {
-                    __m_gameTimerVisible = false;
-                }
 
                 // Load persistent data
                 LoadPersistentData();
@@ -2631,7 +2623,7 @@ namespace TrophyHuntMod
                     {
                         // Flash it with a CoRoutine
                         __m_trophyHuntMod.StartCoroutine(FlashImage(image, imageRect));
-//                        __m_trophyHuntMod.StartCoroutine(DoFlashScore());
+                        __m_trophyHuntMod.StartCoroutine(DoFlashScore());
                     }
                 }
             }
@@ -2645,22 +2637,18 @@ namespace TrophyHuntMod
         {
             if (__m_scoreTextElement != null)
             {
- //               TMPro.TextMeshProUGUI tmText = __m_scoreTextElement.GetComponent<TMPro.TextMeshProUGUI>();
-//                float origSize = tmText.fontSize;
-
-                for (int count=0; count < 4; count++)
+                TMPro.TextMeshProUGUI tmText = __m_scoreTextElement.GetComponent<TMPro.TextMeshProUGUI>();
+                Color oldTextColor = tmText.color;
+                for (int count=0; count < 8; count++)
                 {
-                    for (float x = 0.0f; x < 6.0f; x += 0.1f)
+                    for (float x = 0.0f; x < Math.PI*2; x += (float)(Math.PI/6.0))
                     {
-                        float scale = 1.0f + (float)Math.Sin((double)x) * 0.25f;
-//                        tmText.fontSize = origSize * scale;
-                        __m_scoreTextElement.transform.localScale.Set(scale, scale, 0.0f);
-                           
-            yield return new WaitForSeconds(0.033f);
+                        float scale = (1.0f + (float)Math.Sin((double)x)) * 0.5f;
+                        tmText.color = Color.Lerp(Color.black, Color.white, scale); ;
+                        yield return new WaitForSeconds(0.033f);
                     }
                 }
-                //                tmText.fontSize = origSize;
-                __m_scoreTextElement.transform.localScale = Vector3.one;
+                tmText.color = oldTextColor;
             }
         }
 
@@ -2745,7 +2733,7 @@ namespace TrophyHuntMod
                             if (trophyIcon != null)
                             {
                                 TrophyHuntData data = Array.Find(__m_trophyHuntData, element => element.m_name == name);
-                                MessageHud.instance.QueueUnlockMsg(trophyIcon, "Trophy Get!", data.m_prettyName + " Trophy");
+                                //MessageHud.instance.QueueUnlockMsg(trophyIcon, "Trophy Get!", data.m_prettyName + " Trophy");
                             }
                         }   
                     }
@@ -2805,13 +2793,17 @@ namespace TrophyHuntMod
         }
         #endregion
 
-        public static void AddTrophyPin(Vector3 position, string trophyName)
+        public static void AddTrophyPin(Vector3 position, string trophyName, bool big = false)
         {
             Minimap.PinData pin = Minimap.instance.AddPin(position, Minimap.PinType.Boss, "", true, false);
             pin.m_icon = GetTrophySprite(trophyName);
             TrophyPin newPin = new TrophyPin();
             newPin.m_pos = position;
             newPin.m_trophyName = trophyName;
+            if (big)
+            {
+                pin.m_doubleSize = true;
+            }
             __m_trophyPins.Add(newPin);
         }
 
@@ -5435,23 +5427,35 @@ namespace TrophyHuntMod
                 case "$enemy_eikthyr":
                     RevealBoss("$enemy_gdking");
                     RevealByName("Vendor_BlackForest", "Haldor", Minimap.PinType.Icon3, 100);
+                    if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
+                        RaiseAllPlayerSkills(20);
                     break;
                 case "$enemy_gdking":
                     RevealBoss("$enemy_bonemass");
                     RevealByName("BogWitch_Camp", "BogWitch", Minimap.PinType.Icon3, 100);
+                    if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
+                        RaiseAllPlayerSkills(30);
                     break;
                 case "$enemy_bonemass":
                     RevealBoss("$enemy_dragon");
                     RevealByName("Hildir_camp", "Hildir", Minimap.PinType.Icon3, 100);
+                    if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
+                        RaiseAllPlayerSkills(40);
                     break;
                 case "$enemy_dragon":
                     RevealBoss("$enemy_goblinking");
+                    if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
+                        RaiseAllPlayerSkills(50);
                     break;
                 case "$enemy_goblinking":
                     RevealBoss("$enemy_seekerqueen");
+                    if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
+                        RaiseAllPlayerSkills(70);
                     break;
                 case "$enemy_seekerqueen":
                     RevealBoss("$enemy_fader");
+                    if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
+                        RaiseAllPlayerSkills(90);
                     break;
             }
 
@@ -5513,6 +5517,80 @@ namespace TrophyHuntMod
                 return true;
             }
         }
+
+        [HarmonyPatch(typeof(ItemDrop), nameof(ItemDrop.SetQuality), new[] { typeof(int) })]
+        public static class ItemDrop_SetQuality_Patch
+        {
+            static void Postfix(ItemDrop __instance, int quality)
+            {
+                if (GetGameMode() == TrophyGameMode.TrophyBlitz)
+                {
+                    bool doUpgrade = false;
+                    ItemDrop.ItemData.ItemType itemType = __instance.m_itemData.m_shared.m_itemType;
+                    switch (itemType)
+                    {
+                        case ItemDrop.ItemData.ItemType.Material:
+                        case ItemDrop.ItemData.ItemType.Consumable:
+                        case ItemDrop.ItemData.ItemType.Ammo:
+                        case ItemDrop.ItemData.ItemType.Customization:
+                        case ItemDrop.ItemData.ItemType.Trophy:
+                        case ItemDrop.ItemData.ItemType.Torch:
+                        case ItemDrop.ItemData.ItemType.Misc:
+                        case ItemDrop.ItemData.ItemType.Utility:
+                        case ItemDrop.ItemData.ItemType.Attach_Atgeir:
+                        case ItemDrop.ItemData.ItemType.Fish:
+                        case ItemDrop.ItemData.ItemType.AmmoNonEquipable:
+                        case ItemDrop.ItemData.ItemType.Trinket:
+                            doUpgrade = false;
+                            break;
+
+                        case ItemDrop.ItemData.ItemType.OneHandedWeapon:
+                        case ItemDrop.ItemData.ItemType.Bow:
+                        case ItemDrop.ItemData.ItemType.Shield:
+                        case ItemDrop.ItemData.ItemType.Helmet:
+                        case ItemDrop.ItemData.ItemType.Chest:
+                        case ItemDrop.ItemData.ItemType.Legs:
+                        case ItemDrop.ItemData.ItemType.Hands:
+                        case ItemDrop.ItemData.ItemType.TwoHandedWeapon:
+                        case ItemDrop.ItemData.ItemType.Shoulder:
+                        case ItemDrop.ItemData.ItemType.Tool:
+                        case ItemDrop.ItemData.ItemType.TwoHandedWeaponLeft:
+                            doUpgrade = true;
+                            break;
+                    }
+                    if (doUpgrade)
+                    {
+                        __instance.m_itemData.m_quality = __instance.m_itemData.m_shared.m_maxQuality;
+                    }
+                }
+            }
+        }
+
+        //static int __m_oldCraftedItemQuality = 1;
+        //[HarmonyPatch(typeof(Inventory), nameof(Inventory.AddItem))]
+        //public static class Inventory_AddItem2_Patch
+        //{
+        //    static bool Prefix(Inventory __instance, string name, int stack, int quality, int variant, long crafterID, string crafterName, Vector2i position, bool pickedUp = false)
+
+        //    //static bool Prefix(Inventory __instance, string name, int stack, int quality, int variant, long crafterID, string crafterName, Vector2i position, bool pickedUp, ItemDrop.ItemData __result)
+        //    {
+        //        // I don't think this is necessary, but we want to return things as we found them
+        //        if (__instance == null)
+        //        {
+        //            return true;
+        //        }
+
+
+        //        //if (GetGameMode() == TrophyGameMode.TrophyBlitz)
+        //        //{
+        //        //    __result = __instance.AddItem(name, stack, quality, variant, crafterID, crafterName, position, pickedUp);
+        //        //    __result.m_quality = __result.m_shared.m_maxQuality;
+        //        //    return false;
+        //        //}
+
+        //        return true;
+        //    }
+        //}
 
         static bool __m_overrideGlobalKeysForPieceDrops = false;
 

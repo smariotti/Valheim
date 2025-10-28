@@ -274,12 +274,13 @@ You can find the github at: https://github.com/smariotti/Valheim/tree/master/Tro
 
 ## Change Log
 v0.10.3
-- Added "Trophy Get!" message to upper left notification panel when a trophy is picked up.
 - Added Biome Bonus calculation and text to Score tooltip for Trailblazer and Trophy Blitz
 - Trailblazer
   - Increased skill gain rate
+  - Skills raised after each boss kill
 - Culinary Saga
   - added Cooked Bear Meat to the food list for scoring
+- Flash score when trophy picked up
 
 v0.10.2
 - Disabled stupid Score Throbbing
