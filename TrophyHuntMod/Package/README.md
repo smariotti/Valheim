@@ -274,13 +274,18 @@ You can find the github at: https://github.com/smariotti/Valheim/tree/master/Tro
 
 ## Change Log
 v0.10.3
-- Culinary Saga: added Cooked Bear Meat to the food list for scoring
+- Added "Trophy Get!" message to upper left notification panel when a trophy is picked up.
+- Added Biome Bonus calculation and text to Score tooltip for Trailblazer and Trophy Blitz
+- Trailblazer
+  - Increased skill gain rate
+- Culinary Saga
+  - added Cooked Bear Meat to the food list for scoring
 
 v0.10.2
 - Disabled stupid Score Throbbing
 - Bug fix for Trophy icons on minimap
 - Trailblazer!
- - Skills start at 0, but with greatly increased skill gain rate
+  - Skills start at 0, but with greatly increased skill gain rate
 
 v0.10.1
 - Added experimental Trophy Blitz game mode (see Readme for details)

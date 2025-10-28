@@ -167,7 +167,7 @@ namespace TrophyHuntMod
 
         const float TROPHY_BLITZ_BASE_SKILL_LEVEL = 100.0f;
         const float TROPHY_TRAILBLAZER_BASE_SKILL_LEVEL = 1.0f;
-        const float TROPHY_TRAILBLAZER_SKILL_GAIN_RATE = 4.0f;
+        const float TROPHY_TRAILBLAZER_SKILL_GAIN_RATE = 6.0f;
 
         const string TROPHY_SAGA_INTRO_TEXT = "You were once a great warrior, though your memory of deeds past has long grown dim, shrouded by eons slumbering in the lands beyond death…\n\n\n\n" +
             "Ragnarok looms and the tenth world remains only for a few scant hours. You are reborn with one purpose: collect the heads of Odin's enemies before this cycle ends…\n\n\n\n" +
@@ -2738,6 +2738,16 @@ namespace TrophyHuntMod
                         AddPlayerEvent(PlayerEventType.Trophy, name, player.transform.position);
 
                         AddTrophyPin(player.transform.position, name);
+
+                        if (MessageHud.instance)
+                        {
+                            Sprite trophyIcon = GetTrophySprite(name);
+                            if (trophyIcon != null)
+                            {
+                                TrophyHuntData data = Array.Find(__m_trophyHuntData, element => element.m_name == name);
+                                MessageHud.instance.QueueUnlockMsg(trophyIcon, "Trophy Get!", data.m_prettyName + " Trophy");
+                            }
+                        }   
                     }
                 }
             }
@@ -3042,6 +3052,8 @@ namespace TrophyHuntMod
             {
                 { TrophyGameMode.TrophyHunt, new Vector2(240, 215) },
                 { TrophyGameMode.TrophyRush, new Vector2(290, 380) },
+                { TrophyGameMode.TrophyBlitz, new Vector2(290, 380) },
+                { TrophyGameMode.TrophyTrailblazer, new Vector2(290, 380) },
                 { TrophyGameMode.CasualSaga, new Vector2(300, 170) },
                 { TrophyGameMode.TrophySaga, new Vector2(290, 215) },
                 { TrophyGameMode.CulinarySaga, new Vector2(240, 215) },
@@ -3154,7 +3166,9 @@ namespace TrophyHuntMod
 
                 text += $"  Logouts: (Penalty: <color=red>{GetLogoutPointCost()}</color>)\n    Num: <color=orange>{__m_logoutCount}</color> <color=yellow>({CalculateLogoutPenalty().ToString()} Points)</color>\n";
                 text += $"  Deaths: (Penalty: <color=red>{GetDeathPointCost()}</color>)\n    Num: <color=orange>{__m_deaths}</color> <color=yellow>({CalculateDeathPenalty().ToString()} Points)</color>\n";
-                if (GetGameMode() == TrophyGameMode.TrophyRush)
+                if (GetGameMode() == TrophyGameMode.TrophyRush || 
+                    GetGameMode() == TrophyGameMode.TrophyBlitz || 
+                    GetGameMode() == TrophyGameMode.TrophyTrailblazer)
                 {
                     text += $"  /die's: (Penalty: <color=red>{TROPHY_RUSH_SLASHDIE_PENALTY}</color>)\n    Num: <color=orange>{__m_slashDieCount}</color> <color=yellow>({__m_slashDieCount * TROPHY_RUSH_SLASHDIE_PENALTY} Points)</color>\n";
                     penaltyPoints += __m_slashDieCount * TROPHY_RUSH_SLASHDIE_PENALTY;
@@ -5439,6 +5453,11 @@ namespace TrophyHuntMod
                 case "$enemy_seekerqueen":
                     RevealBoss("$enemy_fader");
                     break;
+            }
+
+            if (Player.m_localPlayer != null)
+            {
+                Player.m_localPlayer.Message(MessageHud.MessageType.Center, "You have gained wisdom and knowledge.");
             }
         }
 
