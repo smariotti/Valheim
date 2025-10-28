@@ -274,13 +274,15 @@ You can find the github at: https://github.com/smariotti/Valheim/tree/master/Tro
 
 ## Change Log
 v0.10.3
-- Added Biome Bonus calculation and text to Score tooltip for Trailblazer and Trophy Blitz
+- Trophy Blitz
+  - Add items craft at max quality (fully upgraded)
 - Trailblazer
   - Increased skill gain rate
   - Skills raised after each boss kill
 - Culinary Saga
-  - added Cooked Bear Meat to the food list for scoring
-- Flash score when trophy picked up
+  - added Cooked Bear Meat to the food list for scoring (here's looking at you @AnamygrodaL)
+- Added Biome Bonus calculation and text to Score tooltip for Trailblazer and Trophy Blitz modes
+- Flash score when trophy picked up, Team No Throb represent
 
 v0.10.2
 - Disabled stupid Score Throbbing

@@ -202,6 +202,7 @@ namespace TrophyHuntMod
         const float DEFAULT_SCORE_FONT_SIZE = 25;
 
         const long NUM_SECONDS_IN_FOUR_HOURS = 4 * 60 * 60;
+        const long NUM_SECONDS_IN_THREE_HOURS = 3 * 60 * 60;
         const long NUM_SECONDS_IN_TWO_HOURS = 2 * 60 * 60;
 
 
@@ -1653,6 +1654,10 @@ namespace TrophyHuntMod
                             if (GetGameMode() == TrophyGameMode.TrophyBlitz)
                             {
                                 timerValue = NUM_SECONDS_IN_TWO_HOURS - timerValue;
+                            }
+                            else if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
+                            {
+                                timerValue = NUM_SECONDS_IN_THREE_HOURS - timerValue;
                             }
                             else
                             {
