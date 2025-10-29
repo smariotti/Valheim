@@ -42,7 +42,7 @@ namespace TrophyHuntMod
 
         private const Boolean UPDATE_LEADERBOARD = false; // SET TO TRUE WHEN PTB IS LIVE
 
-        public const string PluginVersion = "0.10.3";
+        public const string PluginVersion = "0.10.4";
         private readonly Harmony harmony = new Harmony(PluginGUID);
 
         // Configuration variables
@@ -5427,6 +5427,7 @@ namespace TrophyHuntMod
 
         private static void RevealNextBoss(string bossKilled)
         {
+            bool wasABoss = false;
             switch (bossKilled)
             {
                 case "$enemy_eikthyr":
@@ -5434,37 +5435,43 @@ namespace TrophyHuntMod
                     RevealByName("Vendor_BlackForest", "Haldor", Minimap.PinType.Icon3, 100);
                     if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
                         RaiseAllPlayerSkills(20);
+                    wasABoss = true;
                     break;
                 case "$enemy_gdking":
                     RevealBoss("$enemy_bonemass");
                     RevealByName("BogWitch_Camp", "BogWitch", Minimap.PinType.Icon3, 100);
                     if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
                         RaiseAllPlayerSkills(30);
+                    wasABoss = true;
                     break;
                 case "$enemy_bonemass":
                     RevealBoss("$enemy_dragon");
                     RevealByName("Hildir_camp", "Hildir", Minimap.PinType.Icon3, 100);
                     if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
                         RaiseAllPlayerSkills(40);
+                    wasABoss = true;
                     break;
                 case "$enemy_dragon":
                     RevealBoss("$enemy_goblinking");
                     if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
                         RaiseAllPlayerSkills(50);
+                    wasABoss = true;
                     break;
                 case "$enemy_goblinking":
                     RevealBoss("$enemy_seekerqueen");
                     if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
                         RaiseAllPlayerSkills(70);
+                    wasABoss = true;
                     break;
                 case "$enemy_seekerqueen":
                     RevealBoss("$enemy_fader");
                     if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
                         RaiseAllPlayerSkills(90);
+                    wasABoss = true;
                     break;
             }
 
-            if (Player.m_localPlayer != null)
+            if (Player.m_localPlayer != null && wasABoss)
             {
                 Player.m_localPlayer.Message(MessageHud.MessageType.Center, "You have gained wisdom and knowledge.");
             }
@@ -5581,6 +5588,24 @@ namespace TrophyHuntMod
                     if (__instance != null)
                     {
                         __instance.m_delay = 9.0f;
+
+                        Debug.LogError("SE_Cozy_Setup_Patch: StatusEffect: " + __instance.m_statusEffect);
+                    }
+                }
+            }
+        }
+
+        [HarmonyPatch(typeof(SE_Puke), nameof(SE_Puke.Setup), new[] { typeof(Character) })]
+        public static class SE_Puke_Setup_Patch
+        {
+            static void Postfix(SE_Puke __instance, Character character)
+            {
+                if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
+                {
+                    if (__instance != null && character != null)
+                    {
+                        int statusEffectHash = StringExtensionMethods.GetStableHashCode("Rested");
+                        character.GetSEMan().AddStatusEffect(statusEffectHash, resetTime: true);
                     }
                 }
             }

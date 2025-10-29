@@ -273,6 +273,13 @@ You can learn more on the Valheim Speedrun Discord channel here: https://discord
 You can find the github at: https://github.com/smariotti/Valheim/tree/master/TrophyHuntMod
 
 ## Change Log
+v0.10.4
+- Emergency Hotfix!
+  - Stopped "You have gained wisdom and knowledge" message from showing up after every kill.
+- Trailblazer!
+  - Fast resting (10 seconds). Plus a new way to get rested.
+
+## Change Log
 v0.10.3
 - Trophy Blitz
   - Add items craft at max quality (fully upgraded)
