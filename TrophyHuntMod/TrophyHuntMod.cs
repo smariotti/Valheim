@@ -5571,6 +5571,20 @@ namespace TrophyHuntMod
             }
         }
 
+        [HarmonyPatch(typeof(SE_Cozy), nameof(SE_Cozy.Setup), new[] { typeof(Character) })]
+        public static class SE_Cozy_Setup_Patch
+        {
+            static void Postfix(SE_Cozy __instance, Character character)
+            {
+                if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
+                {
+                    if (__instance != null)
+                    {
+                        __instance.m_delay = 9.0f;
+                    }
+                }
+            }
+        }
         //static int __m_oldCraftedItemQuality = 1;
         //[HarmonyPatch(typeof(Inventory), nameof(Inventory.AddItem))]
         //public static class Inventory_AddItem2_Patch
