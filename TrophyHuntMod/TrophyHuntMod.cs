@@ -361,7 +361,7 @@ namespace TrophyHuntMod
         // In game timer
         static long __m_gameTimerElapsedSeconds = 0;
         static bool __m_gameTimerActive = false;
-        static bool __m_gameTimerVisible = true;
+        static bool __m_gameTimerVisible = false;
         static bool __m_gameTimerCountdown = true;
 
         const long UPDATE_STANDINGS_INTERVAL = 30;  // Update standings every 30 seconds
@@ -2638,22 +2638,31 @@ namespace TrophyHuntMod
             }
         }
 
+        static public bool __m_isFlashingScore = false;
         static IEnumerator DoFlashScore()
         {
+            if (__m_isFlashingScore)
+                yield return null;
+
             if (__m_scoreTextElement != null)
             {
+                __m_isFlashingScore = true;
                 TMPro.TextMeshProUGUI tmText = __m_scoreTextElement.GetComponent<TMPro.TextMeshProUGUI>();
                 Color oldTextColor = tmText.color;
+                float oldFontSize = tmText.fontSize;
                 for (int count=0; count < 8; count++)
                 {
                     for (float x = 0.0f; x < Math.PI*2; x += (float)(Math.PI/6.0))
                     {
                         float scale = (1.0f + (float)Math.Sin((double)x)) * 0.5f;
                         tmText.color = Color.Lerp(Color.black, Color.white, scale); ;
+                        tmText.fontSize = oldFontSize + (scale * 1.25f);
                         yield return new WaitForSeconds(0.033f);
                     }
                 }
                 tmText.color = oldTextColor;
+                tmText.fontSize = oldFontSize;
+                __m_isFlashingScore = false;
             }
         }
 
@@ -5473,7 +5482,10 @@ namespace TrophyHuntMod
 
             if (Player.m_localPlayer != null && wasABoss)
             {
-                Player.m_localPlayer.Message(MessageHud.MessageType.Center, "You have gained wisdom and knowledge.");
+                if (GetGameMode()==TrophyGameMode.TrophyBlitz)
+                    Player.m_localPlayer.Message(MessageHud.MessageType.Center, "You have gained knowledge.");
+                else
+                    Player.m_localPlayer.Message(MessageHud.MessageType.Center, "You have gained wisdom and knowledge.");
             }
         }
 
