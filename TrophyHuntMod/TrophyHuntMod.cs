@@ -42,7 +42,7 @@ namespace TrophyHuntMod
 
         private const Boolean UPDATE_LEADERBOARD = false; // SET TO TRUE WHEN PTB IS LIVE
 
-        public const string PluginVersion = "0.10.4";
+        public const string PluginVersion = "0.10.5";
         private readonly Harmony harmony = new Harmony(PluginGUID);
 
         // Configuration variables
@@ -2628,7 +2628,7 @@ namespace TrophyHuntMod
                     {
                         // Flash it with a CoRoutine
                         __m_trophyHuntMod.StartCoroutine(FlashImage(image, imageRect));
-                        __m_trophyHuntMod.StartCoroutine(DoFlashScore());
+//                        __m_trophyHuntMod.StartCoroutine(DoFlashScore());
                     }
                 }
             }
@@ -5484,7 +5484,7 @@ namespace TrophyHuntMod
             {
                 if (GetGameMode()==TrophyGameMode.TrophyBlitz)
                     Player.m_localPlayer.Message(MessageHud.MessageType.Center, "You have gained knowledge.");
-                else
+                else if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
                     Player.m_localPlayer.Message(MessageHud.MessageType.Center, "You have gained wisdom and knowledge.");
             }
         }
