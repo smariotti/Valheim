@@ -4022,6 +4022,7 @@ namespace TrophyHuntMod
                                                     new SpecialSagaDrop("Feathers",         20, 4, 8, false),
 //                                                    new SpecialSagaDrop("CookedDeerMeat",   8,  1, 2, false),
                                                     new SpecialSagaDrop("Acorn",            3,  1, 2, false),
+                                                    new SpecialSagaDrop("CarrotSeeds",      8,  1, 3, false),
                                                     new SpecialSagaDrop("TurnipSeeds",      4,  1, 3, false),
                                                     new SpecialSagaDrop("QueenBee",         6,  1, 1, false),
                                                     new SpecialSagaDrop("Honey",            8,  2, 3, false),
