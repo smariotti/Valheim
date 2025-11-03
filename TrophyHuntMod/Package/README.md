@@ -273,6 +273,18 @@ You can learn more on the Valheim Speedrun Discord channel here: https://discord
 You can find the github at: https://github.com/smariotti/Valheim/tree/master/TrophyHuntMod
 
 ## Change Log
+v0.10.6
+- Fixed Tracker updates for Tournaments, mea culpa
+- Added a Bonus for completing all biomes in applicable game modes (50 points)
+- Adjusted Geirrhafa trophy to 60 points (up from 45 points)
+- Trailblazer
+  - Adjusted skill leveling for later bosses: same knowledge, less wisdom
+- Trophy Blitz and Trailblazer
+  - Award 5 points per minute under the time limit if completing Trophies early
+  - Internal timer used for local play, GMT top of the hour used for Tournament play
+	- Synchronizing to Tracker website planned for the future
+
+
 v0.10.5
 - Casul timer not visible by default
 - Text tweaks

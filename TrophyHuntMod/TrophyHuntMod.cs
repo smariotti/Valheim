@@ -170,6 +170,8 @@ namespace TrophyHuntMod
         const float TROPHY_TRAILBLAZER_BASE_SKILL_LEVEL = 1.0f;
         const float TROPHY_TRAILBLAZER_SKILL_GAIN_RATE = 6.0f;
 
+        const int EXTRA_MINUTE_SCORE_VALUE = 5;
+
         const string TROPHY_SAGA_INTRO_TEXT = "You were once a great warrior, though your memory of deeds past has long grown dim, shrouded by eons slumbering in the lands beyond death…\n\n\n\n" +
             "Ragnarok looms and the tenth world remains only for a few scant hours. You are reborn with one purpose: collect the heads of Odin's enemies before this cycle ends…\n\n\n\n" +
             "Odin will cast these heads into the well of Mimir where his lost eye still resides. With knowledge of the Forsaken he can finally banish them forever…\n\n\n" +
@@ -233,7 +235,7 @@ namespace TrophyHuntMod
             new TrophyHuntData("TrophyCharredMage",             "Charred Warlock",  Biome.Ashlands,     50,     5,      new List<string> { "$enemy_charred_mage" }),
             new TrophyHuntData("TrophyCharredMelee",            "Charred Warrior",  Biome.Ashlands,     50,     5,      new List<string> { "$enemy_charred_melee" }),
             new TrophyHuntData("TrophyCultist",                 "Cultist",          Biome.Mountains,    30,     10,     new List<string> { "$enemy_fenringcultist" }),
-            new TrophyHuntData("TrophyCultist_Hildir",          "Geirrhafa",        Biome.Hildir,       45,     100,    new List<string> { "$enemy_fenringcultist_hildir" }),
+            new TrophyHuntData("TrophyCultist_Hildir",          "Geirrhafa",        Biome.Hildir,       60,     100,    new List<string> { "$enemy_fenringcultist_hildir" }),
             new TrophyHuntData("TrophyDeathsquito",             "Deathsquito",      Biome.Plains,       30,     5,      new List<string> { "$enemy_deathsquito" }),
             new TrophyHuntData("TrophyDeer",                    "Deer",             Biome.Meadows,      10,     50,     new List<string> { "$enemy_deer" }),
             new TrophyHuntData("TrophyDragonQueen",             "Moder",            Biome.Mountains,    100,    100,    new List<string> { "$enemy_dragon" }),
@@ -363,6 +365,7 @@ namespace TrophyHuntMod
         static bool __m_gameTimerActive = false;
         static bool __m_gameTimerVisible = false;
         static bool __m_gameTimerCountdown = true;
+        static long __m_internalTimerElapsedSeconds = 0;
 
         const long UPDATE_STANDINGS_INTERVAL = 30;  // Update standings every 30 seconds
 
@@ -461,6 +464,7 @@ namespace TrophyHuntMod
 
         // Currently computed score value
         static int __m_playerCurrentScore = 0;
+        static int __m_extraTimeScore = 0;
 
         // Log of in-game events we track
         static public List<PlayerEventLog> __m_playerEventLog = new List<PlayerEventLog>();
@@ -486,6 +490,8 @@ namespace TrophyHuntMod
 
         // Biomes we've completed 
         static List<Biome> __m_completedBiomeBonuses = new List<Biome>();
+        static bool __m_completedAllBiomeBonuses = false;
+        static int ALL_BIOME_BONUS_SCORE = 50;
 
         //
         // SAVE DATA SECTION
@@ -541,6 +547,7 @@ namespace TrophyHuntMod
             public List<TrophyPin> m_trophyPins;
 
             public long m_gameTimerElapsedSeconds;
+            public long m_internalTimerElapsedSeconds;
             public bool m_gameTimerActive;
             public bool m_gameTimerVisible;
             public bool m_gameTimerCountdown;
@@ -628,6 +635,7 @@ namespace TrophyHuntMod
 
             // Game timer settings
             saveData.m_gameTimerElapsedSeconds = __m_gameTimerElapsedSeconds;
+            saveData.m_internalTimerElapsedSeconds = __m_internalTimerElapsedSeconds;
             saveData.m_gameTimerActive = __m_gameTimerActive;
             saveData.m_gameTimerVisible = __m_gameTimerVisible;
             saveData.m_gameTimerCountdown = __m_gameTimerCountdown;
@@ -691,6 +699,11 @@ namespace TrophyHuntMod
             if (__m_gameTimerElapsedSeconds < saveData.m_gameTimerElapsedSeconds)
             {
                 __m_gameTimerElapsedSeconds = saveData.m_gameTimerElapsedSeconds;
+            }
+
+            if (__m_internalTimerElapsedSeconds < saveData.m_internalTimerElapsedSeconds)
+            {
+                __m_internalTimerElapsedSeconds = saveData.m_internalTimerElapsedSeconds;
             }
             __m_gameTimerActive = saveData.m_gameTimerActive;
             __m_gameTimerVisible = saveData.m_gameTimerVisible;
@@ -1415,6 +1428,7 @@ namespace TrophyHuntMod
 
             // In-Game Timer 
             __m_gameTimerElapsedSeconds = 0;
+            __m_internalTimerElapsedSeconds = 0;
 
             //                __m_gameTimerVisible = false;
             TimerStart();
@@ -1440,6 +1454,10 @@ namespace TrophyHuntMod
             // Clear the dropped trophies tracking data
             InitializeTrophyDropInfo();
 
+            __m_completedAllBiomeBonuses = false;
+            __m_completedBiomeBonuses.Clear();
+            __m_extraTimeScore = 0;
+
             if (__m_playerEventLog != null)
             {
                 __m_playerEventLog.Clear();
@@ -1452,6 +1470,24 @@ namespace TrophyHuntMod
             __m_trophyPins.Clear();
 
             __m_introMessageDisplayed = false;
+        }
+
+        static public int GetGameModeTimeLength()
+        {
+            int minutes = 0;
+            switch (GetGameMode())
+            {
+                case TrophyGameMode.TrophyHunt: minutes = (int)NUM_SECONDS_IN_FOUR_HOURS / 60; break;
+                case TrophyGameMode.TrophyRush: minutes = (int)NUM_SECONDS_IN_FOUR_HOURS / 60; break;
+                case TrophyGameMode.TrophySaga: minutes = (int)NUM_SECONDS_IN_FOUR_HOURS / 60; break;
+                case TrophyGameMode.TrophyBlitz: minutes = (int)NUM_SECONDS_IN_TWO_HOURS / 60; break;
+                case TrophyGameMode.TrophyTrailblazer: minutes = (int)NUM_SECONDS_IN_THREE_HOURS / 60; break;
+                case TrophyGameMode.CasualSaga: minutes = 0; break;
+                case TrophyGameMode.CulinarySaga: minutes = (int)NUM_SECONDS_IN_FOUR_HOURS / 60; break;
+
+
+            }
+            return minutes;
         }
 
         public static int CalculateCookingPoints(bool displayToLog = false)
@@ -1550,6 +1586,23 @@ namespace TrophyHuntMod
             int logoutScore = __m_logoutCount * GetLogoutPointCost();
 
             return logoutScore;
+        }
+
+        public static void CalculateExtraTimeScore()
+        {
+            // Called at the time when the trophies are all collected
+            if (__m_tournamentStatus != TournamentStatus.Live)
+            {
+                int minutesToHour = 60 - DateTime.Now.Minute;
+                __m_extraTimeScore = EXTRA_MINUTE_SCORE_VALUE * minutesToHour;// minutes until top of the hour
+            }
+            else
+            {
+                int totalMinutes = GetGameModeTimeLength();
+                int minutesRemaining = totalMinutes - (int)__m_internalTimerElapsedSeconds / 60;
+                __m_extraTimeScore = EXTRA_MINUTE_SCORE_VALUE * minutesRemaining;
+            }
+                
         }
 
         static void BuildUIElements()
@@ -1688,12 +1741,13 @@ namespace TrophyHuntMod
                         }
                     }
 
-                    //if (__m_gameTimerElapsedSeconds % UPDATE_STANDINGS_INTERVAL == 0)
-                    //{
-                    //    PostStandingsRequest();
-                    //}
+                    if (__m_internalTimerElapsedSeconds % UPDATE_STANDINGS_INTERVAL == 0)
+                    {
+                        PostStandingsRequest();
+                    }
 
                     __m_gameTimerElapsedSeconds++;
+                    __m_internalTimerElapsedSeconds++;
                 }
                 yield return new WaitForSeconds(1f);
             }
@@ -2248,6 +2302,11 @@ namespace TrophyHuntMod
                 }
             }
 
+            if (__m_completedAllBiomeBonuses)
+            {
+                bonusScore += ALL_BIOME_BONUS_SCORE;
+            }
+
             return bonusScore;
         }
 
@@ -2383,6 +2442,9 @@ namespace TrophyHuntMod
             {
                 score += CalculateBiomeBonusScore(player);
             }
+
+            score += __m_extraTimeScore;
+
 
             // Update the Score string
             if (__m_scoreTextElement)
@@ -2727,12 +2789,14 @@ namespace TrophyHuntMod
                                 FlashBiomeTrophies(name);
                             }
                         }
-                        else if (GetGameMode() == TrophyGameMode.TrophySaga)
+
+                        if (__m_trophyCache.Count == __m_trophyHuntData.Length && !__m_completedAllBiomeBonuses)
                         {
-                            if (__m_trophyCache.Count == __m_trophyHuntData.Length)
-                            {
-                                MessageHud.instance.ShowBiomeFoundMsg("Odin is Pleased", playStinger: true);
-                            }
+                            MessageHud.instance.ShowBiomeFoundMsg("Odin is Pleased", playStinger: true);
+                            string bonusString = "BonusAll";
+                            AddPlayerEvent(PlayerEventType.Misc, bonusString, __instance.transform.position);
+                            __m_completedAllBiomeBonuses = true;
+                            CalculateExtraTimeScore();
                         }
 
                         UpdateModUI(player);
@@ -3057,9 +3121,9 @@ namespace TrophyHuntMod
         static Dictionary<TrophyGameMode, Vector2> __toolTipSizes = new Dictionary<TrophyGameMode, Vector2>()
             {
                 { TrophyGameMode.TrophyHunt, new Vector2(240, 215) },
-                { TrophyGameMode.TrophyRush, new Vector2(290, 380) },
-                { TrophyGameMode.TrophyBlitz, new Vector2(290, 380) },
-                { TrophyGameMode.TrophyTrailblazer, new Vector2(290, 380) },
+                { TrophyGameMode.TrophyRush, new Vector2(290, 400) },
+                { TrophyGameMode.TrophyBlitz, new Vector2(290, 400) },
+                { TrophyGameMode.TrophyTrailblazer, new Vector2(290, 400) },
                 { TrophyGameMode.CasualSaga, new Vector2(300, 170) },
                 { TrophyGameMode.TrophySaga, new Vector2(290, 215) },
                 { TrophyGameMode.CulinarySaga, new Vector2(240, 215) },
@@ -3193,6 +3257,17 @@ namespace TrophyHuntMod
                         text += $"    {biomeBonus.m_biomeName} (+{biomeBonus.m_bonus}): <color=orange>{numCollected}/{numTotal}</color> <color=yellow>(+{bonusScore} Points)</color>\n";
 
                         earnedPoints += bonusScore;
+
+                    }
+                    if (__m_completedAllBiomeBonuses)
+                    {
+                        text += $"    All Biomes: <color=orange>{ALL_BIOME_BONUS_SCORE}</color>\n";
+                        earnedPoints += ALL_BIOME_BONUS_SCORE;
+                    }
+                    if (__m_extraTimeScore > 0)
+                    {
+                        text += $"    Extra Time: <color=orange>{__m_extraTimeScore/EXTRA_MINUTE_SCORE_VALUE}</color> min <color=yellow>(+{__m_extraTimeScore} Points)</color>\n";
+                        earnedPoints += __m_extraTimeScore;
                     }
                 }
 
@@ -5470,13 +5545,13 @@ namespace TrophyHuntMod
                 case "$enemy_goblinking":
                     RevealBoss("$enemy_seekerqueen");
                     if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
-                        RaiseAllPlayerSkills(70);
+                        RaiseAllPlayerSkills(60);
                     wasABoss = true;
                     break;
                 case "$enemy_seekerqueen":
                     RevealBoss("$enemy_fader");
                     if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
-                        RaiseAllPlayerSkills(90);
+                        RaiseAllPlayerSkills(80);
                     wasABoss = true;
                     break;
             }
@@ -5988,7 +6063,7 @@ namespace TrophyHuntMod
 
         static public IEnumerator UnityPostRequest(string url, string json)
         {
-            //                Debug.LogWarning($"UnityPostRequest(): {url}\n{json}");
+                            Debug.LogWarning($"UnityPostRequest(): {url}\n{json}");
 
             UnityWebRequest request = UnityWebRequest.Post(url, json, "application/json");
             yield return request.SendWebRequest();
@@ -5999,10 +6074,10 @@ namespace TrophyHuntMod
             }
             else
             {
-                //                    Debug.Log("Form upload complete!");
+                                    Debug.Log("Form upload complete!");
             }
 
-            //                Debug.LogWarning($"UnityPostRequest(): Result: {request.result.ToString()}");
+                            Debug.LogWarning($"UnityPostRequest(): Result: {request.result.ToString()}");
 
         }
 
@@ -6012,6 +6087,8 @@ namespace TrophyHuntMod
             {
                 return;
             }
+
+            Debug.LogWarning($"PostTrackLogs(): { force }");
 
             TrackLogs trackLogs = new TrackLogs();
 
@@ -6032,7 +6109,7 @@ namespace TrophyHuntMod
 
             string json = JsonConvert.SerializeObject(trackLogs);
 
-            //                Debug.LogWarning(json);
+                            Debug.LogWarning(json);
 
             string url = "https://valheim.help/api/track/logs";
 
@@ -6044,17 +6121,18 @@ namespace TrophyHuntMod
             if (!CanPostToTracker())
                 return;
 
+            Debug.LogWarning($"PostTrackLogEntry(): {eventName}, {score}");
+
             TrackLogEntry entry = new TrackLogEntry();
 
             entry.id = __m_configDiscordId.Value;
             entry.seed = __m_storedWorldSeed;
             entry.score = score;
             entry.code = eventName;
-            //                entry.at = DateTime.UtcNow.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
-
+            
             string json = JsonConvert.SerializeObject(entry);
 
-            //                Debug.LogWarning($"PostTrackLogEntry: {json}");
+                            Debug.LogWarning($"PostTrackLogEntry: {json}");
 
             string url = "https://valheim.help/api/track/log";
 
@@ -6160,7 +6238,7 @@ namespace TrophyHuntMod
 
                 if (webRequest.result == UnityWebRequest.Result.Success)
                 {
-                    //                        Debug.Log($"Standings Recieved: {webRequest.downloadHandler.text}");
+                                            Debug.LogWarning($"Standings Recieved: {webRequest.downloadHandler.text}");
 
                     string responseText = webRequest.downloadHandler.text;
 
@@ -6228,7 +6306,12 @@ namespace TrophyHuntMod
 
         public static void PostStandingsRequest()
         {
-            if (!CanPostToTracker())
+            if (__m_invalidForTournamentPlay)
+            {
+                return;
+            }
+
+            if (!__m_loggedInWithDiscord)
             {
                 return;
             }
@@ -6238,7 +6321,7 @@ namespace TrophyHuntMod
             string seed = __m_storedWorldSeed;
             string mode = GetGameMode().ToString();
             string url = $"{standingsUrl}?seed={seed}&mode={mode}";
-            //                Debug.Log($"Standings Request: {url}");
+                            Debug.LogWarning($"Standings Request: {url}");
             __m_trophyHuntMod.StartCoroutine(UnityGetStandingsRequest(url));
         }
 
