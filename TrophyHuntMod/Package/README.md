@@ -273,6 +273,12 @@ You can learn more on the Valheim Speedrun Discord channel here: https://discord
 You can find the github at: https://github.com/smariotti/Valheim/tree/master/TrophyHuntMod
 
 ## Change Log
+v0.10.7
+- Removed debug logging messages
+- Fixed "time remaining" logic for Trophy Blitz and Trailblazer modes (was incorrect and in some wrong modes)
+- Display Game Mode and Version in above the Mini Map
+- Fixed internal version number
+
 v0.10.6
 - Fixed Tracker updates for Tournaments, mea culpa
 - Added a Bonus for completing all biomes in applicable game modes (50 points)
