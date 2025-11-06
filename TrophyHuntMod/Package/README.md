@@ -273,6 +273,10 @@ You can learn more on the Valheim Speedrun Discord channel here: https://discord
 You can find the github at: https://github.com/smariotti/Valheim/tree/master/TrophyHuntMod
 
 ## Change Log
+v0.10.8
+- Adjusted Geirrhafa trophy to 55 points
+- Whitelisted Yakkity Fast
+
 v0.10.7
 - Removed debug logging messages
 - Fixed "time remaining" logic for Trophy Blitz and Trailblazer modes (was incorrect and in some wrong modes)
