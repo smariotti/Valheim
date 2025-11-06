@@ -30,6 +30,7 @@ using System.Runtime.Remoting.Messaging;
 using static System.Net.Mime.MediaTypeNames;
 using Newtonsoft.Json.Linq;
 using static ClutterSystem;
+using static Minimap;
 
 namespace TrophyHuntMod
 {
@@ -42,7 +43,7 @@ namespace TrophyHuntMod
 
         private const Boolean UPDATE_LEADERBOARD = false; // SET TO TRUE WHEN PTB IS LIVE
 
-        public const string PluginVersion = "0.10.7";
+        public const string PluginVersion = "0.10.8";
         private readonly Harmony harmony = new Harmony(PluginGUID);
 
         // Configuration variables
@@ -235,7 +236,7 @@ namespace TrophyHuntMod
             new TrophyHuntData("TrophyCharredMage",             "Charred Warlock",  Biome.Ashlands,     50,     5,      new List<string> { "$enemy_charred_mage" }),
             new TrophyHuntData("TrophyCharredMelee",            "Charred Warrior",  Biome.Ashlands,     50,     5,      new List<string> { "$enemy_charred_melee" }),
             new TrophyHuntData("TrophyCultist",                 "Cultist",          Biome.Mountains,    30,     10,     new List<string> { "$enemy_fenringcultist" }),
-            new TrophyHuntData("TrophyCultist_Hildir",          "Geirrhafa",        Biome.Hildir,       60,     100,    new List<string> { "$enemy_fenringcultist_hildir" }),
+            new TrophyHuntData("TrophyCultist_Hildir",          "Geirrhafa",        Biome.Hildir,       55,     100,    new List<string> { "$enemy_fenringcultist_hildir" }),
             new TrophyHuntData("TrophyDeathsquito",             "Deathsquito",      Biome.Plains,       30,     5,      new List<string> { "$enemy_deathsquito" }),
             new TrophyHuntData("TrophyDeer",                    "Deer",             Biome.Meadows,      10,     50,     new List<string> { "$enemy_deer" }),
             new TrophyHuntData("TrophyDragonQueen",             "Moder",            Biome.Mountains,    100,    100,    new List<string> { "$enemy_dragon" }),
@@ -831,6 +832,7 @@ namespace TrophyHuntMod
             "org.bepinex.valheim.displayinfo",
             "com.oathorse.TrophyHuntMod",
             "com.oathorse.Tuba",
+            "com.oathorse.Yakkity",
             "wearable_trophies",
 //            "AzuAntiArthriticCrafting"
         };
@@ -7367,6 +7369,88 @@ namespace TrophyHuntMod
                 }
             }
         }
+/*
+        static bool PlaceAPortalHere(Vector3 pos, string name)
+        {
+            if (Player.m_localPlayer != null)
+            {
+                var allPieces = Resources.FindObjectsOfTypeAll<Piece>();
+
+                Piece portalPiece = null;
+                foreach (var piece in allPieces)
+                {
+                    //                        Debug.LogWarning($"Piece: {piece.m_name}");
+                    if (piece.m_name == ("$piece_portal"))
+                    {
+                        portalPiece = piece;
+                        Debug.LogWarning($"Found Portal Piece");
+                        break;
+                    }
+                }
+                if (portalPiece)
+                {
+                    float floor = 0;
+                    Vector3 placePos = pos;
+                    if (ZoneSystem.instance.GetGroundHeight(pos, out floor))
+                    {
+                        WaterVolume waterVolume = null;
+                        float waterLevel = Floating.GetWaterLevel(pos, ref waterVolume);
+                        Debug.LogWarning($"Ground height at {pos} is {floor}, water level is {waterLevel}");
+                        floor = Math.Max(floor, waterLevel);
+                        placePos.y = floor;
+                    }
+                    Debug.LogWarning($"Placing Portal {portalPiece.m_name} at {placePos} (playerPos: {Player.m_localPlayer.transform.position})");
+
+                    Player.m_localPlayer.PlacePiece(portalPiece, placePos, Quaternion.identity, false);
+
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        static PinData __m_lastNamePin = null;
+
+        [HarmonyPatch(typeof(Minimap), nameof(Minimap.HidePinTextInput))]
+        public static class Minimap_HidePinTextInput_Patch
+        {
+            public static bool Prefix(Minimap __instance, bool delayTextInput)
+            {
+                Debug.LogWarning($"Minimap.HidePinTextInput()");
+                __m_lastNamePin = __instance.m_namePin;
+                return true;
+            }
+        }
+
+        [HarmonyPatch(typeof(Minimap), nameof(Minimap.OnPinTextEntered))]
+        public static class Minimap_OnPinTextEntered_Patch
+        {
+            public static void Postfix(Minimap __instance, string t)
+            {
+                if (__instance == null)
+                {
+                    return;
+                }
+
+                Debug.LogWarning($"Minimap.OnPinTextEntered()");
+
+                PinData pinData = __m_lastNamePin;
+                if (pinData == null)
+                {
+                    Debug.LogWarning($"No PinData");
+
+                    return;
+                }
+
+                if (pinData.m_type == PinType.Icon4)
+                {
+                    PlaceAPortalHere(pinData.m_pos, __m_lastNamePin.m_name);
+                }
+                __m_lastNamePin = null;
+            }
+        }
+*/
     }
 }
 
