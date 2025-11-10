@@ -6,6 +6,10 @@ Moving fast now has the soundtrack that it deserves... so long as you keep movin
 
 Yeah, it is, but it's also kinda fun.
 
+## Streamers Be Warned!
+
+Read below for details if you're live streaming with this mod enabled. You may be subject to Copyright claims.
+
 ## Controlling It
 
 `/yakkity unleashed`
@@ -63,6 +67,19 @@ Start Grace Period = 1
 Stop Grace Period = 3
 ```
 
+## Streamer Warning
+"Yakety Sax" is copyrighted by Sony/ATV Tree Publishing, and the song's writers are Randy Randolph and James Rich. To use the song, permission is required from the copyright holder, which can be obtained by contacting the publisher, Sony/ATV Tree Publishing. 
+
+I'm warning streamers, as you may get a copyright claim. Youtube can flag your video as containing copyrighted material.
+
+I'm furnishing the mod for fun, and for your own personal enjoyment and take full responsibility for redistributing that song.
+
+FWIW, apparently the copyright holder (Sony) allows this song to be used on YouTube. Their copyright claim does not restrict most uses of this song on YouTube. Though there may be restrictions to monetization for YouTube Partners.
+
 ## Change Log
+v0.1.1
+- Fade music as you start timing out when speed is below the minimum
+- Include Copyright Claim information in the README for Streamers
+
 v0.1.0 
 - Initial Release, defaults to "unleashed" mode

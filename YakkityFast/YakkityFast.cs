@@ -17,7 +17,7 @@ namespace YakkityFast
     {
         public const string PluginGUID = "com.oathorse.Yakkity";
         public const string PluginName = "Yakkity Fast";
-        public const string PluginVersion = "0.1.0";
+        public const string PluginVersion = "0.1.1";
         private readonly Harmony harmony = new Harmony(PluginGUID);
 
         private ConfigEntry<float> m_minSpeed;
@@ -205,6 +205,7 @@ namespace YakkityFast
                     else
                     {
                         DebugLog($"YF: Stop Audio m_gracePeriodTimer: {m_gracePeriodTimer}");
+                        m_audioSource.volume = m_gracePeriodTimer / m_stopGracePeriod.Value;
                     }
                 }
                 else

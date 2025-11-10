@@ -7369,88 +7369,213 @@ namespace TrophyHuntMod
                 }
             }
         }
-/*
-        static bool PlaceAPortalHere(Vector3 pos, string name)
-        {
-            if (Player.m_localPlayer != null)
-            {
-                var allPieces = Resources.FindObjectsOfTypeAll<Piece>();
-
-                Piece portalPiece = null;
-                foreach (var piece in allPieces)
+        /*
+                static bool PlaceAPortalHere(Vector3 pos, string name)
                 {
-                    //                        Debug.LogWarning($"Piece: {piece.m_name}");
-                    if (piece.m_name == ("$piece_portal"))
+                    if (Player.m_localPlayer != null)
                     {
-                        portalPiece = piece;
-                        Debug.LogWarning($"Found Portal Piece");
-                        break;
+                        var allPieces = Resources.FindObjectsOfTypeAll<Piece>();
+
+                        Piece portalPiece = null;
+                        foreach (var piece in allPieces)
+                        {
+                            //                        Debug.LogWarning($"Piece: {piece.m_name}");
+                            if (piece.m_name == ("$piece_portal"))
+                            {
+                                portalPiece = piece;
+                                Debug.LogWarning($"Found Portal Piece");
+                                break;
+                            }
+                        }
+                        if (portalPiece)
+                        {
+                            float floor = 0;
+                            Vector3 placePos = pos;
+                            if (ZoneSystem.instance.GetGroundHeight(pos, out floor))
+                            {
+                                WaterVolume waterVolume = null;
+                                float waterLevel = Floating.GetWaterLevel(pos, ref waterVolume);
+                                Debug.LogWarning($"Ground height at {pos} is {floor}, water level is {waterLevel}");
+                                floor = Math.Max(floor, waterLevel);
+                                placePos.y = floor;
+                            }
+                            Debug.LogWarning($"Placing Portal {portalPiece.m_name} at {placePos} (playerPos: {Player.m_localPlayer.transform.position})");
+
+                            Player.m_localPlayer.PlacePiece(portalPiece, placePos, Quaternion.identity, false);
+
+                            return true;
+                        }
+                    }
+
+                    return false;
+                }
+
+                static PinData __m_lastNamePin = null;
+
+                [HarmonyPatch(typeof(Minimap), nameof(Minimap.HidePinTextInput))]
+                public static class Minimap_HidePinTextInput_Patch
+                {
+                    public static bool Prefix(Minimap __instance, bool delayTextInput)
+                    {
+                        Debug.LogWarning($"Minimap.HidePinTextInput()");
+                        __m_lastNamePin = __instance.m_namePin;
+                        return true;
                     }
                 }
-                if (portalPiece)
+
+                [HarmonyPatch(typeof(Minimap), nameof(Minimap.OnPinTextEntered))]
+                public static class Minimap_OnPinTextEntered_Patch
                 {
-                    float floor = 0;
-                    Vector3 placePos = pos;
-                    if (ZoneSystem.instance.GetGroundHeight(pos, out floor))
+                    public static void Postfix(Minimap __instance, string t)
                     {
-                        WaterVolume waterVolume = null;
-                        float waterLevel = Floating.GetWaterLevel(pos, ref waterVolume);
-                        Debug.LogWarning($"Ground height at {pos} is {floor}, water level is {waterLevel}");
-                        floor = Math.Max(floor, waterLevel);
-                        placePos.y = floor;
+                        if (__instance == null)
+                        {
+                            return;
+                        }
+
+                        Debug.LogWarning($"Minimap.OnPinTextEntered()");
+
+                        PinData pinData = __m_lastNamePin;
+                        if (pinData == null)
+                        {
+                            Debug.LogWarning($"No PinData");
+
+                            return;
+                        }
+
+                        if (pinData.m_type == PinType.Icon4)
+                        {
+                            PlaceAPortalHere(pinData.m_pos, __m_lastNamePin.m_name);
+                        }
+                        __m_lastNamePin = null;
                     }
-                    Debug.LogWarning($"Placing Portal {portalPiece.m_name} at {placePos} (playerPos: {Player.m_localPlayer.transform.position})");
+                }
+        */
 
-                    Player.m_localPlayer.PlacePiece(portalPiece, placePos, Quaternion.identity, false);
-
-                    return true;
+        // Run right after ObjectDB.Awake finishes setting up its lists
+        [HarmonyPatch(typeof(ObjectDB), nameof(ObjectDB.Awake))]
+        static class ObjectDB_Awake_Patch
+        {
+            static void Postfix(ObjectDB __instance)
+            {
+                try
+                {
+                    RegisterCupid(__instance);
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogError("[Cupid] Register error: " + e);
                 }
             }
 
-            return false;
-        }
-
-        static PinData __m_lastNamePin = null;
-
-        [HarmonyPatch(typeof(Minimap), nameof(Minimap.HidePinTextInput))]
-        public static class Minimap_HidePinTextInput_Patch
-        {
-            public static bool Prefix(Minimap __instance, bool delayTextInput)
+            static void RegisterCupid(ObjectDB odb)
             {
-                Debug.LogWarning($"Minimap.HidePinTextInput()");
-                __m_lastNamePin = __instance.m_namePin;
-                return true;
-            }
-        }
+                // guard: only run once
+                if (odb == null) return;
+                if (odb.m_items.Any(go => go != null && go.name == "arrow_cupid")) return;
 
-        [HarmonyPatch(typeof(Minimap), nameof(Minimap.OnPinTextEntered))]
-        public static class Minimap_OnPinTextEntered_Patch
-        {
-            public static void Postfix(Minimap __instance, string t)
-            {
-                if (__instance == null)
+                // find the wood arrow prefab (common name used in 0.221.3)
+                GameObject wood = odb.m_items.FirstOrDefault(go =>
                 {
+                    if (go == null) return false;
+                    var idrop = go.GetComponent<ItemDrop>();
+                    return idrop != null && (idrop.m_itemData?.m_shared?.m_name?.ToLowerInvariant().Contains("arrow") ?? false)
+                                          && (idrop.m_itemData?.m_shared?.m_name?.ToLowerInvariant().Contains("wood") ?? false);
+                });
+
+                if (wood == null)
+                {
+                    Debug.LogWarning("[Cupid] Could not find wood arrow prefab in ObjectDB.m_items");
                     return;
                 }
 
-                Debug.LogWarning($"Minimap.OnPinTextEntered()");
-
-                PinData pinData = __m_lastNamePin;
-                if (pinData == null)
+                // clone prefab and configure
+                GameObject cupid = UnityEngine.Object.Instantiate(wood);
+                cupid.name = "arrow_cupid"; // internal prefab name
+                var cupidDrop = cupid.GetComponent<ItemDrop>();
+                if (cupidDrop == null)
                 {
-                    Debug.LogWarning($"No PinData");
-
+                    Debug.LogWarning("[Cupid] cloned prefab has no ItemDrop");
                     return;
                 }
 
-                if (pinData.m_type == PinType.Icon4)
+                // set display name/description/damage etc
+                try
                 {
-                    PlaceAPortalHere(pinData.m_pos, __m_lastNamePin.m_name);
+                    // set plain string (you can also use localization keys)
+                    cupidDrop.m_itemData.m_shared.m_name = "Cupid's Arrow";
+                    cupidDrop.m_itemData.m_shared.m_description = "An enchanted arrow that spreads love.";
+                    cupidDrop.m_itemData.m_shared.m_maxStackSize = 100;
+                    // optionally tweak damage if desired:
+                    // cupidDrop.m_itemData.m_shared.m_damages.m_pierce = 12f;
                 }
-                __m_lastNamePin = null;
+                catch { /* non-fatal */ }
+
+                // ensure ZNetScene knows about this prefab, otherwise projectiles/spawning fail
+                if (ZNetScene.instance != null)
+                {
+                    // add to prefab list if missing
+                    if (!ZNetScene.instance.m_prefabs.Contains(cupid))
+                    {
+                        ZNetScene.instance.m_prefabs.Add(cupid);
+                    }
+                    // also ensure named map exists (some builds use m_namedPrefabs or similar)
+                    try
+                    {
+                        var dict = ZNetScene.instance.m_namedPrefabs;
+                        if (!dict.ContainsKey(cupid.name.GetHashCode()))
+                            dict.Add(cupid.name.GetHashCode(), cupid);
+                    }
+                    catch { /* ignore if field absent in this build */ }
+                }
+
+                // add to ObjectDB items so it becomes craftable / available as an item
+                odb.m_items.Add(cupid);
+
+                // create a simple recipe that uses only Wood
+                try
+                {
+                    var recipe = ScriptableObject.CreateInstance<Recipe>();
+                    recipe.name = "Recipe_arrow_cupid";
+
+                    recipe.m_item = cupidDrop;
+                    recipe.m_amount = 20;
+                    recipe.m_enabled = true;
+
+                    // create single-resource requirement (1 wood -> 20 arrows)
+                    var woodGO = odb.GetItemPrefab("Wood") ?? ZNetScene.instance.GetPrefab("Wood");
+                    if (woodGO != null)
+                    {
+                        var req = new Piece.Requirement
+                        {
+                            m_resItem = woodGO.GetComponent<ItemDrop>(),
+                            m_amount = 1
+                        };
+                        recipe.m_resources = new Piece.Requirement[] { req };
+                    }
+                    else
+                    {
+                        recipe.m_resources = new Piece.Requirement[0];
+                    }
+
+                    // craftable at workbench (or null if you want it free)
+                    var workbenchGO = odb.GetItemPrefab("piece_workbench") ?? ZNetScene.instance.GetPrefab("piece_workbench");
+                    if (workbenchGO != null)
+                    {
+                        var station = workbenchGO.GetComponent<CraftingStation>();
+                        if (station != null) recipe.m_craftingStation = station;
+                    }
+                    // add recipe to ObjectDB
+                    odb.m_recipes.Add(recipe);
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogWarning("[Cupid] failed to add recipe: " + e);
+                }
+
+                Debug.Log("[Cupid] Cupid's Arrow registered successfully");
             }
         }
-*/
     }
 }
 
@@ -7503,3 +7628,4 @@ FishingBaitPlains			$item_fishingbait_plains	Stingy Fishing Bait	    Fuling     
 FishingBaitSwamp			$item_fishingbait_swamp		Sticky Fishing Bait	    Abomination         $enemy_abomination
 
  */
+
