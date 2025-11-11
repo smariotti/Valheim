@@ -1759,11 +1759,11 @@ namespace TrophyHuntMod
             // Add RectTransform component for positioning
             RectTransform rectTransform = gameModeTextObject.AddComponent<RectTransform>();
             rectTransform.sizeDelta = new Vector2(300, 100);
-            rectTransform.anchoredPosition = new Vector2(70, 75);
+            rectTransform.anchoredPosition = new Vector2(65, 85);
             rectTransform.localScale = new Vector3(1.0f, 1.0f, 1.0f);
 
             TMPro.TextMeshProUGUI tmText = AddTextMeshProComponent(gameModeTextObject);
-            tmText.text = GetGameModeString(GetGameMode()) + $"<size=14><color=white>v{PluginVersion}</color></size>";
+            tmText.text = GetGameModeString(GetGameMode()) + $"<size=14>\n<color=white>v{PluginVersion}</color></size>";
 
             tmText.fontSize = 22;
             tmText.fontStyle = FontStyles.Bold;
@@ -7716,6 +7716,63 @@ namespace TrophyHuntMod
         //            $" ZDO: Patrol: {patrol} Alert: {alert} Agg: {aggravated}");
         //    }
         //}
+
+        [HarmonyPatch(typeof(Humanoid), nameof(Humanoid.GiveDefaultItems))]
+        public static class Humanoid_GiveDefaultItems_Patch
+        {
+            public static void Postfix(Humanoid __instance)
+            {
+                Debug.LogWarning($"Player_GiveDefaultItems_Patch Postfix called. Type: {__instance.GetType()}");
+
+                if (GetGameMode() != TrophyGameMode.TrophyPacifist)
+                {
+                    return;
+                }
+
+                if (__instance == null)
+                    return;
+
+                if (__instance.GetType() == typeof(Player))
+                {
+                    Inventory inv = __instance.GetInventory();
+                    if (inv != null)
+                    {
+                        //foreach (ItemDrop.ItemData item in inv.GetAllItems())
+                        //{
+                        //    if (item.m_shared.m_itemType == ItemDrop.ItemData.ItemType.Bow)
+                        //    {
+                        //        return;
+                        //    }
+                        //}
+
+                        if (!inv.HaveItem("$item_bow"))
+                        {
+                            GameObject prefab = ObjectDB.instance.GetItemPrefab("Bow");
+                            if (prefab != null)
+                            {
+                                Debug.LogWarning($"Giving Player a Bow");
+                                __instance.GiveDefaultItem(prefab);
+
+                                //ItemDrop.ItemData bow = prefab.GetComponent<ItemDrop>().m_itemData;
+                                //if (bow != null)
+                                //{
+                                //    Debug.LogWarning($"Bow ItemData: {bow.m_shared.m_name}");
+                                //    inv.AddItem(bow);
+                                //}
+                                //else
+                                //{
+                                //    Debug.LogWarning($"Could not get Bow ItemData from prefab");
+                                //}
+                            }
+                            else
+                            {
+                                Debug.LogWarning($"Could not find Bow prefab in ObjectDB");
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         [HarmonyPatch(typeof(Character), nameof(Character.RPC_Damage))]
         public static class Character_RPC_Damage_Patch
