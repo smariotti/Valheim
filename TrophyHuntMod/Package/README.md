@@ -273,6 +273,10 @@ You can learn more on the Valheim Speedrun Discord channel here: https://discord
 You can find the github at: https://github.com/smariotti/Valheim/tree/master/TrophyHuntMod
 
 ## Change Log
+v0.10.9
+- Initial cut at Trophy Pacifist game mode
+- Moved the game mode title to the left side of the screen
+
 v0.10.8
 - Adjusted Geirrhafa trophy to 55 points
 - Whitelisted Yakkity Fast

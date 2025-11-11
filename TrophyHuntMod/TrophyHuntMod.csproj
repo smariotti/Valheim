@@ -121,6 +121,7 @@ xcopy /F /Y "$(TargetDir)\$(TargetFileName)" "$(ProjectDir)\Package\plugins\"
 
 xcopy /F /Y "$(SolutionDir)\Libs\Newtonsoft.Json.dll" "$(ValheimPath)\BepInEx\Plugins"
 xcopy /F /Y "$(TargetDir)\$(TargetFileName)" "$(ValheimPath)\BepInEx\Plugins"
+xcopy /F /Y "$(TargetDir)\$(TargetFileName).mdb" "$(ValheimPath)\BepInEx\Plugins"
 </PostBuildEvent>
   </PropertyGroup>
 </Project>
