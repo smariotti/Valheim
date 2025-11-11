@@ -7645,7 +7645,7 @@ namespace TrophyHuntMod
                 {
                     float targetDist = Vector3.Distance(target.transform.position, __instance.m_character.transform.position);
 
-                    Debug.LogWarning($"MonsterAI.UpdateAI() {__instance.name} T: {target.name} distToTarget {targetDist} F: {__instance.GetFollowTarget().name} distToPlayer: {playerDist} ");
+//                    Debug.LogWarning($"MonsterAI.UpdateAI() {__instance.name} T: {target.name} distToTarget {targetDist} F: {__instance.GetFollowTarget().name} distToPlayer: {playerDist} ");
 
                     //__instance.SetTarget(null);
                     //__instance.SetTargetInfo(ZDOID.None);
@@ -7777,7 +7777,7 @@ namespace TrophyHuntMod
             System.Random randomizer = new System.Random();
             float duration =  TROPHY_PACIFIST_CHARM_DURATION + (float)randomizer.NextDouble() * TROPHY_PACIFIST_CHARM_DURATION/4 - TROPHY_PACIFIST_CHARM_DURATION/8;
 
-            Debug.LogWarning($"[GetCharmDuration] {duration} seconds.");
+//            Debug.LogWarning($"[GetCharmDuration] {duration} seconds.");
 
             return duration;
         }
@@ -7849,6 +7849,8 @@ namespace TrophyHuntMod
                 {
                     return;
                 }
+
+                __instance?.m_nview?.GetZDO()?.Set("charmed", false);
 
                 // Clean up any charmed character entries
                 CharmedCharacter toRemove = null;
