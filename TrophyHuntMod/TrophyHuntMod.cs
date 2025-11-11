@@ -1362,6 +1362,11 @@ namespace TrophyHuntMod
                 FixTrophyPins();
 
                 Debug.LogWarning($"Loading into Game Mode: {GetGameModeString(GetGameMode())}");
+
+                if (GetGameMode() == TrophyGameMode.TrophyPacifist)
+                {
+                    RecharmAllCharmedEnemies();
+                }
             }
         }
 
@@ -7828,6 +7833,49 @@ namespace TrophyHuntMod
                 return true;
             }
         }
+
+        public static void RecharmAllCharmedEnemies()
+        {
+            List<Character> allCharacters = Character.GetAllCharacters();
+            foreach (Character enemy in allCharacters)
+            {
+                var nview = enemy.m_nview;
+                if (nview != null && nview.IsValid())
+                {
+                    if (nview.GetZDO().GetBool("charmed"))
+                    {
+                        CharmEnemy(enemy);
+                    }
+                }
+            }
+        }
+
+        public static void CharmEnemy(Character enemy)
+        {
+            // Change faction to player
+            enemy.m_faction = Character.Faction.Players;
+
+            var monsterAI = enemy.GetComponent<MonsterAI>();
+            if (monsterAI)
+            {
+                monsterAI.SetFollowTarget(Player.m_localPlayer.gameObject);
+                monsterAI.m_attackPlayerObjects = false;
+                monsterAI.ResetRandomMovement();
+                monsterAI.ResetPatrolPoint();
+                monsterAI.SetAlerted(alert: false);
+                monsterAI.m_targetCreature = null;
+                monsterAI.m_targetStatic = null;
+                monsterAI.m_fleeIfNotAlerted = false;
+                monsterAI.m_fleeIfLowHealth = 0;
+                monsterAI.m_afraidOfFire = false;
+                monsterAI.m_fleeIfHurtWhenTargetCantBeReached = false;
+                monsterAI.m_circleTargetInterval = 0;
+                monsterAI.m_character.m_group = "";
+
+                monsterAI.SetTarget(monsterAI.FindEnemy());
+            }
+        }
+
         private static IEnumerator CharmTarget(Character target, float duration)
         {
             if (target == null) yield break;
@@ -7839,34 +7887,9 @@ namespace TrophyHuntMod
             Character.Faction originalFaction = target.m_faction;
             nview.GetZDO().Set("charmed", true);
 
-            bool doFactionChange = true;
-            if (doFactionChange)
-            {
-                // Change faction to player
-                target.m_faction = Character.Faction.Players;
+            CharmEnemy(target);
 
-                var monsterAI = target.GetComponent<MonsterAI>();
-                if (monsterAI)
-                {
-                    monsterAI.SetFollowTarget(Player.m_localPlayer.gameObject);
-                    monsterAI.m_attackPlayerObjects = false;
-                    monsterAI.ResetRandomMovement();
-                    monsterAI.ResetPatrolPoint();
-                    monsterAI.SetAlerted(alert: false);
-                    monsterAI.m_targetCreature = null;
-                    monsterAI.m_targetStatic = null;
-                    monsterAI.m_fleeIfNotAlerted = false;
-                    monsterAI.m_fleeIfLowHealth = 0;
-                    monsterAI.m_afraidOfFire = false;
-                    monsterAI.m_fleeIfHurtWhenTargetCantBeReached = false;
-                    monsterAI.m_circleTargetInterval = 0;
-                    monsterAI.m_character.m_group = "";
-
-                    monsterAI.SetTarget(monsterAI.FindEnemy());
-                }
-            }
-
-            // Optional: give a color tint or particle effect
+             // Optional: give a color tint or particle effect
             AddCharmEffect(target);
 
             // Debug info
