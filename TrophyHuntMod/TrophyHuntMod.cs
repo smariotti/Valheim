@@ -21,6 +21,7 @@ using Newtonsoft.Json;
 using System.Net.Http;
 using static UnityEngine.EventSystems.EventTrigger;
 using static UnityEngine.GraphicsBuffer;
+using UnityEngine.Assertions;
 
 namespace TrophyHuntMod
 {
@@ -1359,6 +1360,8 @@ namespace TrophyHuntMod
                 }
 
                 FixTrophyPins();
+
+                Debug.LogWarning($"Loading into Game Mode: {GetGameModeString(GetGameMode())}");
             }
         }
 
@@ -1718,7 +1721,7 @@ namespace TrophyHuntMod
                     }
                 }
 
-                CreateGameModeText();
+                CreateGameModeElements();
 
                 SetScoreTextElementColor(Color.yellow);
 
@@ -1737,9 +1740,9 @@ namespace TrophyHuntMod
             }
         }
 
-        public static void CreateGameModeText()
+        public static void CreateGameModeElements()
         {
-            Transform miniMapTransform = Hud.instance.transform.Find("hudroot/MiniMap");
+            Transform miniMapTransform = Hud.instance.transform.Find("hudroot/healthpanel");
             if (miniMapTransform == null)
             {
                 Debug.LogError("Minimap transform not found.");
@@ -1756,7 +1759,7 @@ namespace TrophyHuntMod
             // Add RectTransform component for positioning
             RectTransform rectTransform = gameModeTextObject.AddComponent<RectTransform>();
             rectTransform.sizeDelta = new Vector2(300, 100);
-            rectTransform.anchoredPosition = new Vector2(915, 467);
+            rectTransform.anchoredPosition = new Vector2(70, 75);
             rectTransform.localScale = new Vector3(1.0f, 1.0f, 1.0f);
 
             TMPro.TextMeshProUGUI tmText = AddTextMeshProComponent(gameModeTextObject);
@@ -4509,7 +4512,7 @@ namespace TrophyHuntMod
                         {
                             float dropPercentage = 0f;
 
-                            if (GetGameMode() == TrophyGameMode.TrophyRush || 
+                            if (GetGameMode() == TrophyGameMode.TrophyRush ||
                                 GetGameMode() == TrophyGameMode.TrophyBlitz ||
                                 GetGameMode() == TrophyGameMode.TrophyTrailblazer ||
                                 GetGameMode() == TrophyGameMode.TrophyPacifist ||
@@ -7409,7 +7412,7 @@ namespace TrophyHuntMod
                                 Debug.LogWarning($"Found Portal Piece");
                                 break;
                             }
-                        }
+                        }f
                         if (portalPiece)
                         {
                             float floor = 0;
@@ -7483,7 +7486,7 @@ namespace TrophyHuntMod
                 {
                     return;
                 }
-                
+
                 if (__instance != null && __instance.m_nview != null && __instance.m_nview.GetZDO().GetBool("charmed", false))
                 {
                     __result = CHARMED_ENEMY_SPEED_MULTIPLIER; // Normal speed
@@ -7500,13 +7503,219 @@ namespace TrophyHuntMod
                 {
                     return;
                 }
-                
+
                 if (__instance != null && __instance.m_nview != null && __instance.m_nview.GetZDO().GetBool("charmed", false))
                 {
                     __result = CHARMED_ENEMY_SPEED_MULTIPLIER; // Normal speed
                 }
             }
         }
+
+        //[HarmonyPatch(typeof(BaseAI), nameof(BaseAI.RandomMovement))]
+        //public static class BaseAI_RandomMovement_Patch
+        //{
+        //    public static bool Prefix(BaseAI __instance, float dt, Vector3 centerPoint, bool snapToGround)
+        //    {
+        //        if (GetGameMode() != TrophyGameMode.TrophyPacifist)
+        //        {
+        //            return true;
+        //        }
+
+        //        if (__instance == null)
+        //            return true;
+
+        //        var nview = __instance.m_nview;
+        //        if (nview == null || !nview.IsValid())
+        //            return true;
+
+        //        // Record original faction
+        //        if (nview.GetZDO().GetBool("charmed"))
+        //        {
+        //            if (__instance != null)
+        //            {
+        //                Debug.LogWarning($"Random Movement called for {__instance?.name}");
+
+        //                // Disable random movement for charmed enemies
+        //                Debug.LogWarning($"Random Movement disabled");
+
+        //                __instance.ResetRandomMovement();
+        //                return false;
+        //            }
+        //        }
+        //        return true;
+        //    }
+        //}
+
+        //[HarmonyPatch(typeof(BaseAI), nameof(BaseAI.CanHearTarget), new[] { typeof(Transform), typeof(float), typeof(Character)} )]
+        //public static class BaseAI_CanHearTarget_Patch
+        //{
+        //    public static bool Prefix(BaseAI __instance, Transform me, float hearRange, Character target, ref bool __result)
+        //    {
+        //        if (__instance == null)
+        //            return true;
+
+        //        var nview = __instance.m_nview;
+        //        if (nview == null || !nview.IsValid())
+        //            return true;
+
+        //        // Record original faction
+        //        if (nview.GetZDO().GetBool("charmed"))
+        //        {
+        //            __result = true;
+        //            return false;
+        //        }
+
+        //        return true;
+        //    }
+        //}
+
+        //[HarmonyPatch(typeof(BaseAI), nameof(BaseAI.CanSeeTarget), new[] {typeof(Transform), typeof(Vector3), typeof(float), typeof(float), typeof(bool), typeof(bool), typeof(Character)} )]
+        //public static class BaseAI_CanSeeTarget_Patch
+        //{
+        //    public static bool Prefix(BaseAI __instance, Transform me, Vector3 eyePoint, float viewRange, float viewAngle, bool alerted, bool mistVision, Character target, ref bool __result)
+        //    {
+        //        if (__instance == null)
+        //            return true;
+
+        //        var nview = __instance.m_nview;
+        //        if (nview == null || !nview.IsValid())
+        //            return true;
+
+        //        // Record original faction
+        //        if (nview.GetZDO().GetBool("charmed"))
+        //        {
+        //            __result = true;
+        //            return false;
+        //        }
+
+        //        return true;
+        //    }
+        //}
+
+
+
+
+        //[HarmonyPatch(typeof(BaseAI), nameof(BaseAI.SetAggravated))]
+        //public static class BaseAI_SetAggravated_Patch
+        //{
+        //    public static void Postfix(BaseAI __instance, bool aggro, BaseAI.AggravatedReason reason)
+        //    {
+        //        if (__instance == null)
+        //            return;
+
+        //        var nview = __instance.m_nview;
+        //        if (nview == null || !nview.IsValid())
+        //            return;
+
+        //        // Record original faction
+        //        if (nview.GetZDO().GetBool("charmed"))
+        //        {
+        //            Debug.LogWarning($"Aggravated Changed for {__instance?.name} Aggro: {aggro} Reason: {reason.ToString()}");
+        //        }
+        //    }
+        //}
+
+        //[HarmonyPatch(typeof(MonsterAI), nameof(MonsterAI.SetAlerted))]
+        //public static class MonsterAI_SetAlerted_Patch
+        //{
+        //    public static bool Prefix(MonsterAI __instance, bool alert)
+        //    {
+        //        var nview = __instance.m_nview;
+        //        if (nview == null || !nview.IsValid())
+        //            return true;
+
+        //        // Record original faction
+        //        if (nview.GetZDO().GetBool("charmed"))
+        //        {
+        //            return false;
+        //            nview.GetZDO().Set(ZDOVars.s_alert, false);
+        //            __instance.m_alerted = false;
+        //            __instance.m_targetCreature = __instance.FindEnemy();
+
+        //            //    return false;
+        //        }
+
+        //        return true;
+        //   }
+
+        //    public static void Postfix(MonsterAI __instance, bool alert)
+        //    {
+        //        if (__instance == null)
+        //            return;
+
+        //        var nview = __instance.m_nview;
+        //        if (nview == null || !nview.IsValid())
+        //            return;
+
+        //        // Record original faction
+        //        if (nview.GetZDO().GetBool("charmed"))
+        //        {
+        //            Debug.LogWarning($"Alert Changed for {__instance?.name} Alert: {alert}");
+        //            nview.GetZDO().Set(ZDOVars.s_alert, false);
+        //            __instance.m_alerted = false;
+        //            __instance.m_targetCreature = __instance.FindEnemy();
+        //        }
+        //    }
+        //}
+
+        public static class MonsterAI_UpdateTarget_Patch
+        {
+            public static bool Prefix(MonsterAI __instance, Humanoid humanoid, float dt, out bool canHearTarget, out bool canSeeTarget)
+            {
+                if (GetGameMode() == TrophyGameMode.TrophyPacifist)
+                {
+                    if (__instance != null)
+                    {
+                        var nview = __instance.m_nview;
+                        if (nview != null && nview.IsValid())
+                        {
+                            if (nview.GetZDO().GetBool("charmed"))
+                            {
+                                //Debug.LogWarning($"UpdateTarget called for {__instance?.name} Alert: {humanoid?.name} Follow Target: {__instance.GetFollowTarget()?.name}");
+                                __instance.SetTarget(__instance.FindEnemy());
+                                __instance.SetAggravated(true, BaseAI.AggravatedReason.Damage);
+                                canHearTarget = true;
+                                canSeeTarget = true;
+                                return false;
+                            }
+                        }
+                    }
+                }
+
+                canHearTarget = false;
+                canSeeTarget = false;
+
+                return true;
+            }
+        }
+
+        //[HarmonyPatch(typeof(BaseAI), nameof(BaseAI.UpdateAI))]
+        //public static class BaseAI_UpdateAI_Patch
+        //{
+        //    public static void Postfix(BaseAI __instance, float dt)
+        //    {
+        //        if (__instance == null)
+        //            return;
+
+        //        var nview = __instance.m_nview;
+        //        if (nview == null || !nview.IsValid())
+        //            return;
+
+        //        // Record original faction
+        //        if (!nview.GetZDO().GetBool("charmed"))
+        //        {
+        //            return;
+        //        }
+
+        //        bool patrol = nview.GetZDO().GetBool(ZDOVars.s_patrol);
+        //        bool alert = nview.GetZDO().GetBool(ZDOVars.s_alert);
+        //        bool aggravated = nview.GetZDO().GetBool(ZDOVars.s_aggravated);
+
+        //        Debug.LogWarning($"UpdateAI {__instance.name} Type: {__instance.GetType()} Alerted: {__instance.IsAlerted()} Aggravated: {__instance.IsAggravated()}" +
+        //            $" RandomMoveTimer: {__instance.m_randomMoveUpdateTimer} FleeTargetUpdateTime: {__instance.m_fleeTargetUpdateTime}" +
+        //            $" ZDO: Patrol: {patrol} Alert: {alert} Agg: {aggravated}");
+        //    }
+        //}
 
         [HarmonyPatch(typeof(Character), nameof(Character.RPC_Damage))]
         public static class Character_RPC_Damage_Patch
@@ -7562,7 +7771,8 @@ namespace TrophyHuntMod
 
                             if (weapon.m_shared.m_skillType == SkillType.Axes ||
                                 weapon.m_shared.m_skillType == SkillType.Pickaxes ||
-                                weapon.m_shared.m_skillType == SkillType.WoodCutting)
+                                weapon.m_shared.m_skillType == SkillType.WoodCutting ||
+                                weapon.m_shared.m_skillType == SkillType.Unarmed)
                             {
                                 return true;
                             }
@@ -7574,6 +7784,121 @@ namespace TrophyHuntMod
                 }
                 return true;
             }
+        }
+        private static IEnumerator CharmTarget(Character target, float duration)
+        {
+            if (target == null) yield break;
+
+            var nview = target.m_nview;
+            if (nview == null || !nview.IsValid()) yield break;
+
+            // Record original faction
+            Character.Faction originalFaction = target.m_faction;
+            nview.GetZDO().Set("charmed", true);
+
+            bool doFactionChange = true;
+            if (doFactionChange)
+            {
+                // Change faction to player
+                target.m_faction = Character.Faction.Players;
+
+                var monsterAI = target.GetComponent<MonsterAI>();
+                if (monsterAI)
+                {
+                    monsterAI.SetFollowTarget(Player.m_localPlayer.gameObject);
+                    monsterAI.m_attackPlayerObjects = false;
+                    monsterAI.ResetRandomMovement();
+                    monsterAI.ResetPatrolPoint();
+                    monsterAI.SetAlerted(alert: false);
+                    monsterAI.m_targetCreature = null;
+                    monsterAI.m_targetStatic = null;
+                    monsterAI.m_fleeIfNotAlerted = false;
+                    monsterAI.m_fleeIfLowHealth = 0;
+                    monsterAI.m_afraidOfFire = false;
+                    monsterAI.m_fleeIfHurtWhenTargetCantBeReached = false;
+                    monsterAI.m_circleTargetInterval = 0;
+                    monsterAI.m_character.m_group = "";
+
+                    monsterAI.SetTarget(monsterAI.FindEnemy());
+                }
+            }
+
+            // Optional: give a color tint or particle effect
+            AddCharmEffect(target);
+
+            // Debug info
+            Debug.Log($"[WoodArrowCharm] {target.name} charmed for {duration} seconds.");
+
+            float endTime = Time.time + duration;
+            while (Time.time < endTime)
+            {
+                // Keep them alive & ensure faction doesn’t reset prematurely
+                if (target == null || target.IsDead()) yield break;
+                yield return new WaitForSeconds(5f);
+            }
+
+            // Revert faction
+            if (target != null && target.m_nview != null && target.m_nview.IsValid())
+            {
+                target.m_faction = originalFaction;
+                nview.GetZDO().Set("charmed", false);
+                RemoveCharmEffect(target);
+                Debug.LogWarning($"[WoodArrowCharm] {target.name} reverted to {originalFaction} faction.");
+            }
+        }
+
+        private static void AddCharmEffect(Character target)
+        {
+            // Simple visual cue — give the charmed enemy a blue tint glow
+            Renderer[] renderers = target.GetComponentsInChildren<Renderer>();
+            foreach (var r in renderers)
+            {
+                foreach (var mat in r.materials)
+                {
+                    if (mat.HasProperty("_Color"))
+                        mat.color = new Color(0.0f, 0f, 0f, 1f);
+                }
+            }
+
+            // Use a built-in pink-ish particle, such as vfx_surtling_death or vfx_pickaxe_sparks
+            // (replace with vfx_heart style prefab if your version has it)
+            GameObject heartVFX = ZNetScene.instance.GetPrefab("fx_troll_love");
+            if (heartVFX != null)
+            {
+                Debug.LogWarning($"[heartVFX] {heartVFX.name}");
+
+                var fx = UnityEngine.Object.Instantiate(heartVFX, target.transform.position, Quaternion.identity);
+                var ps = fx.GetComponentInChildren<ParticleSystem>();
+                if (ps != null)
+                {
+                    var main = ps.main;
+                    main.startColor = new ParticleSystem.MinMaxGradient(new Color(1f, 0.5f, 0.7f, 1f));
+                    ps.Play();
+                }
+            }
+            else
+            {
+                Debug.LogWarning($"[heartVFX] not found.");
+            }
+
+        }
+
+        private static void RemoveCharmEffect(Character target)
+        {
+            // Reset color
+            Renderer[] renderers = target.GetComponentsInChildren<Renderer>();
+            foreach (var r in renderers)
+            {
+                foreach (var mat in r.materials)
+                {
+                    if (mat.HasProperty("_Color"))
+                        mat.color = Color.white;
+                }
+            }
+
+            Player.m_localPlayer.Message(MessageHud.MessageType.TopLeft, $"{target?.name} is no longer doing your bidding.");
+            Debug.LogWarning($"{target?.name} is no longer doing your bidding.");
+
         }
 
         [HarmonyPatch(typeof(Projectile), nameof(Projectile.OnHit))]
@@ -7600,13 +7925,12 @@ namespace TrophyHuntMod
                 if (!item.m_shared.m_name.Equals("$item_arrow_wood", System.StringComparison.OrdinalIgnoreCase))
                     return true;
 
-                Debug.LogWarning($"[WoodArrowCharm] {item.m_shared.m_name}");
-
                 // no damage when charming
                 __instance.m_damage = new HitData.DamageTypes();
 
                 return false;
             }
+
             public static void Postfix(Projectile __instance, Collider collider)
             {
                 if (GetGameMode() != TrophyGameMode.TrophyPacifist)
@@ -7631,12 +7955,12 @@ namespace TrophyHuntMod
                     if (!item.m_shared.m_name.Equals("$item_arrow_wood", System.StringComparison.OrdinalIgnoreCase))
                         return;
 
-                    Debug.LogWarning($"[WoodArrowCharm] {item.m_shared.m_name}");
-
                     // Ensure we hit a Character
                     Character hitChar = collider.GetComponent<Character>();
                     if (hitChar == null || hitChar.IsPlayer() || hitChar.IsDead())
                         return;
+
+                    Debug.LogWarning($"Hit char {hitChar.name} of faction {hitChar.GetFaction()} and group {hitChar.m_group}");
 
                     // Skip if already charmed
                     if (hitChar.m_nview != null && hitChar.m_nview.GetZDO().GetBool("charmed", false))
@@ -7650,111 +7974,6 @@ namespace TrophyHuntMod
                     Debug.LogError($"[WoodArrowCharm] Error: {ex}");
                 }
             }
-
-            private static IEnumerator CharmTarget(Character target, float duration)
-            {
-                if (target == null) yield break;
-
-                var nview = target.m_nview;
-                if (nview == null || !nview.IsValid()) yield break;
-
-                // Record original faction
-                Character.Faction originalFaction = target.m_faction;
-                nview.GetZDO().Set("charmed", true);
-
-                bool doFactionChange = true;
-                if (doFactionChange)
-                {
-                    // Change faction to player
-                    target.m_faction = Character.Faction.Players;
-
-                    var monsterAI = target.GetComponent<MonsterAI>();
-                    if (monsterAI)
-                    {
-                        monsterAI.SetFollowTarget(Player.m_localPlayer.gameObject);
-                        monsterAI.ResetRandomMovement();
-                        monsterAI.ResetPatrolPoint();
-                        monsterAI.SetAggravated(false, BaseAI.AggravatedReason.Damage);
-                        monsterAI.SetAlerted(false);
-                        monsterAI.m_attackPlayerObjects = false;
-                        monsterAI.FindEnemy();
-                    }
-                }
-
-                // Optional: give a color tint or particle effect
-                AddCharmEffect(target);
-
-                // Debug info
-                Debug.Log($"[WoodArrowCharm] {target.name} charmed for {duration} seconds.");
-
-                float endTime = Time.time + duration;
-                while (Time.time < endTime)
-                {
-                    // Keep them alive & ensure faction doesn’t reset prematurely
-                    if (target == null || target.IsDead()) yield break;
-                    yield return new WaitForSeconds(5f);
-                }
-
-                // Revert faction
-                if (target != null && target.m_nview != null && target.m_nview.IsValid())
-                {
-                    target.m_faction = originalFaction;
-                    nview.GetZDO().Set("charmed", false);
-                    RemoveCharmEffect(target);
-                    Debug.LogWarning($"[WoodArrowCharm] {target.name} reverted to {originalFaction} faction.");
-                }
-            }
-
-            private static void AddCharmEffect(Character target)
-            {
-                // Simple visual cue — give the charmed enemy a blue tint glow
-                Renderer[] renderers = target.GetComponentsInChildren<Renderer>();
-                foreach (var r in renderers)
-                {
-                    foreach (var mat in r.materials)
-                    {
-                        if (mat.HasProperty("_Color"))
-                            mat.color = new Color(0.0f, 0f, 0f, 1f);
-                    }
-                }
-
-                // Use a built-in pink-ish particle, such as vfx_surtling_death or vfx_pickaxe_sparks
-                // (replace with vfx_heart style prefab if your version has it)
-                GameObject heartVFX = ZNetScene.instance.GetPrefab("fx_troll_love");
-                if (heartVFX != null)
-                {
-                    Debug.LogWarning($"[heartVFX] {heartVFX.name}");
-
-                    var fx = UnityEngine.Object.Instantiate(heartVFX, target.transform.position, Quaternion.identity);
-                    var ps = fx.GetComponentInChildren<ParticleSystem>();
-                    if (ps != null)
-                    {
-                        var main = ps.main;
-                        main.startColor = new ParticleSystem.MinMaxGradient(new Color(1f, 0.5f, 0.7f, 1f));
-                        ps.Play();
-                    }
-                }
-                else
-                {
-                    Debug.LogWarning($"[heartVFX] not found.");
-                }
-
-            }
-
-            private static void RemoveCharmEffect(Character target)
-            {
-                // Reset color
-                Renderer[] renderers = target.GetComponentsInChildren<Renderer>();
-                foreach (var r in renderers)
-                {
-                    foreach (var mat in r.materials)
-                    {
-                        if (mat.HasProperty("_Color"))
-                            mat.color = Color.white;
-                    }
-                }
-            }
-
         }
     }
 }
