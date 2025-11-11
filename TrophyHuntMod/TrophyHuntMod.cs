@@ -4653,6 +4653,23 @@ namespace TrophyHuntMod
                     return;
 
                 Character character = __instance;
+
+                if (GetGameMode() == TrophyGameMode.TrophyPacifist)
+                {
+                    var nview = character.m_nview;
+                    if (nview != null && nview.IsValid())
+                    {
+                        if (nview.GetZDO().GetBool("charmed"))
+                        {
+                            // Post player message saying charmed enemy died
+                            if (Player.m_localPlayer != null)
+                            {
+                                Player.m_localPlayer.Message(MessageHud.MessageType.TopLeft, $"Your friend {__instance.m_name} has fallen!");
+                            }
+                        }
+                    }
+                }
+
                 // Check if the attacker is the local player
                 bool playerHit = false;
                 if (Player.m_localPlayer != null &&
@@ -7546,55 +7563,6 @@ namespace TrophyHuntMod
         //    }
         //}
 
-        //[HarmonyPatch(typeof(BaseAI), nameof(BaseAI.CanHearTarget), new[] { typeof(Transform), typeof(float), typeof(Character)} )]
-        //public static class BaseAI_CanHearTarget_Patch
-        //{
-        //    public static bool Prefix(BaseAI __instance, Transform me, float hearRange, Character target, ref bool __result)
-        //    {
-        //        if (__instance == null)
-        //            return true;
-
-        //        var nview = __instance.m_nview;
-        //        if (nview == null || !nview.IsValid())
-        //            return true;
-
-        //        // Record original faction
-        //        if (nview.GetZDO().GetBool("charmed"))
-        //        {
-        //            __result = true;
-        //            return false;
-        //        }
-
-        //        return true;
-        //    }
-        //}
-
-        //[HarmonyPatch(typeof(BaseAI), nameof(BaseAI.CanSeeTarget), new[] {typeof(Transform), typeof(Vector3), typeof(float), typeof(float), typeof(bool), typeof(bool), typeof(Character)} )]
-        //public static class BaseAI_CanSeeTarget_Patch
-        //{
-        //    public static bool Prefix(BaseAI __instance, Transform me, Vector3 eyePoint, float viewRange, float viewAngle, bool alerted, bool mistVision, Character target, ref bool __result)
-        //    {
-        //        if (__instance == null)
-        //            return true;
-
-        //        var nview = __instance.m_nview;
-        //        if (nview == null || !nview.IsValid())
-        //            return true;
-
-        //        // Record original faction
-        //        if (nview.GetZDO().GetBool("charmed"))
-        //        {
-        //            __result = true;
-        //            return false;
-        //        }
-
-        //        return true;
-        //    }
-        //}
-
-
-
-
         //[HarmonyPatch(typeof(BaseAI), nameof(BaseAI.SetAggravated))]
         //public static class BaseAI_SetAggravated_Patch
         //{
@@ -7672,11 +7640,16 @@ namespace TrophyHuntMod
                             if (nview.GetZDO().GetBool("charmed"))
                             {
                                 //Debug.LogWarning($"UpdateTarget called for {__instance?.name} Alert: {humanoid?.name} Follow Target: {__instance.GetFollowTarget()?.name}");
-                                __instance.SetTarget(__instance.FindEnemy());
-                                __instance.SetAggravated(true, BaseAI.AggravatedReason.Damage);
-                                canHearTarget = true;
-                                canSeeTarget = true;
-                                return false;
+                                Character nearestEnemy = __instance.FindEnemy();
+                                float enemyDistance = Vector3.Distance(nearestEnemy.transform.position, __instance.m_character.transform.position);
+                                if (enemyDistance <= __instance.m_viewRange)
+                                {
+                                    __instance.SetTarget(nearestEnemy);
+                                    __instance.SetAggravated(true, BaseAI.AggravatedReason.Damage);
+                                    canHearTarget = true;
+                                    canSeeTarget = true;
+                                    return false;
+                                }
                             }
                         }
                     }
@@ -7689,33 +7662,46 @@ namespace TrophyHuntMod
             }
         }
 
-        //[HarmonyPatch(typeof(BaseAI), nameof(BaseAI.UpdateAI))]
-        //public static class BaseAI_UpdateAI_Patch
-        //{
-        //    public static void Postfix(BaseAI __instance, float dt)
-        //    {
-        //        if (__instance == null)
-        //            return;
+        [HarmonyPatch(typeof(MonsterAI), nameof(MonsterAI.UpdateAI))]
+        public static class MonsterAI_UpdateAI_Patch
+        {
+            public static void Postfix(MonsterAI __instance, float dt)
+            {
+                if (GetGameMode() != TrophyGameMode.TrophyPacifist)
+                {
+                    return;
+                }
 
-        //        var nview = __instance.m_nview;
-        //        if (nview == null || !nview.IsValid())
-        //            return;
+                if (__instance == null)
+                    return;
 
-        //        // Record original faction
-        //        if (!nview.GetZDO().GetBool("charmed"))
-        //        {
-        //            return;
-        //        }
+                var nview = __instance.m_nview;
+                if (nview == null || !nview.IsValid())
+                    return;
 
-        //        bool patrol = nview.GetZDO().GetBool(ZDOVars.s_patrol);
-        //        bool alert = nview.GetZDO().GetBool(ZDOVars.s_alert);
-        //        bool aggravated = nview.GetZDO().GetBool(ZDOVars.s_aggravated);
+                // Record original faction
+                if (!nview.GetZDO().GetBool("charmed"))
+                {
+                    return;
+                }
 
-        //        Debug.LogWarning($"UpdateAI {__instance.name} Type: {__instance.GetType()} Alerted: {__instance.IsAlerted()} Aggravated: {__instance.IsAggravated()}" +
-        //            $" RandomMoveTimer: {__instance.m_randomMoveUpdateTimer} FleeTargetUpdateTime: {__instance.m_fleeTargetUpdateTime}" +
-        //            $" ZDO: Patrol: {patrol} Alert: {alert} Agg: {aggravated}");
-        //    }
-        //}
+                if (Player.m_localPlayer != null)
+                {
+                    float dist = Vector3.Distance(Player.m_localPlayer.transform.position, __instance.m_character.transform.position);
+                    if (dist > 50.0f)
+                    {
+                        Character target = __instance.GetTargetCreature();
+                        if (target)
+                        {
+                            Player.m_localPlayer.Message(MessageHud.MessageType.TopLeft, $"{__instance.name} lost interest in {target.name}");
+                            __instance.SetTarget(null);
+                            __instance.m_follow = Player.m_localPlayer.gameObject;
+                        }
+                    }
+                }
+
+            }
+        }
 
         [HarmonyPatch(typeof(Humanoid), nameof(Humanoid.GiveDefaultItems))]
         public static class Humanoid_GiveDefaultItems_Patch
@@ -7919,7 +7905,7 @@ namespace TrophyHuntMod
 
             // Use a built-in pink-ish particle, such as vfx_surtling_death or vfx_pickaxe_sparks
             // (replace with vfx_heart style prefab if your version has it)
-            GameObject heartVFX = ZNetScene.instance.GetPrefab("fx_troll_love");
+            GameObject heartVFX = ZNetScene.instance.GetPrefab("fx_hen_love");
             if (heartVFX != null)
             {
                 Debug.LogWarning($"[heartVFX] {heartVFX.name}");
