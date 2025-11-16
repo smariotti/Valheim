@@ -22,6 +22,7 @@ using System.Net.Http;
 using static UnityEngine.EventSystems.EventTrigger;
 using static UnityEngine.GraphicsBuffer;
 using UnityEngine.Assertions;
+using System.Security.Policy;
 
 namespace TrophyHuntMod
 {
@@ -2426,6 +2427,8 @@ namespace TrophyHuntMod
 
             if (numCollected == numTotal && !__m_completedBiomeBonuses.Contains(trophyHuntData.m_biome))
             {
+                biome = trophyHuntData.m_biome;
+
                 PrintToConsole($"Biome Completed! {trophyHuntData.m_biome.ToString()}");
 
                 __m_completedBiomeBonuses.Add(trophyHuntData.m_biome);
@@ -6064,7 +6067,6 @@ namespace TrophyHuntMod
 
         public static void AddPlayerEvent(PlayerEventType eventType, string eventName, Vector3 eventPos)
         {
-            //                Debug.LogWarning($"AddPlayerEvent() Logging Event: {eventType.ToString()}, {eventName}, {eventPos}");
 
             if (!IsLoggableEvent(eventType, eventName))
             {
@@ -6079,6 +6081,8 @@ namespace TrophyHuntMod
                     return;
                 }
             }
+
+            Debug.LogWarning($"AddPlayerEvent() Logging Event: {eventType.ToString()}, {eventName}, {eventPos}");
 
             // Add the event to our internal tracking log
             __m_playerEventLog.Add(new PlayerEventLog(eventType, eventName, eventPos, DateTime.UtcNow));
@@ -6242,7 +6246,7 @@ namespace TrophyHuntMod
 
             string json = JsonConvert.SerializeObject(entry);
 
-            //                            Debug.LogWarning($"PostTrackLogEntry: {json}");
+                                        Debug.LogWarning($"PostTrackLogEntry: {json}");
 
             string url = "https://valheim.help/api/track/log";
 
@@ -7545,6 +7549,11 @@ namespace TrophyHuntMod
 
                 if (__instance != null && __instance.m_nview != null && __instance.m_nview.GetZDO().GetBool("charmed", false))
                 {
+                    if (Player.IsCharacterInRange(__instance.transform.position, 30))
+                    {
+//                        Debug.LogWarning($"GetJogSpeedFactor called for {__instance?.name}");
+                    }
+
                     __result = CHARMED_ENEMY_SPEED_MULTIPLIER; // Normal speed
                 }
             }
@@ -7562,6 +7571,11 @@ namespace TrophyHuntMod
 
                 if (__instance != null && __instance.m_nview != null && __instance.m_nview.GetZDO().GetBool("charmed", false))
                 {
+                    if (Player.IsCharacterInRange(__instance.transform.position, 30))
+                    {
+//                        Debug.LogWarning($"GetRunSpeedFactor called for {__instance?.name}");
+                    }
+
                     __result = CHARMED_ENEMY_SPEED_MULTIPLIER; // Normal speed
                 }
             }
@@ -7636,6 +7650,18 @@ namespace TrophyHuntMod
                 // Record original faction
                 if (!nview.GetZDO().GetBool("charmed"))
                 {
+                    return;
+                }
+
+                if (__instance.m_character == null)
+                {
+                    Debug.LogError("MonsterAI_UpdateAI_Patch: __instance.m_character is null!");
+                    return;
+                }
+
+                if (Player.m_localPlayer == null)
+                {
+                    Debug.LogError("MonsterAI_UpdateAI_Patch: Player.m_localPlayer is null!");
                     return;
                 }
 
@@ -7770,7 +7796,7 @@ namespace TrophyHuntMod
         }
 
         static List<CharmedCharacter> __m_allCharmedCharacters = new List<CharmedCharacter>();
-        const float TROPHY_PACIFIST_CHARM_DURATION = 300; // seconds
+        const float TROPHY_PACIFIST_CHARM_DURATION = 30; // seconds
 
         public static float GetCharmDuration()
         {
@@ -7802,19 +7828,24 @@ namespace TrophyHuntMod
 
         public static void CharmEnemy(Character enemy)
         {
+            enemy.SetTamed(true);
+
             // Change faction to player
-            enemy.m_faction = Character.Faction.Players;
+//            enemy.m_faction = Character.Faction.Players;
 
             var monsterAI = enemy.GetComponent<MonsterAI>();
             if (monsterAI)
             {
+                Tameable tameable = enemy.GetComponent<Tameable>();
+                if (tameable)
+                {
+                    tameable.m_commandable = true;
+                }
                 monsterAI.SetFollowTarget(Player.m_localPlayer.gameObject);
                 monsterAI.m_attackPlayerObjects = false;
                 monsterAI.ResetRandomMovement();
                 monsterAI.ResetPatrolPoint();
                 monsterAI.SetAlerted(alert: false);
-                monsterAI.m_targetCreature = null;
-                monsterAI.m_targetStatic = null;
                 monsterAI.m_fleeIfNotAlerted = false;
                 monsterAI.m_fleeIfLowHealth = 0;
                 monsterAI.m_afraidOfFire = false;
@@ -7829,6 +7860,9 @@ namespace TrophyHuntMod
 
         public static void UncharmEnemy(Character enemy)
         {
+            enemy.SetTamed(false);
+            return;
+
             var monsterAI = enemy.GetComponent<MonsterAI>();
             if (monsterAI)
             {
@@ -7843,14 +7877,18 @@ namespace TrophyHuntMod
         [HarmonyPatch(typeof(Character), nameof(Humanoid.OnDestroy))]
         public static class Character_OnDestroy_Patch
         {
-            public static void Postfix(Character __instance)
+            public static void Prefix(Character __instance)
             {
                 if (GetGameMode() != TrophyGameMode.TrophyPacifist)
                 {
                     return;
                 }
 
+                Debug.LogWarning($"OnDestroy: {__instance.name}");
+
                 __instance?.m_nview?.GetZDO()?.Set("charmed", false);
+
+                UncharmEnemy(__instance);
 
                 // Clean up any charmed character entries
                 CharmedCharacter toRemove = null;
@@ -7879,7 +7917,7 @@ namespace TrophyHuntMod
 
             // Record original faction
             Character.Faction originalFaction = target.m_faction;
-            nview.GetZDO().Set("charmed", true);
+//            nview.GetZDO().Set("charmed", true);
 
             CharmedCharacter cc = new CharmedCharacter(target);
             cc.m_pin = Minimap.instance.AddPin(target.transform.position, Minimap.PinType.Icon3, "", false, false);
@@ -7912,10 +7950,12 @@ namespace TrophyHuntMod
             }
 
             // Revert faction
-            if (target != null && target.m_nview != null && target.m_nview.IsValid())
+            if (target != null && target.m_nview != null)
+//                if (target != null && target.m_nview != null && target.m_nview.IsValid())
             {
+                Debug.LogWarning($"UNCHARMED: {target.name}");
                 target.m_faction = originalFaction;
-                nview.GetZDO().Set("charmed", false);
+//                nview.GetZDO().Set("charmed", false);
             }
 
             Minimap.instance.RemovePin(cc.m_pin);
@@ -7993,7 +8033,7 @@ namespace TrophyHuntMod
                     return true;
                 }
                 // Ensure it's a projectile owned by a player
-                if (__instance == null || __instance.m_owner == null)
+                if (__instance == null || __instance.m_owner == null || __instance.m_owner.IsPlayer())
                     return true;
 
                 // Get the item that spawned the projectile
@@ -8006,6 +8046,8 @@ namespace TrophyHuntMod
                 // Only apply to wood arrows
                 if (!item.m_shared.m_name.Equals("$item_arrow_wood", System.StringComparison.OrdinalIgnoreCase))
                     return true;
+
+//                Debug.LogWarning($"[Projectile_OnHit_WoodArrowCharm] damage rejected for {collider.gameObject.name}");
 
                 // no damage when charming
                 __instance.m_damage = new HitData.DamageTypes();
@@ -8042,20 +8084,51 @@ namespace TrophyHuntMod
                     if (hitChar == null || hitChar.IsPlayer() || hitChar.IsDead())
                         return;
 
-//                    Debug.LogWarning($"Hit char {hitChar.name} of faction {hitChar.GetFaction()} and group {hitChar.m_group}");
+                    //                    Debug.LogWarning($"Hit char {hitChar.name} of faction {hitChar.GetFaction()} and group {hitChar.m_group} nview {hitChar.m_nview}");
 
+                    Debug.LogWarning($"Hit char {hitChar.name} ZDO 'charmed': {hitChar.m_nview.GetZDO().GetBool("charmed")}");
                     // Skip if already charmed
-                    if (hitChar.m_nview != null && hitChar.m_nview.GetZDO().GetBool("charmed", false))
+                    //if (hitChar.m_nview.GetZDO().GetBool("charmed"))
+                    if (hitChar.IsTamed())
                         return;
 
+
                     // Apply charm
-                    hitChar.StartCoroutine(CaptureForCharm(hitChar, GetCharmDuration()));
+ //                   Debug.LogWarning($"[Projectile_OnHit_WoodArrowCharm] Applying charm for {hitChar.name}");
+                    __m_trophyHuntMod.StartCoroutine(CaptureForCharm(hitChar, GetCharmDuration()));
                 }
 
                 catch (System.Exception ex)
                 {
                     Debug.LogError($"[WoodArrowCharm] Error: {ex}");
                 }
+            }
+        }
+
+        public class SE_Thrall : StatusEffect
+        {
+            public override void Setup(Character character)
+            {
+                base.Setup(character);
+
+                if (m_character)
+                {
+                    m_character.SetTamed(true);
+                }
+            }
+            public override void UpdateStatusEffect(float dt)
+            {
+                base.UpdateStatusEffect(dt);
+            }
+
+            public override void Stop()
+            {
+                if (m_character)
+                {
+                    m_character.SetTamed(false);
+                }
+
+                base.Stop();
             }
         }
     }
