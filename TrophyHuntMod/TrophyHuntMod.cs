@@ -550,7 +550,7 @@ namespace TrophyHuntMod
             }
         }
 
-        static public string __m_saveDataVersionNumber = "5";
+        static public string __m_saveDataVersionNumber = "6";
 
         // WARNING!
         //
@@ -571,9 +571,19 @@ namespace TrophyHuntMod
                 public int m_numPickedUp;
             }
 
+            public class THMSaveDataCharmedCharacter
+            {
+                public Vector3 m_pos;
+                public Minimap.PinType m_pinType;
+                public long m_charmTimeRemaining;
+                public ushort m_userKey;
+                public uint m_ID;
+                public Character.Faction m_originalFaction;
+            }
+
             public List<THMSaveDataDropInfo> m_playerTrophyDropInfos = null;
             public List<THMSaveDataDropInfo> m_allTrophyDropInfos = null;
-
+            
             public List<Vector3> m_playerPathData = null;
 
             public List<TrophyPin> m_trophyPins;
@@ -585,6 +595,9 @@ namespace TrophyHuntMod
             public bool m_gameTimerCountdown;
 
             public long m_charmTimerSeconds;
+
+            public List<THMSaveDataCharmedCharacter> m_charmedCharacters = null;
+
 
             public int m_slashDieCount;
             public int m_logoutCount;
@@ -674,9 +687,25 @@ namespace TrophyHuntMod
             saveData.m_gameTimerVisible = __m_gameTimerVisible;
             saveData.m_gameTimerCountdown = __m_gameTimerCountdown;
 
+            // Charming Enemies in Pacifist mode
             saveData.m_charmTimerSeconds = __m_charmTimerSeconds;
-            
-            // TODO: SAVE LIST OF CHARMED ENEMIES
+
+            saveData.m_charmedCharacters = new List<THMSaveDataCharmedCharacter>();
+            foreach (var cc in __m_allCharmedCharacters)
+            {
+                THMSaveDataCharmedCharacter savedChar = new THMSaveDataCharmedCharacter();
+                savedChar.m_pos = cc.m_pin.m_pos;
+                savedChar.m_pinType = cc.m_pin.m_type;
+
+                savedChar.m_userKey = cc.m_zdoid.UserKey;
+                savedChar.m_ID = cc.m_zdoid.ID;
+
+                savedChar.m_charmTimeRemaining = cc.m_charmExpireTime - __m_charmTimerSeconds;
+                savedChar.m_originalFaction = cc.m_originalFaction;
+
+                saveData.m_charmedCharacters.Add(savedChar);
+            }
+//            saveData.m_charmedCharacters = __m_allCharmedCharacters;
 
             // Death and logout accounting
             saveData.m_slashDieCount = __m_slashDieCount;
@@ -749,6 +778,25 @@ namespace TrophyHuntMod
             if (__m_charmTimerSeconds < saveData.m_charmTimerSeconds)
             {
                 __m_charmTimerSeconds = saveData.m_charmTimerSeconds;
+            }
+
+            //            __m_allCharmedCharacters = saveData.m_charmedCharacters;
+            __m_allCharmedCharacters.Clear();
+            foreach (var thmsdcc in saveData.m_charmedCharacters)
+            {
+                CharmedCharacter cc = new CharmedCharacter();
+
+                cc.m_zdoid = new ZDOID();
+                cc.m_zdoid.UserKey = thmsdcc.m_userKey;
+                cc.m_zdoid.ID = thmsdcc.m_ID;
+
+                cc.m_charmExpireTime = __m_charmTimerSeconds + thmsdcc.m_charmTimeRemaining;
+                cc.m_originalFaction = thmsdcc.m_originalFaction;
+                cc.m_pin = new Minimap.PinData();
+                cc.m_pin.m_type = thmsdcc.m_pinType;
+                cc.m_pin.m_pos = thmsdcc.m_pos;
+
+                __m_allCharmedCharacters.Add(cc);
             }
 
             // Death and logout accounting
@@ -7909,11 +7957,6 @@ namespace TrophyHuntMod
 
         public static void SetCharmedState(CharmedCharacter cc)
         {
-            if (!__m_allCharmedCharacters.Contains(cc))
-            {
-                return;
-            }
-
             CharmedCharacter guy = __m_allCharmedCharacters.Find(c => c.m_zdoid == cc.m_zdoid);
 
             if (guy != null)
@@ -7922,13 +7965,6 @@ namespace TrophyHuntMod
                 if (enemy == null)
                 {
                     Debug.LogError($"Unable to SetCharmedState for ZDOID {guy.m_zdoid} - character not found!");
-                    return;
-                }
-
-                var nview = enemy.m_nview;
-                if (nview == null || !nview.IsValid())
-                {
-                    Debug.LogError($"Unable to SetCharmedState for {enemy.name} - nview is null or invalid!");
                     return;
                 }
 
@@ -7951,7 +7987,11 @@ namespace TrophyHuntMod
                     //    tameable.m_commandable = true;
                     //}
 
-                    monsterAI.SetFollowTarget(Player.m_localPlayer.gameObject);
+                    if (Player.m_localPlayer != null && Player.m_localPlayer.gameObject != null)
+                    {
+                        monsterAI.SetFollowTarget(Player.m_localPlayer.gameObject);
+                    }
+
                     monsterAI.m_attackPlayerObjects = false;
                     //                monsterAI.ResetRandomMovement();
                     //                monsterAI.ResetPatrolPoint();
