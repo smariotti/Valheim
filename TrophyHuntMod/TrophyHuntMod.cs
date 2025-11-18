@@ -584,6 +584,8 @@ namespace TrophyHuntMod
             public bool m_gameTimerVisible;
             public bool m_gameTimerCountdown;
 
+            public long m_charmTimerSeconds;
+
             public int m_slashDieCount;
             public int m_logoutCount;
 
@@ -672,6 +674,10 @@ namespace TrophyHuntMod
             saveData.m_gameTimerVisible = __m_gameTimerVisible;
             saveData.m_gameTimerCountdown = __m_gameTimerCountdown;
 
+            saveData.m_charmTimerSeconds = __m_charmTimerSeconds;
+            
+            // TODO: SAVE LIST OF CHARMED ENEMIES
+
             // Death and logout accounting
             saveData.m_slashDieCount = __m_slashDieCount;
             saveData.m_logoutCount = __m_logoutCount;
@@ -732,7 +738,6 @@ namespace TrophyHuntMod
             {
                 __m_gameTimerElapsedSeconds = saveData.m_gameTimerElapsedSeconds;
             }
-
             if (__m_internalTimerElapsedSeconds < saveData.m_internalTimerElapsedSeconds)
             {
                 __m_internalTimerElapsedSeconds = saveData.m_internalTimerElapsedSeconds;
@@ -740,6 +745,11 @@ namespace TrophyHuntMod
             __m_gameTimerActive = saveData.m_gameTimerActive;
             __m_gameTimerVisible = saveData.m_gameTimerVisible;
             __m_gameTimerCountdown = saveData.m_gameTimerCountdown;
+
+            if (__m_charmTimerSeconds < saveData.m_charmTimerSeconds)
+            {
+                __m_charmTimerSeconds = saveData.m_charmTimerSeconds;
+            }
 
             // Death and logout accounting
             __m_slashDieCount = saveData.m_slashDieCount;
@@ -1348,6 +1358,11 @@ namespace TrophyHuntMod
                 PostStandingsRequest();
 
                 StartPeriodicTimer();
+
+                if (GetGameMode() == TrophyGameMode.TrophyPacifist)
+                {
+                    StartCharmTimer();
+                }
 
                 //                PostTrackHunt();
 
@@ -6246,7 +6261,7 @@ namespace TrophyHuntMod
 
             string json = JsonConvert.SerializeObject(entry);
 
-                                        Debug.LogWarning($"PostTrackLogEntry: {json}");
+            Debug.LogWarning($"PostTrackLogEntry: {json}");
 
             string url = "https://valheim.help/api/track/log";
 
@@ -7547,13 +7562,9 @@ namespace TrophyHuntMod
                     return;
                 }
 
-                if (__instance != null && __instance.m_nview != null && __instance.m_nview.GetZDO().GetBool("charmed", false))
+                CharmedCharacter guy = __m_allCharmedCharacters.Find(c => c.m_zdoid == __instance.GetZDOID());
+                if (guy != null)
                 {
-                    if (Player.IsCharacterInRange(__instance.transform.position, 30))
-                    {
-//                        Debug.LogWarning($"GetJogSpeedFactor called for {__instance?.name}");
-                    }
-
                     __result = CHARMED_ENEMY_SPEED_MULTIPLIER; // Normal speed
                 }
             }
@@ -7569,13 +7580,9 @@ namespace TrophyHuntMod
                     return;
                 }
 
-                if (__instance != null && __instance.m_nview != null && __instance.m_nview.GetZDO().GetBool("charmed", false))
+                CharmedCharacter guy = __m_allCharmedCharacters.Find(c => c.m_zdoid == __instance.GetZDOID());
+                if (guy != null)
                 {
-                    if (Player.IsCharacterInRange(__instance.transform.position, 30))
-                    {
-//                        Debug.LogWarning($"GetRunSpeedFactor called for {__instance?.name}");
-                    }
-
                     __result = CHARMED_ENEMY_SPEED_MULTIPLIER; // Normal speed
                 }
             }
@@ -7585,8 +7592,12 @@ namespace TrophyHuntMod
         {
             public static bool Prefix(MonsterAI __instance, Humanoid humanoid, float dt, out bool canHearTarget, out bool canSeeTarget)
             {
+
                 canHearTarget = false;
                 canSeeTarget = false;
+
+                return true;
+
                 if (GetGameMode() != TrophyGameMode.TrophyPacifist)
                 {
                     return true;
@@ -7611,7 +7622,7 @@ namespace TrophyHuntMod
                                     __instance.SetTargetInfo(nearestEnemy.GetZDOID());
                                     __instance.m_lastKnownTargetPos = nearestEnemy.transform.position;
                                     __instance.m_beenAtLastPos = false;
-                                    
+
                                     __instance.SetAlerted(alert: true);
                                     __instance.SetAggravated(true, BaseAI.AggravatedReason.Damage);
                                     __instance.SetFollowTarget(Player.m_localPlayer.gameObject);
@@ -7629,7 +7640,7 @@ namespace TrophyHuntMod
                 return true;
             }
         }
-        
+
         [HarmonyPatch(typeof(MonsterAI), nameof(MonsterAI.UpdateAI))]
         public static class MonsterAI_UpdateAI_Patch
         {
@@ -7671,7 +7682,7 @@ namespace TrophyHuntMod
                 {
                     float targetDist = Vector3.Distance(target.transform.position, __instance.m_character.transform.position);
 
-//                    Debug.LogWarning($"MonsterAI.UpdateAI() {__instance.name} T: {target.name} distToTarget {targetDist} F: {__instance.GetFollowTarget().name} distToPlayer: {playerDist} ");
+                    //                    Debug.LogWarning($"MonsterAI.UpdateAI() {__instance.name} T: {target.name} distToTarget {targetDist} F: {__instance.GetFollowTarget().name} distToPlayer: {playerDist} ");
 
                     //__instance.SetTarget(null);
                     //__instance.SetTargetInfo(ZDOID.None);
@@ -7679,7 +7690,37 @@ namespace TrophyHuntMod
                 }
             }
         }
-        
+
+        public const float cFollowDistance = 3.0f;
+        public const float cRadiusScale = 2f;
+
+        [HarmonyPatch(typeof(BaseAI), nameof(BaseAI.Follow))]
+        public static class BaseAI_Follow_Patch
+        {
+            public static bool Prefix(BaseAI __instance, GameObject go, float dt)
+            {
+                float distanceReduction = 0.0f;
+
+                //if (go == Player.m_localPlayer.gameObject)
+                //{
+                //    float velmag = Player.m_localPlayer.GetVelocity().magnitude;
+                //    distanceReduction = velmag * 0.5f;
+                //}
+                float num = Vector3.Distance(go.transform.position, __instance.m_character.transform.position);
+                bool run = num > 10f;
+                if (num < cFollowDistance + __instance.m_character.GetRadius() * cRadiusScale - distanceReduction)
+                {
+                    __instance.StopMoving();
+                }
+                else
+                {
+                    __instance.MoveTo(dt, go.transform.position, 0f, run);
+                }
+
+                return false;
+            }
+        }
+
         [HarmonyPatch(typeof(Humanoid), nameof(Humanoid.GiveDefaultItems))]
         public static class Humanoid_GiveDefaultItems_Patch
         {
@@ -7789,92 +7830,192 @@ namespace TrophyHuntMod
 
         public class CharmedCharacter
         {
-            public CharmedCharacter() { m_pin = null; m_character = null; }
-            public CharmedCharacter(Character character) { m_character = character; }
-            public Minimap.PinData m_pin;
-            public Character m_character;
+            public CharmedCharacter() { m_zdoid = ZDOID.None;  m_pin = null;}
+            public CharmedCharacter(ZDOID zdoid) { m_zdoid = zdoid; }
+
+            // Data we store for the charmed guy
+            public ZDOID m_zdoid = ZDOID.None;
+            public Minimap.PinData m_pin = null;
+            public long m_charmExpireTime = 0;
+            public Character.Faction m_originalFaction = Character.Faction.TrainingDummy;
         }
 
         static List<CharmedCharacter> __m_allCharmedCharacters = new List<CharmedCharacter>();
-        const float TROPHY_PACIFIST_CHARM_DURATION = 30; // seconds
+
+        const float TROPHY_PACIFIST_CHARM_DURATION = 300; // seconds
 
         public static float GetCharmDuration()
         {
             System.Random randomizer = new System.Random();
-            float duration =  TROPHY_PACIFIST_CHARM_DURATION + (float)randomizer.NextDouble() * TROPHY_PACIFIST_CHARM_DURATION/4 - TROPHY_PACIFIST_CHARM_DURATION/8;
+            float duration = TROPHY_PACIFIST_CHARM_DURATION + (float)randomizer.NextDouble() * TROPHY_PACIFIST_CHARM_DURATION / 4 - TROPHY_PACIFIST_CHARM_DURATION / 8;
 
-//            Debug.LogWarning($"[GetCharmDuration] {duration} seconds.");
+            //            Debug.LogWarning($"[GetCharmDuration] {duration} seconds.");
 
             return duration;
         }
 
-        public static void RecharmAllCharmedEnemies()
+        public static ZDOID GetZDOIDFromCharacter(Character character)
         {
-            __m_allCharmedCharacters.Clear();
+            if (character == null)
+            {
+                return ZDOID.None;
+            }
 
+            var nview = character.m_nview;
+            if (nview == null || !nview.IsValid())
+            {
+                return ZDOID.None;
+            }
+
+            return character.GetZDOID();
+        }
+
+        public static Character GetCharacterFromZDOID(ZDOID zdoid)
+        {
             List<Character> allCharacters = Character.GetAllCharacters();
             foreach (Character character in allCharacters)
             {
-                var nview = character.m_nview;
-                if (nview != null && nview.IsValid())
+                if (character.GetZDOID() == zdoid)
                 {
-                    if (nview.GetZDO().GetBool("charmed"))
-                    {
-                        character.StartCoroutine(CaptureForCharm(character, GetCharmDuration()));
-                    }
+                    return character;
                 }
             }
+            return null;
         }
 
-        public static void CharmEnemy(Character enemy)
+        public static void RecharmAllCharmedEnemies()
         {
-            enemy.SetTamed(true);
-
-            // Change faction to player
-//            enemy.m_faction = Character.Faction.Players;
-
-            var monsterAI = enemy.GetComponent<MonsterAI>();
-            if (monsterAI)
+            foreach (var cc in __m_allCharmedCharacters)
             {
-                Tameable tameable = enemy.GetComponent<Tameable>();
-                if (tameable)
-                {
-                    tameable.m_commandable = true;
-                }
-                monsterAI.SetFollowTarget(Player.m_localPlayer.gameObject);
-                monsterAI.m_attackPlayerObjects = false;
-                monsterAI.ResetRandomMovement();
-                monsterAI.ResetPatrolPoint();
-                monsterAI.SetAlerted(alert: false);
-                monsterAI.m_fleeIfNotAlerted = false;
-                monsterAI.m_fleeIfLowHealth = 0;
-                monsterAI.m_afraidOfFire = false;
-                monsterAI.m_fleeIfHurtWhenTargetCantBeReached = false;
-                monsterAI.m_circleTargetInterval = 0;
-                monsterAI.m_character.m_group = "";
-                monsterAI.SetHuntPlayer(false);
-                monsterAI.SetTarget(null);
-                monsterAI.SetTargetInfo(ZDOID.None);
+                SetCharmedState(cc);
             }
         }
 
-        public static void UncharmEnemy(Character enemy)
+        public static void AddToCharmedList(Character enemy, long duration)
         {
-            enemy.SetTamed(false);
-            return;
+            // Create a data structure to track the guy we charmed
+            CharmedCharacter cc = new CharmedCharacter();
+
+            ZDOID zdoid = enemy.GetZDOID();
+            cc.m_zdoid = zdoid;
+            cc.m_pin = Minimap.instance.AddPin(enemy.transform.position, Minimap.PinType.Icon3, "", false, false);
+            cc.m_originalFaction = enemy.m_faction;
+            cc.m_charmExpireTime = __m_charmTimerSeconds + duration;
+
+            __m_allCharmedCharacters.Add(cc);
+
+            SetCharmedState(cc);
+        }
+
+        public static void SetCharmedState(CharmedCharacter cc)
+        {
+            if (!__m_allCharmedCharacters.Contains(cc))
+            {
+                return;
+            }
+
+            CharmedCharacter guy = __m_allCharmedCharacters.Find(c => c.m_zdoid == cc.m_zdoid);
+
+            if (guy != null)
+            {
+                Character enemy = GetCharacterFromZDOID(guy.m_zdoid);
+                if (enemy == null)
+                {
+                    Debug.LogError($"Unable to SetCharmedState for ZDOID {guy.m_zdoid} - character not found!");
+                    return;
+                }
+
+                var nview = enemy.m_nview;
+                if (nview == null || !nview.IsValid())
+                {
+                    Debug.LogError($"Unable to SetCharmedState for {enemy.name} - nview is null or invalid!");
+                    return;
+                }
+
+                //            enemy.SetTamed(true);
+
+                // Change faction to player
+                enemy.m_faction = Character.Faction.Players;
+
+                // Optional: give a color tint or particle effect
+                AddCharmEffect(enemy);
+
+                Debug.LogError($"SetCharmedState for {enemy.name} - success");
+
+                var monsterAI = enemy.GetComponent<MonsterAI>();
+                if (monsterAI)
+                {
+                    //Tameable tameable = enemy.GetComponent<Tameable>();
+                    //if (tameable)
+                    //{
+                    //    tameable.m_commandable = true;
+                    //}
+
+                    monsterAI.SetFollowTarget(Player.m_localPlayer.gameObject);
+                    monsterAI.m_attackPlayerObjects = false;
+                    //                monsterAI.ResetRandomMovement();
+                    //                monsterAI.ResetPatrolPoint();
+                    //                monsterAI.SetAlerted(alert: false);
+                    monsterAI.m_fleeIfNotAlerted = false;
+                    monsterAI.m_fleeIfLowHealth = 0;
+                    //                monsterAI.m_afraidOfFire = false;
+                    //                monsterAI.m_fleeIfHurtWhenTargetCantBeReached = false;
+                    //                monsterAI.m_circleTargetInterval = 0;
+                    monsterAI.m_character.m_group = "";
+                    monsterAI.SetHuntPlayer(false);
+                    monsterAI.SetTarget(null);
+                    monsterAI.SetTargetInfo(ZDOID.None);
+                }
+            }
+        }
+
+        public static void SetUncharmedState(CharmedCharacter cc)
+        {
+            Character enemy = GetCharacterFromZDOID(cc.m_zdoid);
+            if (!enemy)
+            {
+                Debug.LogError($"Unable to SetUncharmedState for ZDOID {cc.m_zdoid} - character not found!");
+                return;
+            }
+
+//            enemy.SetTamed(false);
+            RemoveCharmEffect(enemy);
+            Debug.LogError($"SetUncharmedState for {enemy.name} - success");
+            enemy.m_faction = cc.m_originalFaction;
 
             var monsterAI = enemy.GetComponent<MonsterAI>();
             if (monsterAI)
             {
                 monsterAI.SetFollowTarget(null);
-                monsterAI.ResetRandomMovement();
-                monsterAI.ResetPatrolPoint();
-                monsterAI.SetAlerted(alert: false);
+//                monsterAI.ResetRandomMovement();
+//                monsterAI.ResetPatrolPoint();
+//                monsterAI.SetAlerted(alert: false);
                 monsterAI.SetTarget(null);
             }
         }
 
-        [HarmonyPatch(typeof(Character), nameof(Humanoid.OnDestroy))]
+        [HarmonyPatch(typeof(Character), nameof(Character.Awake))]
+        public static class Character_Awake_Patch
+        {
+            public static void Postfix(Character __instance)
+            {
+                if (GetGameMode() != TrophyGameMode.TrophyPacifist)
+                {
+                    return;
+                }
+
+                if (__instance == null)
+                    return;
+
+                CharmedCharacter guy = __m_allCharmedCharacters.Find(c => c.m_zdoid == __instance.GetZDOID());
+                if (guy != null)
+                {
+                    SetCharmedState(guy);
+                }
+            }
+        }
+
+        [HarmonyPatch(typeof(Character), nameof(Character.OnDestroy))]
         public static class Character_OnDestroy_Patch
         {
             public static void Prefix(Character __instance)
@@ -7885,89 +8026,82 @@ namespace TrophyHuntMod
                 }
 
                 Debug.LogWarning($"OnDestroy: {__instance.name}");
+            }
+        }
 
-                __instance?.m_nview?.GetZDO()?.Set("charmed", false);
+        public static bool __m_charmTimerStarted = false;
 
-                UncharmEnemy(__instance);
+        public static void StartCharmTimer()
+        {
+            if (__m_charmTimerStarted)
+            {
+                return;
+            }
 
-                // Clean up any charmed character entries
+            __m_charmTimerStarted = true;
+
+            __m_trophyHuntMod.StartCoroutine(CharmTimerUpdate());
+
+            Debug.LogWarning("[StartCharmTimer] Started Charm Timer.");
+        }
+
+        public static long __m_charmTimerSeconds = 0;
+
+        static IEnumerator CharmTimerUpdate()
+        {
+            while (__m_charmTimerStarted)
+            {
+                __m_charmTimerSeconds++;
+
+                Debug.LogWarning($"Charm Data");
+                Debug.LogWarning($"Charm Seconds: {__m_charmTimerSeconds}");
+                Debug.LogWarning($"Charm List: {__m_allCharmedCharacters.Count}");
+                for (var i = 0; i < __m_allCharmedCharacters.Count; i++)
+                {
+                    var cc = __m_allCharmedCharacters[i];
+                    Debug.LogWarning($"  Charm {i}: ZDOID {cc.m_zdoid} ExpireTime: {cc.m_charmExpireTime} Orig Faction: {cc.m_originalFaction}");
+                }
+
+                // For all charmed characters
                 CharmedCharacter toRemove = null;
                 foreach (var cc in __m_allCharmedCharacters)
                 {
-                    if (cc.m_character == __instance)
+                    Minimap.instance.RemovePin(cc.m_pin);
+
+                    if (__m_charmTimerSeconds >= cc.m_charmExpireTime)
                     {
+                        Debug.LogWarning($"Removing {cc}");
                         toRemove = cc;
                         break;
                     }
+
+                    Character target = GetCharacterFromZDOID(cc.m_zdoid);
+                    if (target)
+                    {
+                        cc.m_pin = Minimap.instance.AddPin(target.transform.position, Minimap.PinType.Icon3, "", false, false);
+                    }
                 }
+
                 if (toRemove != null)
                 {
+                    SetUncharmedState(toRemove);
                     Minimap.instance.RemovePin(toRemove.m_pin);
+
+                    Character target = GetCharacterFromZDOID(toRemove.m_zdoid);
+                    if (target)
+                    {
+                        Player.m_localPlayer.Message(MessageHud.MessageType.Center, $"{target?.GetHoverName()} is no longer yours.");
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"Target to uncharm not found for ZDOID {toRemove.m_zdoid}");
+                    }
+
                     __m_allCharmedCharacters.Remove(toRemove);
-                }
-            }
-        }   
-
-        private static IEnumerator CaptureForCharm(Character target, float duration)
-        {
-            if (target == null) yield break;
-
-            var nview = target.m_nview;
-            if (nview == null || !nview.IsValid()) yield break;
-
-            // Record original faction
-            Character.Faction originalFaction = target.m_faction;
-//            nview.GetZDO().Set("charmed", true);
-
-            CharmedCharacter cc = new CharmedCharacter(target);
-            cc.m_pin = Minimap.instance.AddPin(target.transform.position, Minimap.PinType.Icon3, "", false, false);
-            __m_allCharmedCharacters.Add(cc);
-
-            CharmEnemy(target);
-
-             // Optional: give a color tint or particle effect
-            AddCharmEffect(target);
-
-            // Debug info
-            //Debug.Log($"[WoodArrowCharm] {target.name} charmed for {duration} seconds.");
-
-            Player.m_localPlayer.Message(MessageHud.MessageType.Center, $"{target?.GetHoverName()} is under your thrall.");
-
-            Vector3 oldPos = target.transform.position;
-
-            float endTime = Time.time + duration;
-            while (Time.time < endTime)
-            {
-                Minimap.instance.RemovePin(cc.m_pin);
-                cc.m_pin = Minimap.instance.AddPin(target.transform.position, Minimap.PinType.Icon3, "", false, false);
-                // Keep them alive & ensure faction doesn’t reset prematurely
-                if (target == null || target.IsDead())
-                {
-                    break;
                 }
 
                 yield return new WaitForSeconds(1f);
             }
-
-            // Revert faction
-            if (target != null && target.m_nview != null)
-//                if (target != null && target.m_nview != null && target.m_nview.IsValid())
-            {
-                Debug.LogWarning($"UNCHARMED: {target.name}");
-                target.m_faction = originalFaction;
-//                nview.GetZDO().Set("charmed", false);
-            }
-
-            Minimap.instance.RemovePin(cc.m_pin);
-
-            __m_allCharmedCharacters.Remove(cc);
-
-            RemoveCharmEffect(target);
-
-            UncharmEnemy(target);
-
-            //Debug.LogWarning($"[WoodArrowCharm] {target.name} reverted to {originalFaction} faction.");
-            Player.m_localPlayer.Message(MessageHud.MessageType.Center, $"{target?.GetHoverName()} is no longer yours.");
         }
 
         private static void AddCharmEffect(Character target)
@@ -8073,29 +8207,42 @@ namespace TrophyHuntMod
                     if (item == null || item.m_shared == null)
                         return;
 
-//                    Debug.LogWarning($"[Projectile_OnHit_WoodArrowCharm] {__instance.m_ammo.m_shared.m_name} {collider.gameObject.name}");
+                    Debug.LogWarning($"[Projectile_OnHit_WoodArrowCharm] {__instance.m_ammo.m_shared.m_name} {collider.gameObject.name}");
 
                     // Only apply to wood arrows
                     if (!item.m_shared.m_name.Equals("$item_arrow_wood", System.StringComparison.OrdinalIgnoreCase))
                         return;
+                    Debug.LogWarning($"[Wood arrow!] Hit detected on {collider.gameObject.name}");
 
                     // Ensure we hit a Character
-                    Character hitChar = collider.GetComponent<Character>();
+                    GameObject obj = Projectile.FindHitObject(collider);
+                    if (obj == null)
+                    {
+                        Debug.LogWarning($"Unable find hit object for Projectile with collilder {collider.name}");
+                        return;
+                    }
+                    Character hitChar = obj.GetComponent<Character>();
                     if (hitChar == null || hitChar.IsPlayer() || hitChar.IsDead())
+                    {
+                        Debug.LogWarning($"Invalid hit char.");
                         return;
+                    }
+                
+                    Debug.LogWarning($"Hit char {hitChar.name} of faction {hitChar.GetFaction()} and group {hitChar.m_group} nview {hitChar.m_nview}");
 
-                    //                    Debug.LogWarning($"Hit char {hitChar.name} of faction {hitChar.GetFaction()} and group {hitChar.m_group} nview {hitChar.m_nview}");
-
-                    Debug.LogWarning($"Hit char {hitChar.name} ZDO 'charmed': {hitChar.m_nview.GetZDO().GetBool("charmed")}");
                     // Skip if already charmed
-                    //if (hitChar.m_nview.GetZDO().GetBool("charmed"))
-                    if (hitChar.IsTamed())
-                        return;
+                    ZDOID hitZDOID = GetZDOIDFromCharacter(hitChar);
+                    CharmedCharacter cc = __m_allCharmedCharacters.Find(c => c.m_zdoid == hitZDOID);
+                    if (cc != null)
+                    {
+                        Debug.LogWarning($"Found {hitChar.name} in charmed list");
 
+                        return;
+                    }
 
                     // Apply charm
- //                   Debug.LogWarning($"[Projectile_OnHit_WoodArrowCharm] Applying charm for {hitChar.name}");
-                    __m_trophyHuntMod.StartCoroutine(CaptureForCharm(hitChar, GetCharmDuration()));
+                    Debug.LogWarning($"[Projectile_OnHit_WoodArrowCharm] Applying charm for {hitChar.name}");
+                    AddToCharmedList(hitChar, (long)GetCharmDuration());
                 }
 
                 catch (System.Exception ex)
