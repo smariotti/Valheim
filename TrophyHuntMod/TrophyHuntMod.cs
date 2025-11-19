@@ -1225,10 +1225,10 @@ namespace TrophyHuntMod
                 }
                 if (GetGameMode() == TrophyGameMode.TrophyPacifist)
                 {
-                    text += $"<align=\"left\">      * You <color=yellow>can't attack</color> enemies!\n";
+                    text += $"<align=\"left\">      * You <color=orange>can't attack</color> enemies!\n";
                     text += $"<align=\"left\">      * <color=orange>Wood Arrows</color> charm enemies!\n";
-                    text += $"<align=\"left\">      * Charmed enemies move <color=yellow>super fast</color>!\n";
-
+                    text += $"<align=\"left\">      * <color=orange>Bosses</color> cannot be charmed!\n";
+                    text += $"<align=\"left\">      * Charmed enemies move <color=orange>super fast</color>!\n";
                 }
 
                 if (GetGameMode() == TrophyGameMode.CasualSaga)
@@ -4724,28 +4724,33 @@ namespace TrophyHuntMod
         [HarmonyPatch(typeof(Character), nameof(Character.OnDeath))]
         public class Character_OnDeath_Patch
         {
+            static bool Prefix(Character __instance)
+            {
+                if (GetGameMode() == TrophyGameMode.TrophyPacifist)
+                {
+                    Debug.LogWarning($"Trophy Pacifist Mode: Removing charmed enemy {__instance.m_name} {__instance.GetZDOID()} on death.");
+                    if (IsCharmed(__instance))
+                    {
+                        Debug.LogWarning($"Trophy Pacifist Mode: {__instance.m_name} was charmed and has died.");
+
+                        // Post player message saying charmed enemy died
+                        if (Player.m_localPlayer != null)
+                        {
+                            Player.m_localPlayer.Message(MessageHud.MessageType.Center, $"Your thrall {__instance.m_name} has fallen!");
+                        }
+                        RemoveFromCharmedList(__instance);
+                    }
+                }
+
+                return true;
+            }
+
             static void Postfix(Character __instance)
             {
                 if (GetGameMode() == TrophyGameMode.CulinarySaga)
                     return;
 
                 Character character = __instance;
-
-                if (GetGameMode() == TrophyGameMode.TrophyPacifist)
-                {
-                    var nview = character.m_nview;
-                    if (nview != null && nview.IsValid())
-                    {
-                        if (nview.GetZDO().GetBool("charmed"))
-                        {
-                            // Post player message saying charmed enemy died
-                            if (Player.m_localPlayer != null)
-                            {
-                                Player.m_localPlayer.Message(MessageHud.MessageType.TopLeft, $"Your friend {__instance.m_name} has fallen!");
-                            }
-                        }
-                    }
-                }
 
                 // Check if the attacker is the local player
                 bool playerHit = false;
@@ -7635,59 +7640,60 @@ namespace TrophyHuntMod
                 }
             }
         }
-        [HarmonyPatch(typeof(MonsterAI), nameof(MonsterAI.UpdateTarget))]
-        public static class MonsterAI_UpdateTarget_Patch
-        {
-            public static bool Prefix(MonsterAI __instance, Humanoid humanoid, float dt, out bool canHearTarget, out bool canSeeTarget)
-            {
 
-                canHearTarget = false;
-                canSeeTarget = false;
+        //[HarmonyPatch(typeof(MonsterAI), nameof(MonsterAI.UpdateTarget))]
+        //public static class MonsterAI_UpdateTarget_Patch
+        //{
+        //    public static bool Prefix(MonsterAI __instance, Humanoid humanoid, float dt, out bool canHearTarget, out bool canSeeTarget)
+        //    {
 
-                return true;
+        //        canHearTarget = false;
+        //        canSeeTarget = false;
 
-                if (GetGameMode() != TrophyGameMode.TrophyPacifist)
-                {
-                    return true;
-                }
+        //        return true;
 
-                if (__instance != null)
-                {
-                    var nview = __instance.m_nview;
-                    if (nview != null && nview.IsValid())
-                    {
-                        if (nview.GetZDO().GetBool("charmed"))
-                        {
-                            //Debug.LogWarning($"UpdateTarget called for {__instance?.name} Alert: {humanoid?.name} Follow Target: {__instance.GetFollowTarget()?.name}");
-                            Character nearestEnemy = __instance.FindEnemy();
-                            if (nearestEnemy != null)
-                            {
-                                float enemyDistance = Vector3.Distance(nearestEnemy.transform.position, __instance.m_character.transform.position);
-                                float playerToEnemy = Vector3.Distance(Player.m_localPlayer.transform.position, __instance.m_character.transform.position);
-                                if (enemyDistance <= __instance.m_viewRange + playerToEnemy)
-                                {
-                                    __instance.SetTarget(nearestEnemy);
-                                    __instance.SetTargetInfo(nearestEnemy.GetZDOID());
-                                    __instance.m_lastKnownTargetPos = nearestEnemy.transform.position;
-                                    __instance.m_beenAtLastPos = false;
+        //        if (GetGameMode() != TrophyGameMode.TrophyPacifist)
+        //        {
+        //            return true;
+        //        }
 
-                                    __instance.SetAlerted(alert: true);
-                                    __instance.SetAggravated(true, BaseAI.AggravatedReason.Damage);
-                                    __instance.SetFollowTarget(Player.m_localPlayer.gameObject);
-                                    canHearTarget = true;
-                                    canSeeTarget = true;
+        //        if (__instance != null)
+        //        {
+        //            var nview = __instance.m_nview;
+        //            if (nview != null && nview.IsValid())
+        //            {
+        //                if (nview.GetZDO().GetBool("charmed"))
+        //                {
+        //                    //Debug.LogWarning($"UpdateTarget called for {__instance?.name} Alert: {humanoid?.name} Follow Target: {__instance.GetFollowTarget()?.name}");
+        //                    Character nearestEnemy = __instance.FindEnemy();
+        //                    if (nearestEnemy != null)
+        //                    {
+        //                        float enemyDistance = Vector3.Distance(nearestEnemy.transform.position, __instance.m_character.transform.position);
+        //                        float playerToEnemy = Vector3.Distance(Player.m_localPlayer.transform.position, __instance.m_character.transform.position);
+        //                        if (enemyDistance <= __instance.m_viewRange + playerToEnemy)
+        //                        {
+        //                            __instance.SetTarget(nearestEnemy);
+        //                            __instance.SetTargetInfo(nearestEnemy.GetZDOID());
+        //                            __instance.m_lastKnownTargetPos = nearestEnemy.transform.position;
+        //                            __instance.m_beenAtLastPos = false;
 
-                                    return true;
-                                }
-                            }
-                        }
-                    }
-                }
-                __instance.SetTarget(null);
-                __instance.SetTargetInfo(ZDOID.None);
-                return true;
-            }
-        }
+        //                            __instance.SetAlerted(alert: true);
+        //                            __instance.SetAggravated(true, BaseAI.AggravatedReason.Damage);
+        //                            __instance.SetFollowTarget(Player.m_localPlayer.gameObject);
+        //                            canHearTarget = true;
+        //                            canSeeTarget = true;
+
+        //                            return true;
+        //                        }
+        //                    }
+        //                }
+        //            }
+        //        }
+        //        __instance.SetTarget(null);
+        //        __instance.SetTargetInfo(ZDOID.None);
+        //        return true;
+        //    }
+        //}
 
         [HarmonyPatch(typeof(MonsterAI), nameof(MonsterAI.UpdateAI))]
         public static class MonsterAI_UpdateAI_Patch
@@ -7699,18 +7705,24 @@ namespace TrophyHuntMod
                     return;
                 }
 
-                if (__instance == null)
+                if (__instance == null || __instance.m_character == null)
                     return;
 
-                var nview = __instance.m_nview;
-                if (nview == null || !nview.IsValid())
-                    return;
-
-                // Record original faction
-                if (!nview.GetZDO().GetBool("charmed"))
+                if (!IsCharmed(__instance.m_character))
                 {
                     return;
                 }
+
+                //var nview = __instance.m_nview;
+                //if (nview == null || !nview.IsValid())
+                //    return;
+
+                //// Record original faction
+                //if (!nview.GetZDO().GetBool("charmed"))
+                //{
+                //    return;
+                //}
+
 
                 if (__instance.m_character == null)
                 {
@@ -7769,6 +7781,108 @@ namespace TrophyHuntMod
             }
         }
 
+        public const float PACIFIST_THRALL_PLAYER_TARGET_DISTANCE = 50.0f;
+
+        [HarmonyPatch(typeof(BaseAI), nameof(BaseAI.FindEnemy))]
+        public static class BaseAI_FindEnemy_Patch
+        {
+            public static bool Prefix(BaseAI __instance, ref Character __result)
+            {
+                if (GetGameMode() != TrophyGameMode.TrophyPacifist)
+                {
+                    return true;
+                }
+
+                if (!IsCharmed(__instance.m_character)) 
+                {
+                    return true;
+                }
+                Character localPlayer = Player.m_localPlayer;
+                if (localPlayer == null)
+                {
+                    return true;
+                }
+
+                BaseAI me = __instance;
+
+                List<Character> allCharacters = Character.GetAllCharacters();
+                Character closestEnemy = null;
+                float closestDist = 99999f;
+                foreach (Character enemy in allCharacters)
+                {
+                    if (!BaseAI.IsEnemy(me.m_character, enemy) || enemy.IsDead() || enemy.m_aiSkipTarget)
+                    {
+                        continue;
+                    }
+
+                    BaseAI enemyAI = enemy.GetBaseAI();
+                    if ((enemyAI == null || !enemyAI.IsSleeping()) && me.CanSenseTarget(enemy))
+                    {
+                        float meToEnemyDist = Vector3.Distance(enemy.transform.position, localPlayer.transform.position);
+                        if (meToEnemyDist < closestDist || closestEnemy == null)
+                        {
+                            closestEnemy = enemy;
+                            closestDist = meToEnemyDist;
+                        }
+                    }
+                }
+                if (closestEnemy == null && me.HuntPlayer())
+                {
+                    Player closestPlayer = Player.GetClosestPlayer(me.transform.position, 200f);
+                    if (closestPlayer != null && (closestPlayer.InDebugFlyMode() || closestPlayer.InGhostMode()))
+                    {
+                        __result = null;
+                        return false;
+                    }
+
+                    __result = closestPlayer;
+                    return false;
+                }
+
+                if (closestDist > PACIFIST_THRALL_PLAYER_TARGET_DISTANCE)
+                {
+                    Debug.LogWarning($"Thrall {__instance.m_character.name} wants to discard {closestEnemy?.name} at distance {closestDist}");
+                    MonsterAI monster = __instance as MonsterAI;
+                    if (monster)
+                    {
+                        monster.m_timeSinceSensedTargetCreature = 0;
+                        monster.m_targetCreature = null;
+                        monster.m_targetStatic = null;
+                        monster.SetTargetInfo(ZDOID.None);
+                    }
+                    __result = null;
+                    return false;
+                }
+
+                Debug.LogWarning($"BaseAI.FindEnemy() returning target: {closestEnemy?.name}");
+                __result = closestEnemy;
+
+                return false;
+
+                //float leashDistance = 10;
+                //Character target = __instance.GetTargetCreature();
+                //if (target != null)
+                //{
+                //    float targetDistance = Vector3.Distance(target.transform.position, __instance.m_character.transform.position);
+                //    float playerDistance = Vector3.Distance(Player.m_localPlayer.transform.position, __instance.m_character.transform.position);
+
+                //    if (playerDistance > leashDistance)
+                //    {
+                //        if (targetDistance > 3.0f)
+                //        {
+                //            Debug.Log($"Ignoring enemy {target} who's {targetDistance} meters from his target, and {playerDistance} meters from me");
+                //            __instance.SetTargetInfo(ZDOID.None);
+                //            MonsterAI monster = __instance as MonsterAI;
+                //            if (monster != null)
+                //                monster.SetFollowTarget(Player.m_localPlayer.gameObject);
+
+                //            __result = null;
+                //        }
+                //    }
+                //}
+            }
+        }
+
         [HarmonyPatch(typeof(Humanoid), nameof(Humanoid.GiveDefaultItems))]
         public static class Humanoid_GiveDefaultItems_Patch
         {
@@ -7822,7 +7936,7 @@ namespace TrophyHuntMod
 
                 if (hit.GetAttacker() == Player.m_localPlayer)
                 {
-                    Debug.LogWarning($"[Character_RPC_Damage_Patch] Player is Attacker: {__instance?.name} : {hit.GetAttacker().name}");
+//                    Debug.LogWarning($"[Character_RPC_Damage_Patch] Player is Attacker: {__instance?.name} : {hit.GetAttacker().name}");
                     return false;
                 }
 
@@ -7939,6 +8053,15 @@ namespace TrophyHuntMod
             }
         }
 
+        public static bool IsCharmed(Character character)
+        {
+            CharmedCharacter guy = __m_allCharmedCharacters.Find(c => c.m_zdoid == character.GetZDOID());
+
+            bool result = guy != null;
+
+            return result;
+        }
+
         public static void AddToCharmedList(Character enemy, long duration)
         {
             // Create a data structure to track the guy we charmed
@@ -7955,10 +8078,19 @@ namespace TrophyHuntMod
             SetCharmedState(cc);
         }
 
+        public static void RemoveFromCharmedList(Character enemy)
+        {
+            CharmedCharacter cc = __m_allCharmedCharacters.Find(c => c.m_zdoid == enemy.GetZDOID());
+            if (cc != null)
+            {
+                Minimap.instance.RemovePin(cc.m_pin);
+                __m_allCharmedCharacters.Remove(cc);
+            }
+        }
+
         public static void SetCharmedState(CharmedCharacter cc)
         {
             CharmedCharacter guy = __m_allCharmedCharacters.Find(c => c.m_zdoid == cc.m_zdoid);
-
             if (guy != null)
             {
                 Character enemy = GetCharacterFromZDOID(guy.m_zdoid);
@@ -7976,7 +8108,7 @@ namespace TrophyHuntMod
                 // Optional: give a color tint or particle effect
                 AddCharmEffect(enemy);
 
-                Debug.LogError($"SetCharmedState for {enemy.name} - success");
+//                Debug.LogError($"SetCharmedState for {enemy.name} - success");
 
                 var monsterAI = enemy.GetComponent<MonsterAI>();
                 if (monsterAI)
@@ -8020,7 +8152,7 @@ namespace TrophyHuntMod
 
 //            enemy.SetTamed(false);
             RemoveCharmEffect(enemy);
-            Debug.LogError($"SetUncharmedState for {enemy.name} - success");
+//            Debug.LogError($"SetUncharmedState for {enemy.name} - success");
             enemy.m_faction = cc.m_originalFaction;
 
             var monsterAI = enemy.GetComponent<MonsterAI>();
@@ -8065,7 +8197,7 @@ namespace TrophyHuntMod
                     return;
                 }
 
-                Debug.LogWarning($"OnDestroy: {__instance.name}");
+ //               Debug.LogWarning($"OnDestroy: {__instance.name}");
             }
         }
 
@@ -8082,7 +8214,7 @@ namespace TrophyHuntMod
 
             __m_trophyHuntMod.StartCoroutine(CharmTimerUpdate());
 
-            Debug.LogWarning("[StartCharmTimer] Started Charm Timer.");
+//            Debug.LogWarning("[StartCharmTimer] Started Charm Timer.");
         }
 
         public static long __m_charmTimerSeconds = 0;
@@ -8110,7 +8242,6 @@ namespace TrophyHuntMod
 
                     if (__m_charmTimerSeconds >= cc.m_charmExpireTime)
                     {
-                        Debug.LogWarning($"Removing {cc}");
                         toRemove = cc;
                         break;
                     }
@@ -8247,12 +8378,12 @@ namespace TrophyHuntMod
                     if (item == null || item.m_shared == null)
                         return;
 
-                    Debug.LogWarning($"[Projectile_OnHit_WoodArrowCharm] {__instance.m_ammo.m_shared.m_name} {collider.gameObject.name}");
+//                    Debug.LogWarning($"[Projectile_OnHit_WoodArrowCharm] {__instance.m_ammo.m_shared.m_name} {collider.gameObject.name}");
 
                     // Only apply to wood arrows
                     if (!item.m_shared.m_name.Equals("$item_arrow_wood", System.StringComparison.OrdinalIgnoreCase))
                         return;
-                    Debug.LogWarning($"[Wood arrow!] Hit detected on {collider.gameObject.name}");
+//                    Debug.LogWarning($"[Wood arrow!] Hit detected on {collider.gameObject.name}");
 
                     // Ensure we hit a Character
                     GameObject obj = Projectile.FindHitObject(collider);
@@ -8265,23 +8396,26 @@ namespace TrophyHuntMod
                     if (hitChar == null || hitChar.IsPlayer() || hitChar.IsDead())
                     {
                         Debug.LogWarning($"Invalid hit char.");
+
                         return;
                     }
-                
-                    Debug.LogWarning($"Hit char {hitChar.name} of faction {hitChar.GetFaction()} and group {hitChar.m_group} nview {hitChar.m_nview}");
+
+                    if (hitChar.m_faction == Character.Faction.Boss)
+                    {
+                        Player.m_localPlayer.Message(MessageHud.MessageType.Center, $"Bosses cannot be charmed.");
+
+                        return;
+                    }
+                    //                    Debug.LogWarning($"Hit char {hitChar.name} of faction {hitChar.GetFaction()} and group {hitChar.m_group} nview {hitChar.m_nview}");
 
                     // Skip if already charmed
-                    ZDOID hitZDOID = GetZDOIDFromCharacter(hitChar);
-                    CharmedCharacter cc = __m_allCharmedCharacters.Find(c => c.m_zdoid == hitZDOID);
-                    if (cc != null)
+                    if (IsCharmed(hitChar))
                     {
-                        Debug.LogWarning($"Found {hitChar.name} in charmed list");
-
                         return;
                     }
 
                     // Apply charm
-                    Debug.LogWarning($"[Projectile_OnHit_WoodArrowCharm] Applying charm for {hitChar.name}");
+//                    Debug.LogWarning($"[Projectile_OnHit_WoodArrowCharm] Applying charm for {hitChar.name}");
                     AddToCharmedList(hitChar, (long)GetCharmDuration());
                 }
 
