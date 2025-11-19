@@ -579,6 +579,7 @@ namespace TrophyHuntMod
                 public ushort m_userKey;
                 public uint m_ID;
                 public Character.Faction m_originalFaction;
+                public float m_swimSpeed;
             }
 
             public List<THMSaveDataDropInfo> m_playerTrophyDropInfos = null;
@@ -702,6 +703,7 @@ namespace TrophyHuntMod
 
                 savedChar.m_charmTimeRemaining = cc.m_charmExpireTime - __m_charmTimerSeconds;
                 savedChar.m_originalFaction = cc.m_originalFaction;
+                savedChar.m_swimSpeed = cc.m_swimSpeed;
 
                 saveData.m_charmedCharacters.Add(savedChar);
             }
@@ -795,6 +797,7 @@ namespace TrophyHuntMod
                 cc.m_pin = new Minimap.PinData();
                 cc.m_pin.m_type = thmsdcc.m_pinType;
                 cc.m_pin.m_pos = thmsdcc.m_pos;
+                cc.m_swimSpeed = thmsdcc.m_swimSpeed;
 
                 __m_allCharmedCharacters.Add(cc);
             }
@@ -7992,7 +7995,7 @@ namespace TrophyHuntMod
 
         public class CharmedCharacter
         {
-            public CharmedCharacter() { m_zdoid = ZDOID.None;  m_pin = null;}
+            public CharmedCharacter() { m_zdoid = ZDOID.None;  m_pin = null; m_charmExpireTime = 0; m_originalFaction = Character.Faction.TrainingDummy; m_swimSpeed = 2f; }
             public CharmedCharacter(ZDOID zdoid) { m_zdoid = zdoid; }
 
             // Data we store for the charmed guy
@@ -8000,6 +8003,7 @@ namespace TrophyHuntMod
             public Minimap.PinData m_pin = null;
             public long m_charmExpireTime = 0;
             public Character.Faction m_originalFaction = Character.Faction.TrainingDummy;
+            public float m_swimSpeed = 2f;
         }
 
         static List<CharmedCharacter> __m_allCharmedCharacters = new List<CharmedCharacter>();
@@ -8072,6 +8076,7 @@ namespace TrophyHuntMod
             cc.m_pin = Minimap.instance.AddPin(enemy.transform.position, Minimap.PinType.Icon3, "", false, false);
             cc.m_originalFaction = enemy.m_faction;
             cc.m_charmExpireTime = __m_charmTimerSeconds + duration;
+            cc.m_swimSpeed = enemy.m_swimSpeed;
 
             __m_allCharmedCharacters.Add(cc);
 
@@ -8104,6 +8109,8 @@ namespace TrophyHuntMod
 
                 // Change faction to player
                 enemy.m_faction = Character.Faction.Players;
+
+                enemy.m_swimSpeed *= 10;
 
                 // Optional: give a color tint or particle effect
                 AddCharmEffect(enemy);
@@ -8154,6 +8161,7 @@ namespace TrophyHuntMod
             RemoveCharmEffect(enemy);
 //            Debug.LogError($"SetUncharmedState for {enemy.name} - success");
             enemy.m_faction = cc.m_originalFaction;
+            enemy.m_swimSpeed = cc.m_swimSpeed;
 
             var monsterAI = enemy.GetComponent<MonsterAI>();
             if (monsterAI)
