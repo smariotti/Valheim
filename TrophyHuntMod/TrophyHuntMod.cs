@@ -26,6 +26,7 @@ using System.Security.Policy;
 using Newtonsoft.Json.Linq;
 using System.ComponentModel;
 using static TrophyHuntMod.TrophyHuntMod;
+using System.Runtime.InteropServices.WindowsRuntime;
 
 namespace TrophyHuntMod
 {
@@ -423,6 +424,9 @@ namespace TrophyHuntMod
 
         // TrophyHuntMod current Game Mode
         static TrophyGameMode __m_trophyGameMode = TrophyGameMode.TrophyHunt;
+
+        static public bool __m_pacifistEnabled = false;
+
         static public TrophyGameMode GetGameMode() { return __m_trophyGameMode; }
         static public string GetGameModeString(TrophyGameMode mode)
         {
@@ -459,6 +463,7 @@ namespace TrophyHuntMod
         }
 
         static public bool IsSagaMode() { return __m_trophyGameMode == TrophyGameMode.CasualSaga || __m_trophyGameMode == TrophyGameMode.CulinarySaga || __m_trophyGameMode == TrophyGameMode.TrophySaga; }
+        static public bool IsPacifist() { return __m_pacifistEnabled; }
 
         static bool __m_fiestaFlashing = false;
         static Color[] __m_fiestaColors = new Color[]
@@ -997,6 +1002,11 @@ namespace TrophyHuntMod
             }
         }
 
+        public static void TogglePacifist()
+        {
+            __m_pacifistEnabled = !__m_pacifistEnabled;
+        }
+
         public static void ToggleShowAllTrophyStats()
         {
             __m_showAllTrophyStats = !__m_showAllTrophyStats;
@@ -1068,7 +1078,7 @@ namespace TrophyHuntMod
                     gameModeText = "Trailblazer";
                     break;
                 case TrophyGameMode.TrophyPacifist:
-                    gameModeText = "Trailblazer";
+                    gameModeText = "Pacifist";
                     break;
                 case TrophyGameMode.CulinarySaga:
                     gameModeText = "Culinary Saga";
@@ -1229,7 +1239,7 @@ namespace TrophyHuntMod
                     text += $"<align=\"left\">      * Automatic Portal map pins\n";
                     text += $"<align=\"left\">      * <color=orange>CheatDeath(tm)</color> within 3 sec.\n";
                 }
-                if (GetGameMode() == TrophyGameMode.TrophyPacifist)
+                if (IsPacifist())
                 {
                     text += $"<align=\"left\">      * You <color=orange>can't attack</color> enemies!\n";
                     text += $"<align=\"left\">      * <color=orange>Wood Arrows</color> charm enemies!\n";
@@ -1413,7 +1423,7 @@ namespace TrophyHuntMod
 
                 StartPeriodicTimer();
 
-                if (GetGameMode() == TrophyGameMode.TrophyPacifist)
+                if (IsPacifist())
                 {
                     StartCharmTimer();
                 }
@@ -1433,7 +1443,7 @@ namespace TrophyHuntMod
 
                 Debug.LogWarning($"Loading into Game Mode: {GetGameModeString(GetGameMode())}");
 
-                if (GetGameMode() == TrophyGameMode.TrophyPacifist)
+                if (IsPacifist())
                 {
                     RecharmAllCharmedEnemies();
 
@@ -4734,7 +4744,7 @@ namespace TrophyHuntMod
         {
             static bool Prefix(Character __instance)
             {
-                if (GetGameMode() == TrophyGameMode.TrophyPacifist)
+                if (IsPacifist())
                 {
                     Debug.LogWarning($"Trophy Pacifist Mode: Removing charmed enemy {__instance.m_name} {__instance.GetZDOID()} on death.");
                     if (IsCharmed(__instance))
@@ -5362,22 +5372,11 @@ namespace TrophyHuntMod
             rectTransform.anchorMin = new Vector2(1.0f, 0.0f);
             rectTransform.anchorMax = new Vector2(1.0f, 0.0f);
             rectTransform.pivot = new Vector2(1.0f, 0.0f);
-            rectTransform.anchoredPosition = new Vector2(-70, -200); // Position below the logo
+            rectTransform.anchoredPosition = new Vector2(-170, -200); // Position below the logo
             rectTransform.sizeDelta = new Vector2(200, 25);
 
             // Add the Button component
             UnityEngine.UI.Button button = toggleGameModeButton.AddComponent<UnityEngine.UI.Button>();
-
-            ColorBlock cb = button.colors;
-            cb.normalColor = Color.black;
-            cb.highlightedColor = Color.yellow;  // When hovering
-            cb.pressedColor = Color.red;      // When pressed
-            cb.selectedColor = Color.white;   // When selected
-            button.colors = cb;
-
-            Navigation nav = new Navigation();
-            nav.mode = Navigation.Mode.None;
-            button.navigation = nav;
 
             // Add an Image component for the button background
             UnityEngine.UI.Image image = toggleGameModeButton.AddComponent<UnityEngine.UI.Image>();
@@ -5404,6 +5403,55 @@ namespace TrophyHuntMod
             // Set up the click listener
             button.onClick.AddListener(ToggleGameModeButtonClick);
         }
+        public static TextMeshProUGUI __m_pacifistButtonText = null;
+        public static void AddTogglePacifistButton(Transform parentTransform)
+        {
+            // Clone the existing button
+            GameObject togglePacifistButton = new GameObject("TogglePacifistButton");
+            togglePacifistButton.transform.SetParent(parentTransform);
+
+            // The UI RectTransform for the button
+            RectTransform rectTransform = togglePacifistButton.AddComponent<RectTransform>();
+            rectTransform.localScale = Vector3.one;
+            rectTransform.anchorMin = new Vector2(1.0f, 0.0f);
+            rectTransform.anchorMax = new Vector2(1.0f, 0.0f);
+            rectTransform.pivot = new Vector2(1.0f, 0.0f);
+            rectTransform.anchoredPosition = new Vector2(40, -200); // Position below the logo
+            rectTransform.sizeDelta = new Vector2(200, 25);
+            
+            // Add the Button component
+            UnityEngine.UI.Button button = togglePacifistButton.AddComponent<UnityEngine.UI.Button>();
+
+            // Add an Image component for the button background
+            UnityEngine.UI.Image image = togglePacifistButton.AddComponent<UnityEngine.UI.Image>();
+            image.color = Color.grey; // Set background color
+            if (IsPacifist())
+            {
+                image.color = Color.green; // Set background color
+            }
+
+            // Create a sub-object for the text because the GameObject can't have an Image and a Text object
+            GameObject textObject = new GameObject("TogglePacifistButtonText");
+            textObject.transform.SetParent(togglePacifistButton.transform);
+
+            // Set the Text RectTransform
+            RectTransform textRect = textObject.AddComponent<RectTransform>();
+            textRect.anchoredPosition = new Vector2(0, 0);
+
+            // Change the button's text
+            //TextMeshProUGUI buttonText = textObject.AddComponent<TextMeshProUGUI>();
+            __m_pacifistButtonText = AddTextMeshProComponent(textObject);
+
+            __m_pacifistButtonText.text = "<b><color=red>Pacifist: OFF</color><b>";
+            __m_pacifistButtonText.fontSize = 18;
+            __m_pacifistButtonText.color = Color.black;
+            __m_pacifistButtonText.alignment = TextAlignmentOptions.Center;
+            __m_pacifistButtonText.fontStyle = FontStyles.Bold;
+
+            // Set up the click listener
+            button.onClick.AddListener(TogglePacifistButtonClick);
+        }
+
 
         public static void AddLoginWithDiscordButton(Transform parentTransform)
         {
@@ -5603,6 +5651,19 @@ namespace TrophyHuntMod
         public static void ToggleGameModeButtonClick()
         {
             ToggleGameMode();
+        }
+
+        public static void TogglePacifistButtonClick()
+        {
+            TogglePacifist();
+            if (IsPacifist())
+            {
+                __m_pacifistButtonText.text = "<b><color=green>Pacifist: ON</color><b>";
+            }
+            else
+            {
+                __m_pacifistButtonText.text = "<b><color=red>Pacifist: OFF</color><b>";
+            }
         }
 
         public static void LoginButtonClick()
@@ -6564,7 +6625,7 @@ namespace TrophyHuntMod
 
 
                         AddToggleGameModeButton(textObject.transform);
-
+                        AddTogglePacifistButton(textObject.transform);
 
                         GameObject discordBackground = new GameObject("AvatarObject");
                         discordBackground.transform.SetParent(textObject.transform);
@@ -7618,7 +7679,7 @@ namespace TrophyHuntMod
         {
             public static void Postfix(Character __instance, ref float __result)
             {
-                if (GetGameMode() != TrophyGameMode.TrophyPacifist)
+                if (IsPacifist())
                 {
                     return;
                 }
@@ -7636,7 +7697,7 @@ namespace TrophyHuntMod
         {
             public static void Postfix(Character __instance, ref float __result)
             {
-                if (GetGameMode() != TrophyGameMode.TrophyPacifist)
+                if (IsPacifist())
                 {
                     return;
                 }
@@ -7708,7 +7769,7 @@ namespace TrophyHuntMod
         {
             public static void Postfix(MonsterAI __instance, float dt)
             {
-                if (GetGameMode() != TrophyGameMode.TrophyPacifist)
+                if (IsPacifist())
                 {
                     return;
                 }
@@ -7796,7 +7857,7 @@ namespace TrophyHuntMod
         {
             public static bool Prefix(BaseAI __instance, ref Character __result)
             {
-                if (GetGameMode() != TrophyGameMode.TrophyPacifist)
+                if (!IsPacifist())
                 {
                     return true;
                 }
@@ -7849,7 +7910,7 @@ namespace TrophyHuntMod
 
                 if (closestDist > PACIFIST_THRALL_PLAYER_TARGET_DISTANCE)
                 {
-                    //                    Debug.LogWarning($"Thrall {__instance.m_character.name} wants to discard {closestEnemy?.name} at distance {closestDist}");
+//                    Debug.LogWarning($"Thrall {__instance.m_character.name} wants to discard {closestEnemy?.name} at distance {closestDist}");
                     MonsterAI monster = __instance as MonsterAI;
                     if (monster)
                     {
@@ -7862,32 +7923,9 @@ namespace TrophyHuntMod
                     return false;
                 }
 
-                //                Debug.LogWarning($"BaseAI.FindEnemy() returning target: {closestEnemy?.name}");
                 __result = closestEnemy;
 
                 return false;
-
-                //float leashDistance = 10;
-                //Character target = __instance.GetTargetCreature();
-                //if (target != null)
-                //{
-                //    float targetDistance = Vector3.Distance(target.transform.position, __instance.m_character.transform.position);
-                //    float playerDistance = Vector3.Distance(Player.m_localPlayer.transform.position, __instance.m_character.transform.position);
-
-                //    if (playerDistance > leashDistance)
-                //    {
-                //        if (targetDistance > 3.0f)
-                //        {
-                //            Debug.Log($"Ignoring enemy {target} who's {targetDistance} meters from his target, and {playerDistance} meters from me");
-                //            __instance.SetTargetInfo(ZDOID.None);
-                //            MonsterAI monster = __instance as MonsterAI;
-                //            if (monster != null)
-                //                monster.SetFollowTarget(Player.m_localPlayer.gameObject);
-
-                //            __result = null;
-                //        }
-                //    }
-                //}
             }
         }
 
@@ -7898,7 +7936,7 @@ namespace TrophyHuntMod
             {
                 //                Debug.LogWarning($"Player_GiveDefaultItems_Patch Postfix called. Type: {__instance.GetType()}");
 
-                if (GetGameMode() != TrophyGameMode.TrophyPacifist)
+                if (IsPacifist())
                 {
                     return;
                 }
@@ -7934,7 +7972,7 @@ namespace TrophyHuntMod
         {
             public static bool Prefix(Character __instance, long sender, HitData hit)
             {
-                if (GetGameMode() != TrophyGameMode.TrophyPacifist)
+                if (!IsPacifist())
                 {
                     return true;
                 }
@@ -7969,7 +8007,7 @@ namespace TrophyHuntMod
         {
             public static bool Prefix(Humanoid __instance, Character target, bool secondaryAttack, bool __result)
             {
-                if (GetGameMode() != TrophyGameMode.TrophyPacifist)
+                if (!IsPacifist())
                 {
                     return true;
                 }
@@ -8197,7 +8235,7 @@ namespace TrophyHuntMod
         {
             public static void Postfix(Character __instance)
             {
-                if (GetGameMode() != TrophyGameMode.TrophyPacifist)
+                if (!IsPacifist())
                 {
                     return;
                 }
@@ -8218,7 +8256,7 @@ namespace TrophyHuntMod
         {
             public static void Prefix(Character __instance)
             {
-                if (GetGameMode() != TrophyGameMode.TrophyPacifist)
+                if (!IsPacifist())
                 {
                     return;
                 }
@@ -8334,7 +8372,6 @@ namespace TrophyHuntMod
             {
                 Debug.LogWarning($"[heartVFX] not found.");
             }
-
         }
 
         private static void RemoveCharmEffect(Character target)
@@ -8359,7 +8396,7 @@ namespace TrophyHuntMod
         {
             public static bool Prefix(Projectile __instance, Collider collider)
             {
-                if (GetGameMode() != TrophyGameMode.TrophyPacifist)
+                if (!IsPacifist())
                 {
                     return true;
                 }
@@ -8388,7 +8425,7 @@ namespace TrophyHuntMod
 
             public static void Postfix(Projectile __instance, Collider collider)
             {
-                if (GetGameMode() != TrophyGameMode.TrophyPacifist)
+                if (!IsPacifist())
                 {
                     return;
                 }
@@ -8404,10 +8441,12 @@ namespace TrophyHuntMod
                     if (item == null || item.m_shared == null)
                         return;
 
+                    string arrowName = item.m_shared.m_name;
+
                     //                    Debug.LogWarning($"[Projectile_OnHit_WoodArrowCharm] {__instance.m_ammo.m_shared.m_name} {collider.gameObject.name}");
 
                     // Only apply to wood arrows
-                    if (!IsThrallArrow(item.m_shared.m_name))
+                    if (!IsThrallArrow(arrowName))
                         return;
                     //                    Debug.LogWarning($"[Wood arrow!] Hit detected on {collider.gameObject.name}");
 
@@ -8435,14 +8474,22 @@ namespace TrophyHuntMod
                     //                    Debug.LogWarning($"Hit char {hitChar.name} of faction {hitChar.GetFaction()} and group {hitChar.m_group} nview {hitChar.m_nview}");
 
                     // Skip if already charmed
-                    if (IsCharmed(hitChar))
+                    if (!IsCharmed(hitChar))
                     {
-                        return;
+                        if (arrowName.ToLower().Contains("wood"))
+                        {
+                            // Apply charm
+                            //                    Debug.LogWarning($"[Projectile_OnHit_WoodArrowCharm] Applying charm for {hitChar.name}");
+                            AddToCharmedList(hitChar, (long)GetCharmDuration());
+                        }
                     }
-
-                    // Apply charm
-                    //                    Debug.LogWarning($"[Projectile_OnHit_WoodArrowCharm] Applying charm for {hitChar.name}");
-                    AddToCharmedList(hitChar, (long)GetCharmDuration());
+                    else
+                    {
+                        if (!arrowName.ToLower().Contains("wood"))
+                        {
+                            ApplyGaldrEffect(arrowName, hitChar);
+                        }
+                    }
                 }
 
                 catch (System.Exception ex)
@@ -8485,7 +8532,7 @@ namespace TrophyHuntMod
                 }
 
                 vanillaRecipe.m_item = itemDrop;
-                vanillaRecipe.m_amount = 20;
+                vanillaRecipe.m_amount = 5;
                 vanillaRecipe.m_enabled = true;
                 vanillaRecipe.m_craftingStation = null;
 //                vanillaRecipe.m_repairStation = null;
@@ -8502,7 +8549,7 @@ namespace TrophyHuntMod
             static void Postfix(ObjectDB __instance)
             {
                 Debug.LogWarning($"ObjectDB.Awake() called");
-                if (GetGameMode() != TrophyGameMode.TrophyPacifist)
+                if (!IsPacifist())
                     return;
 
                 // See if the Database is initialized
@@ -8512,372 +8559,118 @@ namespace TrophyHuntMod
                 {
                     Debug.LogWarning($"ObjectDB available");
 
-                    ChangeArrow(__instance, "ArrowBronze", "Wood", "Bronze Gandr", "");
-                    ChangeArrow(__instance, "ArrowCarapace", "Wood", "Bug Gandr", "");
-                    ChangeArrow(__instance, "ArrowCharred", "Wood", "Charred Gandr", "");
-                    ChangeArrow(__instance, "ArrowFire", "Wood", "Fire Gandr", "");
+                    ChangeArrow(__instance, "ArrowBronze", "Bronze", "Bronze Gandr", "Thralls bristle with new strength.");
+                    ChangeArrow(__instance, "ArrowCarapace", "Carapace", "Bug Gandr", "");
+                    ChangeArrow(__instance, "ArrowCharred", "Blackwood", "Charred Gandr", "");
+                    ChangeArrow(__instance, "ArrowFire", "Resin", "Fire Gandr", "");
                     ChangeArrow(__instance, "ArrowFlint", "Flint", "Flint Gandr", "Thralls harden like stone.");
-                    ChangeArrow(__instance, "ArrowFrost", "Wood", "Frost Gandr", "");
-                    ChangeArrow(__instance, "ArrowIron", "Wood", "Iron Gandr", "");
-                    ChangeArrow(__instance, "ArrowNeedle", "Wood", "Needle Gandr", "");
-                    ChangeArrow(__instance, "ArrowObsidian", "Wood", "Glass Gandr", "");
-                    ChangeArrow(__instance, "ArrowPoison", "Wood", "Poison Gandr", "");
-                    ChangeArrow(__instance, "ArrowSilver", "Wood", "Silver Gandr", "");
+                    ChangeArrow(__instance, "ArrowFrost", "FreezeGland", "Frost Gandr", "");
+                    ChangeArrow(__instance, "ArrowIron", "Iron", "Iron Gandr", "");
+                    ChangeArrow(__instance, "ArrowNeedle", "Needle", "Needle Gandr", "");
+                    ChangeArrow(__instance, "ArrowObsidian", "Obsidian", "Glass Gandr", "");
+                    ChangeArrow(__instance, "ArrowPoison", "Ooze", "Poison Gandr", "");
+                    ChangeArrow(__instance, "ArrowSilver", "Silver", "Silver Gandr", "");
                     ChangeArrow(__instance, "ArrowWood", "Wood", "Wooden Gandr", "Those struck with this evil splinter come under your thrall.");
                 }
             }
         }
 
-
-        //public class SE_Thrall : StatusEffect
-        //{
-        //    public override void Setup(Character character)
-        //    {
-        //        base.Setup(character);
-
-        //        if (m_character)
-        //        {
-        //            m_character.SetTamed(true);
-        //        }
-        //    }
-        //    public override void UpdateStatusEffect(float dt)
-        //    {
-        //        base.UpdateStatusEffect(dt);
-        //    }
-
-        //    public override void Stop()
-        //    {
-        //        if (m_character)
-        //        {
-        //            m_character.SetTamed(false);
-        //        }
-
-        //        base.Stop();
-        //    }
-        //}
-
-
-        // ObjectDB
-
-        //[HarmonyPatch(typeof(ObjectDB), nameof(ObjectDB.Awake))]
-        //public class ObjectDB_Awake_Patch
-        //{
-        //    public static void Postfix(ObjectDB __instance)
-        //    {
-        //        if (GetGameMode() != TrophyGameMode.TrophyPacifist)
-        //        {
-        //            return;
-        //        }
-
-        //        Debug.LogWarning($"ObjectDB_Awake_Patch: Creating Pacifist recipes");
-
-        //        GameObject woodArrowPrefab = __instance.GetItemPrefab("ArrowWood");
-        //        if (!woodArrowPrefab)
-        //        {
-        //            return;
-        //        }
-
-        //        GameObject thrallArrow = UnityEngine.Object.Instantiate(woodArrowPrefab);
-        //        thrallArrow.name = "ArrowThrall";
-
-        //        ItemDrop thrallArrowItemDrop = thrallArrow.GetComponent<ItemDrop>();
-        //        if (thrallArrowItemDrop != null)
-        //        {
-        //            ItemDrop.ItemData itemData = thrallArrowItemDrop.m_itemData;
-        //            if (itemData != null)
-        //            {
-        //                itemData.m_shared.m_name = "$item_arrow_thrall";
-        //                itemData.m_shared.m_description = "Those stuck with this splinter are under your thrall.";
-
-        //                __instance.m_items.Add(thrallArrow);
-        //                __instance.m_itemByHash[thrallArrow.name.GetStableHashCode()] = thrallArrow;
-        //            }
-        //        }
-
-        //        Recipe thrallArrowRecipe = ScriptableObject.CreateInstance<Recipe>();
-        //        if (thrallArrowRecipe != null)
-        //        {
-        //            thrallArrowRecipe.name = "Recipe_ArrowThrall";
-        //            thrallArrowRecipe.m_item = thrallArrowItemDrop;
-        //            thrallArrowRecipe.m_amount = 20;
-        //            thrallArrowRecipe.m_craftingStation = null;// __instance.GetItemPrefab("piece_workbench").GetComponent<CraftingStation>();
-        //            thrallArrowRecipe.m_resources = new Piece.Requirement[]
-        //            {
-        //                new Piece.Requirement()
-        //                {
-        //                    m_resItem = __instance.GetItemPrefab("Wood").GetComponent<ItemDrop>(),
-        //                    m_amount = 5,
-        //                    m_amountPerLevel = 0                        }
-        //            };
-        //        }
-
-        //        __instance.m_recipes.Add(thrallArrowRecipe);
-
-        //        //Recipe woodArrowRecipe = __instance.m_recipes.Find(r => r.name == "Recipe_ArrowWood");
-        //        //if (woodArrowRecipe)
-        //        //{
-        //        //    thrallArrowRecipe = UnityEngine.Object.Instantiate(woodArrowRecipe);
-        //        //}
-        //    }
-        //}
-
-        /*
-        public static bool IsObjectDBReady()
+        public static void ApplyGaldrEffect(string arrowName, Character hitChar)
         {
-            return ObjectDB.instance != null && ObjectDB.instance.m_items.Count != 0 && ObjectDB.instance.GetItemPrefab("Amber") != null;
-        }
-
-        [HarmonyPatch(typeof(ObjectDB), nameof(ObjectDB.CopyOtherDB))]
-        public static class ObjectDB_CopyOtherDB_Patch
-        {
-            static void Postfix(ObjectDB __instance)
-            {
-                if (GetGameMode() != TrophyGameMode.TrophyPacifist)
-                    return;
-
-                ThrallArrow.CreateItemDrop(__instance);
-                ThrallArrow.CreateRecipe(__instance);
-                //                ThrallArrow.CreateProjectile(__instance);
-            }
-        }
-
-        [HarmonyPatch(typeof(ObjectDB), nameof(ObjectDB.Awake))]
-        public static class ObjectDB_Awake_Patch
-        {
-            static void Postfix(ObjectDB __instance)
-            {
-                if (GetGameMode() != TrophyGameMode.TrophyPacifist)
-                    return;
-
-                ThrallArrow.CreateItemDrop(__instance);
-//                ThrallArrow.CreateProjectile(__instance);
-            }
-        }
-
-        [HarmonyPatch(typeof(ZNetScene), nameof(ZNetScene.Awake))]
-        public static class ZNetScene_Awake_Patch
-        {
-            static void Postfix(ZNetScene __instance)
-            {
-                //                    ThrallArrow.CreateProjectile(ObjectDB.instance, __instance);
-            }
-        }
-
-        public static class ThrallArrow
-        {
-            private static bool m_itemCreated = false;
-            private static bool m_projectileCreated = false;
-
-            private static GameObject m_thrallArrowPrefab;
-            private static GameObject m_thrallProjectilePrefab;
-
-            public static void CreateEasy(ObjectDB db)
-            {
-                // ------------------------------------
-                // 1. Find the vanilla arrow prefab
-                // ------------------------------------
-                GameObject vanillaArrow = db.GetItemPrefab("ArrowWood");
-                if (!vanillaArrow)
-                {
-                    Debug.LogError("Could not find ArrowWood prefab");
-                    return;
-                }
-
-                // ------------------------------------
-                // 2. Clone the prefab (ItemDrop prefab)
-                // ------------------------------------
-                //GameObject thrallArrow = UnityEngine.Object.Instantiate(vanillaArrow);
-                //thrallArrow.name = "ThrallArrow";   // IMPORTANT: unique GameObject name
-
-                //// Also rename ItemDrop internally
-                //ItemDrop item = thrallArrow.GetComponent<ItemDrop>();
-                //item.m_itemData.m_shared.m_name = "$item_thrallarrow";   // localized token
-                //item.m_itemData.m_shared.m_description = "$item_thrallarrow_desc";
-
-                //// ------------------------------------
-                //// 3. Register cloned item in ObjectDB
-                //// ------------------------------------
-                //int hash = thrallArrow.name.GetStableHashCode();
-
-                //// Add to items list
-                //db.m_items.Add(thrallArrow);
-
-                //// Add to hash lookup
-                //db.m_itemByHash[hash] = thrallArrow;
-
-                //db.m_itemByHash.Clear();
-                //foreach (GameObject curItem in db.m_items)
-                //{
-                //    db.m_itemByHash.Add(StringExtensionMethods.GetStableHashCode(curItem.name), curItem);
-                //}
-
-                // ------------------------------------
-                // 4. Create a recipe for ThrallArrow
-                // ------------------------------------
-
-                GameObject thrallArrow = GameObject.Instantiate(vanillaArrow);
-                db.m_items.Add(thrallArrow);
-
-                db.m_itemByHash.Clear();
-                foreach (GameObject curItem in db.m_items)
-                {
-                    db.m_itemByHash.Add(StringExtensionMethods.GetStableHashCode(curItem.name), curItem);
-                }
-
-                ItemDrop item = thrallArrow.GetComponent<ItemDrop>();
-
-                Recipe recipe = ScriptableObject.CreateInstance<Recipe>();
-                recipe.name = "Recipe_ThrallArrow";     // Must begin with "Recipe_"
-                recipe.m_item = item;
-                recipe.m_amount = 1;
-
-                // Ingredients
-                GameObject wood = db.GetItemPrefab("Wood");
-                recipe.m_resources = new Piece.Requirement[]
-                {
-                    new Piece.Requirement
-                    {
-                        m_resItem = wood.GetComponent<ItemDrop>(),
-                        m_amount = 5,
-                        m_amountPerLevel = 0
-                    }
-                };
-
-                // Crafting station — use an existing one
-                recipe.m_craftingStation = FindStation(db, "piece_workbench");
-
-                // Add to ObjectDB recipes
-                db.m_recipes.Add(recipe);
-
-                Debug.Log("Thrall Arrow recipe added.");
-            }
-
-            public static void CreateItemDrop(ObjectDB db)
-            {
-                if (!IsObjectDBReady())
-                {
-                    return;
-                }
-
-                if (m_itemCreated) return;
-                m_itemCreated = true;
-
-                CreateEasy(db);
+            if (hitChar == null)
                 return;
-                GameObject src = db.GetItemPrefab("ArrowWood");
-                if (!src)
-                {
-                    Debug.LogError("ThrallArrow: Missing ArrowWood!");
-                    return;
-                }
 
-                m_thrallArrowPrefab = GameObject.Instantiate(src);
-                m_thrallArrowPrefab.name = "ArrowThrall";
+            Debug.LogWarning($"ApplyGaldrEffect: {arrowName} {hitChar.m_name}");
 
-                ItemDrop drop = m_thrallArrowPrefab.GetComponent<ItemDrop>();
-                drop.m_itemData.m_shared.m_name = "$item_arrowthrall";
-                drop.m_itemData.m_shared.m_description = "A thrall-binding arrow.";
-
-                drop.m_itemData.m_dropPrefab = m_thrallArrowPrefab;
-
-                // We'll fill this later once projectile exists
-//                drop.m_itemData.m_shared.m_attack.m_attackProjectile = null;
-
-                // Register in ObjectDB
-                db.m_items.Add(m_thrallArrowPrefab);
-                db.m_itemByHash[m_thrallArrowPrefab.name.GetStableHashCode()] = m_thrallArrowPrefab;
-
-                CreateRecipe(db);
-            }
-
-
-
-            // ------------------------------------------------------------
-            // 2. Create Projectile (ZNetScene only)
-            // ------------------------------------------------------------
-            public static void CreateProjectile(ObjectDB db, ZNetScene zns)
+            StatusEffect se = null;
+            if (arrowName.ToLower().Contains("flint".ToLower()))
             {
-                if (!IsObjectDBReady())
+                SE_FlintSkin flintSkinEffect = ScriptableObject.CreateInstance<SE_FlintSkin>();
+                flintSkinEffect.m_ttl = 30;
+                flintSkinEffect.m_absorbDamage = 500;
+                flintSkinEffect.m_startEffects = new EffectList();
+                EffectList myEffects = new EffectList();
+                myEffects.m_effectPrefabs = new EffectList.EffectData[]
                 {
-                    return;
-                }
-
-                if (m_projectileCreated) return;
-                m_projectileCreated = true;
-
-                GameObject srcProj = db.GetItemPrefab("bow_projectile");
-                if (!srcProj)
-                {
-                    Debug.LogError("ThrallArrow: Missing bow_projectile!");
-                    return;
-                }
-
-                m_thrallProjectilePrefab = ZNetScene.Instantiate(srcProj);
-
-                if (!m_thrallProjectilePrefab.GetComponent<ZNetView>())
-                    m_thrallProjectilePrefab.AddComponent<ZNetView>();
-
-                if (!m_thrallProjectilePrefab.GetComponent<ZSyncTransform>())
-                    m_thrallProjectilePrefab.AddComponent<ZSyncTransform>();
-
-                if (!m_thrallProjectilePrefab.GetComponent<Projectile>())
-                    m_thrallProjectilePrefab.AddComponent<Projectile>();
-
-                // clone the *in-scene* projectile
-                m_thrallProjectilePrefab.name = "bow_projectile_thrall";
-
-                zns.m_prefabs.Add(m_thrallProjectilePrefab);
-                zns.m_namedPrefabs[m_thrallProjectilePrefab.name.GetStableHashCode()] = m_thrallProjectilePrefab;
-
-                // now link to item
-                if (m_thrallArrowPrefab)
-                {
-                    m_thrallArrowPrefab.GetComponent<ItemDrop>()
-                        .m_itemData.m_shared.m_attack.m_attackProjectile = m_thrallProjectilePrefab;
-                }
-            }
-
-            // ------------------------------------------------------------
-            // Recipe
-            // ------------------------------------------------------------
-            public static void CreateRecipe(ObjectDB db)
-            {
-                Recipe recipe = ScriptableObject.CreateInstance<Recipe>();
-                recipe.name = "Recipe_ThrallArrow";
-                recipe.m_item = m_thrallArrowPrefab.GetComponent<ItemDrop>();
-                recipe.m_amount = 20;
-                recipe.m_enabled = true;
-                // Workbench
-                recipe.m_craftingStation = FindStation(db, "piece_workbench");
-
-                recipe.m_resources = new Piece.Requirement[]
-                {
-                    new Piece.Requirement {
-                        m_resItem = db.GetItemPrefab("Wood").GetComponent<ItemDrop>(),
-                        m_amount = 5,
+                    new EffectList.EffectData()
+                    {
+                        m_prefab = ObjectDB.instance.GetItemPrefab("fx_bat_death"),
+                        m_attach = true,
+                        m_randomRotation = false,
+                        m_enabled = true,
                     }
                 };
 
-                db.m_recipes.Add(recipe);
+                flintSkinEffect.m_startEffects = myEffects;
+
+                se = hitChar.m_seman.AddStatusEffect(flintSkinEffect);
             }
-
-            public static CraftingStation FindStation(ObjectDB db, string name)
+            else if (arrowName.ToLower().Contains("bronze".ToLower()))
             {
-                int hash = name.GetStableHashCode();
+                SE_BronzeStrength strengthEffect = ScriptableObject.CreateInstance<SE_BronzeStrength>();
 
-                foreach (var go in db.m_items)
-                {
-                    if (!go) continue;
-                    if (go.name.GetStableHashCode() != hash) continue;
+                strengthEffect.m_damageModifier = 1000.0f;
+                strengthEffect.m_modifyAttackSkill = Skills.SkillType.All;
+                strengthEffect.m_ttl = 30.0f;
 
-                    CraftingStation cs = go.GetComponent<CraftingStation>();
-                    if (cs) return cs;
-                }
-
-                return null;
+                se = hitChar.m_seman.AddStatusEffect(strengthEffect);
+            }
+            if (se != null)
+            {
+                Debug.LogWarning($"STATUS EFFECT APPLIED: {se.m_name} {se.m_ttl}");
             }
         }
-        */
+
+        public class SE_FlintSkin : SE_Shield
+        {
+            public override void Setup(Character character)
+            {
+                base.Setup(character);
+
+                if (m_character)
+                {
+                }
+            }
+            public override void UpdateStatusEffect(float dt)
+            {
+                base.UpdateStatusEffect(dt);
+            }
+
+            public override void Stop()
+            {
+                if (m_character)
+                {
+                }
+
+                base.Stop();
+            }
+        }
+
+
+        public class SE_BronzeStrength : SE_Stats
+        {
+            public override void Setup(Character character)
+            {
+                base.Setup(character);
+
+                if (m_character)
+                {
+                }
+            }
+            public override void UpdateStatusEffect(float dt)
+            {
+                base.UpdateStatusEffect(dt);
+            }
+
+            public override void Stop()
+            {
+                if (m_character)
+                {
+                }
+
+                base.Stop();
+            }
+        }
     }
 }
 
