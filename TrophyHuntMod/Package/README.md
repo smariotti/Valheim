@@ -272,7 +272,11 @@ You can learn more on the Valheim Speedrun Discord channel here: https://discord
 ## Where to Find
 You can find the github at: https://github.com/smariotti/Valheim/tree/master/TrophyHuntMod
 
+
 ## Change Log
+v0.10.10
+- Bug fixes for Trophy Pacifist mode
+
 v0.10.9
 - Initial cut at Trophy Pacifist game mode
 - Moved the game mode title to the left side of the screen

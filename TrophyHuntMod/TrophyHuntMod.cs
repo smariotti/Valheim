@@ -23,6 +23,9 @@ using static UnityEngine.EventSystems.EventTrigger;
 using static UnityEngine.GraphicsBuffer;
 using UnityEngine.Assertions;
 using System.Security.Policy;
+using Newtonsoft.Json.Linq;
+using System.ComponentModel;
+using static TrophyHuntMod.TrophyHuntMod;
 
 namespace TrophyHuntMod
 {
@@ -35,7 +38,7 @@ namespace TrophyHuntMod
 
         private const Boolean UPDATE_LEADERBOARD = false; // SET TO TRUE WHEN PTB IS LIVE
 
-        public const string PluginVersion = "0.10.9";
+        public const string PluginVersion = "0.10.10";
         private readonly Harmony harmony = new Harmony(PluginGUID);
 
         // Configuration variables
@@ -443,7 +446,7 @@ namespace TrophyHuntMod
                         "<color=#F00000>t</color>" +
                         "<color=#D00000>z</color>";
                     break;
-                case TrophyGameMode.TrophyTrailblazer: modeString = "<color=#F000D0>Trailblazer!</color>"; break;
+                case TrophyGameMode.TrophyTrailblazer: modeString = "<color=#70FFA0>Trailblazer!</color>"; break;
                 case TrophyGameMode.TrophyPacifist: modeString = "<color=#F387C5>Trophy Pacifist</color>"; break;
                 case TrophyGameMode.CulinarySaga: modeString = "<color=#8080FF>Culinary Saga</color>"; break;
                 case TrophyGameMode.CasualSaga: modeString = "<color=yellow>Casual Saga</color>"; break;
@@ -584,7 +587,7 @@ namespace TrophyHuntMod
 
             public List<THMSaveDataDropInfo> m_playerTrophyDropInfos = null;
             public List<THMSaveDataDropInfo> m_allTrophyDropInfos = null;
-            
+
             public List<Vector3> m_playerPathData = null;
 
             public List<TrophyPin> m_trophyPins;
@@ -707,7 +710,7 @@ namespace TrophyHuntMod
 
                 saveData.m_charmedCharacters.Add(savedChar);
             }
-//            saveData.m_charmedCharacters = __m_allCharmedCharacters;
+            //            saveData.m_charmedCharacters = __m_allCharmedCharacters;
 
             // Death and logout accounting
             saveData.m_slashDieCount = __m_slashDieCount;
@@ -1837,9 +1840,9 @@ namespace TrophyHuntMod
             // Add RectTransform component for positioning
             RectTransform rectTransform = gameModeTextObject.AddComponent<RectTransform>();
             rectTransform.sizeDelta = new Vector2(300, 100);
-            rectTransform.anchoredPosition = new Vector2(65, 90);
+            rectTransform.anchoredPosition = new Vector2(-40, 260);
             rectTransform.localScale = new Vector3(1.0f, 1.0f, 1.0f);
-
+            rectTransform.rotation = Quaternion.Euler(0, 0, 90);
             TMPro.TextMeshProUGUI tmText = AddTextMeshProComponent(gameModeTextObject);
             tmText.text = GetGameModeString(GetGameMode()) + $"<size=14>\n<color=white>v{PluginVersion}</color></size>";
 
@@ -1850,6 +1853,8 @@ namespace TrophyHuntMod
             tmText.fontMaterial.EnableKeyword("OUTLINE_ON");
             tmText.outlineColor = Color.black;
             tmText.outlineWidth = 0.125f; // Adjust the thickness
+            tmText.verticalAlignment = VerticalAlignmentOptions.Top;
+            tmText.horizontalAlignment = HorizontalAlignmentOptions.Left;
         }
 
         static IEnumerator TimerUpdate()
@@ -7796,7 +7801,7 @@ namespace TrophyHuntMod
                     return true;
                 }
 
-                if (!IsCharmed(__instance.m_character)) 
+                if (!IsCharmed(__instance.m_character))
                 {
                     return true;
                 }
@@ -7844,7 +7849,7 @@ namespace TrophyHuntMod
 
                 if (closestDist > PACIFIST_THRALL_PLAYER_TARGET_DISTANCE)
                 {
-                    Debug.LogWarning($"Thrall {__instance.m_character.name} wants to discard {closestEnemy?.name} at distance {closestDist}");
+                    //                    Debug.LogWarning($"Thrall {__instance.m_character.name} wants to discard {closestEnemy?.name} at distance {closestDist}");
                     MonsterAI monster = __instance as MonsterAI;
                     if (monster)
                     {
@@ -7857,7 +7862,7 @@ namespace TrophyHuntMod
                     return false;
                 }
 
-                Debug.LogWarning($"BaseAI.FindEnemy() returning target: {closestEnemy?.name}");
+                //                Debug.LogWarning($"BaseAI.FindEnemy() returning target: {closestEnemy?.name}");
                 __result = closestEnemy;
 
                 return false;
@@ -7939,13 +7944,26 @@ namespace TrophyHuntMod
 
                 if (hit.GetAttacker() == Player.m_localPlayer)
                 {
-//                    Debug.LogWarning($"[Character_RPC_Damage_Patch] Player is Attacker: {__instance?.name} : {hit.GetAttacker().name}");
+                    //                    Debug.LogWarning($"[Character_RPC_Damage_Patch] Player is Attacker: {__instance?.name} : {hit.GetAttacker().name}");
                     return false;
                 }
 
                 return true;
             }
         }
+
+        public static bool IsThrallArrow(string ammoName)
+        {
+            Debug.LogWarning($"[IsThrallArrow] Checking ammo name: {ammoName}");
+
+            if (ammoName.ToLower().Contains("Gandr".ToLower()))
+            {
+                return true;
+            }
+
+            return false;
+        }
+
         [HarmonyPatch(typeof(Humanoid), nameof(Humanoid.StartAttack))]
         public static class Humanoid_StartAttack_Patch
         {
@@ -7967,7 +7985,7 @@ namespace TrophyHuntMod
                         if (weapon != null && weapon.m_shared.m_itemType == ItemDrop.ItemData.ItemType.Bow)
                         {
                             ItemDrop.ItemData ammo = __instance.GetAmmoItem();
-                            if (ammo != null && ammo.m_shared.m_name.Equals("$item_arrow_wood", System.StringComparison.OrdinalIgnoreCase))
+                            if (ammo != null && IsThrallArrow(ammo.m_shared.m_name))
                             {
                                 return true;
                             }
@@ -7995,7 +8013,7 @@ namespace TrophyHuntMod
 
         public class CharmedCharacter
         {
-            public CharmedCharacter() { m_zdoid = ZDOID.None;  m_pin = null; m_charmExpireTime = 0; m_originalFaction = Character.Faction.TrainingDummy; m_swimSpeed = 2f; }
+            public CharmedCharacter() { m_zdoid = ZDOID.None; m_pin = null; m_charmExpireTime = 0; m_originalFaction = Character.Faction.TrainingDummy; m_swimSpeed = 2f; }
             public CharmedCharacter(ZDOID zdoid) { m_zdoid = zdoid; }
 
             // Data we store for the charmed guy
@@ -8115,7 +8133,7 @@ namespace TrophyHuntMod
                 // Optional: give a color tint or particle effect
                 AddCharmEffect(enemy);
 
-//                Debug.LogError($"SetCharmedState for {enemy.name} - success");
+                //                Debug.LogError($"SetCharmedState for {enemy.name} - success");
 
                 var monsterAI = enemy.GetComponent<MonsterAI>();
                 if (monsterAI)
@@ -8157,9 +8175,9 @@ namespace TrophyHuntMod
                 return;
             }
 
-//            enemy.SetTamed(false);
+            //            enemy.SetTamed(false);
             RemoveCharmEffect(enemy);
-//            Debug.LogError($"SetUncharmedState for {enemy.name} - success");
+            //            Debug.LogError($"SetUncharmedState for {enemy.name} - success");
             enemy.m_faction = cc.m_originalFaction;
             enemy.m_swimSpeed = cc.m_swimSpeed;
 
@@ -8167,9 +8185,9 @@ namespace TrophyHuntMod
             if (monsterAI)
             {
                 monsterAI.SetFollowTarget(null);
-//                monsterAI.ResetRandomMovement();
-//                monsterAI.ResetPatrolPoint();
-//                monsterAI.SetAlerted(alert: false);
+                //                monsterAI.ResetRandomMovement();
+                //                monsterAI.ResetPatrolPoint();
+                //                monsterAI.SetAlerted(alert: false);
                 monsterAI.SetTarget(null);
             }
         }
@@ -8205,7 +8223,7 @@ namespace TrophyHuntMod
                     return;
                 }
 
- //               Debug.LogWarning($"OnDestroy: {__instance.name}");
+                //               Debug.LogWarning($"OnDestroy: {__instance.name}");
             }
         }
 
@@ -8222,7 +8240,7 @@ namespace TrophyHuntMod
 
             __m_trophyHuntMod.StartCoroutine(CharmTimerUpdate());
 
-//            Debug.LogWarning("[StartCharmTimer] Started Charm Timer.");
+            //            Debug.LogWarning("[StartCharmTimer] Started Charm Timer.");
         }
 
         public static long __m_charmTimerSeconds = 0;
@@ -8301,7 +8319,7 @@ namespace TrophyHuntMod
             GameObject heartVFX = ZNetScene.instance.GetPrefab("fx_hen_love");
             if (heartVFX != null)
             {
-//                Debug.LogWarning($"[heartVFX] {heartVFX.name}");
+                //                Debug.LogWarning($"[heartVFX] {heartVFX.name}");
 
                 var fx = UnityEngine.Object.Instantiate(heartVFX, target.transform.position, Quaternion.identity);
                 var ps = fx.GetComponentInChildren<ParticleSystem>();
@@ -8332,7 +8350,7 @@ namespace TrophyHuntMod
                 }
             }
 
-//            Debug.LogWarning($"{target?.name} is no longer doing your bidding.");
+            //            Debug.LogWarning($"{target?.name} is no longer doing your bidding.");
 
         }
 
@@ -8354,13 +8372,13 @@ namespace TrophyHuntMod
                 if (item == null || item.m_shared == null)
                     return true;
 
-//                Debug.LogWarning($"[Projectile_OnHit_WoodArrowCharm] {__instance.m_ammo.m_shared.m_name} {collider.gameObject.name}");
+                //                Debug.LogWarning($"[Projectile_OnHit_WoodArrowCharm] {__instance.m_ammo.m_shared.m_name} {collider.gameObject.name}");
 
                 // Only apply to wood arrows
-                if (!item.m_shared.m_name.Equals("$item_arrow_wood", System.StringComparison.OrdinalIgnoreCase))
+                if (!IsThrallArrow(item.m_shared.m_name))
                     return true;
 
-//                Debug.LogWarning($"[Projectile_OnHit_WoodArrowCharm] damage rejected for {collider.gameObject.name}");
+                //                Debug.LogWarning($"[Projectile_OnHit_WoodArrowCharm] damage rejected for {collider.gameObject.name}");
 
                 // no damage when charming
                 __instance.m_damage = new HitData.DamageTypes();
@@ -8386,12 +8404,12 @@ namespace TrophyHuntMod
                     if (item == null || item.m_shared == null)
                         return;
 
-//                    Debug.LogWarning($"[Projectile_OnHit_WoodArrowCharm] {__instance.m_ammo.m_shared.m_name} {collider.gameObject.name}");
+                    //                    Debug.LogWarning($"[Projectile_OnHit_WoodArrowCharm] {__instance.m_ammo.m_shared.m_name} {collider.gameObject.name}");
 
                     // Only apply to wood arrows
-                    if (!item.m_shared.m_name.Equals("$item_arrow_wood", System.StringComparison.OrdinalIgnoreCase))
+                    if (!IsThrallArrow(item.m_shared.m_name))
                         return;
-//                    Debug.LogWarning($"[Wood arrow!] Hit detected on {collider.gameObject.name}");
+                    //                    Debug.LogWarning($"[Wood arrow!] Hit detected on {collider.gameObject.name}");
 
                     // Ensure we hit a Character
                     GameObject obj = Projectile.FindHitObject(collider);
@@ -8423,7 +8441,7 @@ namespace TrophyHuntMod
                     }
 
                     // Apply charm
-//                    Debug.LogWarning($"[Projectile_OnHit_WoodArrowCharm] Applying charm for {hitChar.name}");
+                    //                    Debug.LogWarning($"[Projectile_OnHit_WoodArrowCharm] Applying charm for {hitChar.name}");
                     AddToCharmedList(hitChar, (long)GetCharmDuration());
                 }
 
@@ -8434,32 +8452,432 @@ namespace TrophyHuntMod
             }
         }
 
-        public class SE_Thrall : StatusEffect
+        [HarmonyPatch(typeof(ObjectDB), nameof(ObjectDB.Awake))]
+        public static class ObjectDB_Awake_Patch
         {
-            public override void Setup(Character character)
+            static public void ChangeArrow(ObjectDB db, string prefabName, string ingredient, string newName, string newDescription)
             {
-                base.Setup(character);
-
-                if (m_character)
+                GameObject arrowPrefab = db.GetItemPrefab(prefabName);
+                if (!arrowPrefab)
                 {
-                    m_character.SetTamed(true);
-                }
-            }
-            public override void UpdateStatusEffect(float dt)
-            {
-                base.UpdateStatusEffect(dt);
-            }
-
-            public override void Stop()
-            {
-                if (m_character)
-                {
-                    m_character.SetTamed(false);
+                    Debug.LogError($"Could not find {prefabName}");
+                    return;
                 }
 
-                base.Stop();
+                ItemDrop itemDrop = arrowPrefab.GetComponent<ItemDrop>();
+                if (!itemDrop)
+                {
+                    Debug.LogError($"Could not find ItemDrop on {prefabName}");
+                    return;
+                }
+
+                itemDrop.m_itemData.m_shared.m_description = newDescription;
+                itemDrop.m_itemData.m_shared.m_name = newName;
+
+                Recipe vanillaRecipe = db.m_recipes.Find(r => r.name == $"Recipe_{prefabName}");
+                if (vanillaRecipe)
+                {
+                    Debug.LogWarning($"name: {vanillaRecipe.name} item: {vanillaRecipe?.m_item?.name} amount: {vanillaRecipe.m_amount} enabled: {vanillaRecipe.m_enabled} craftingStation = {vanillaRecipe.m_craftingStation?.m_name} repairStation = {vanillaRecipe.m_repairStation?.m_name}");
+                }
+                else
+                {
+                    Debug.LogError($"Could not find Recipe_{prefabName}");
+                }
+
+                vanillaRecipe.m_item = itemDrop;
+                vanillaRecipe.m_amount = 20;
+                vanillaRecipe.m_enabled = true;
+                vanillaRecipe.m_craftingStation = null;
+//                vanillaRecipe.m_repairStation = null;
+                vanillaRecipe.m_minStationLevel = 0;
+                vanillaRecipe.m_resources = new Piece.Requirement[] {
+                        new Piece.Requirement()
+                        {
+                            m_resItem = db.GetItemPrefab(ingredient).GetComponent<ItemDrop>(),
+                            m_amount = 5,
+                            m_amountPerLevel = 0
+                        }
+                    };
+            }
+            static void Postfix(ObjectDB __instance)
+            {
+                Debug.LogWarning($"ObjectDB.Awake() called");
+                if (GetGameMode() != TrophyGameMode.TrophyPacifist)
+                    return;
+
+                // See if the Database is initialized
+                if (ObjectDB.instance != null && 
+                    ObjectDB.instance.m_items.Count != 0 
+                    && ObjectDB.instance.GetItemPrefab("Amber") != null)
+                {
+                    Debug.LogWarning($"ObjectDB available");
+
+                    ChangeArrow(__instance, "ArrowBronze", "Wood", "Bronze Gandr", "");
+                    ChangeArrow(__instance, "ArrowCarapace", "Wood", "Bug Gandr", "");
+                    ChangeArrow(__instance, "ArrowCharred", "Wood", "Charred Gandr", "");
+                    ChangeArrow(__instance, "ArrowFire", "Wood", "Fire Gandr", "");
+                    ChangeArrow(__instance, "ArrowFlint", "Flint", "Flint Gandr", "Thralls harden like stone.");
+                    ChangeArrow(__instance, "ArrowFrost", "Wood", "Frost Gandr", "");
+                    ChangeArrow(__instance, "ArrowIron", "Wood", "Iron Gandr", "");
+                    ChangeArrow(__instance, "ArrowNeedle", "Wood", "Needle Gandr", "");
+                    ChangeArrow(__instance, "ArrowObsidian", "Wood", "Glass Gandr", "");
+                    ChangeArrow(__instance, "ArrowPoison", "Wood", "Poison Gandr", "");
+                    ChangeArrow(__instance, "ArrowSilver", "Wood", "Silver Gandr", "");
+                    ChangeArrow(__instance, "ArrowWood", "Wood", "Wooden Gandr", "Those struck with this evil splinter come under your thrall.");
+                }
             }
         }
+
+
+        //public class SE_Thrall : StatusEffect
+        //{
+        //    public override void Setup(Character character)
+        //    {
+        //        base.Setup(character);
+
+        //        if (m_character)
+        //        {
+        //            m_character.SetTamed(true);
+        //        }
+        //    }
+        //    public override void UpdateStatusEffect(float dt)
+        //    {
+        //        base.UpdateStatusEffect(dt);
+        //    }
+
+        //    public override void Stop()
+        //    {
+        //        if (m_character)
+        //        {
+        //            m_character.SetTamed(false);
+        //        }
+
+        //        base.Stop();
+        //    }
+        //}
+
+
+        // ObjectDB
+
+        //[HarmonyPatch(typeof(ObjectDB), nameof(ObjectDB.Awake))]
+        //public class ObjectDB_Awake_Patch
+        //{
+        //    public static void Postfix(ObjectDB __instance)
+        //    {
+        //        if (GetGameMode() != TrophyGameMode.TrophyPacifist)
+        //        {
+        //            return;
+        //        }
+
+        //        Debug.LogWarning($"ObjectDB_Awake_Patch: Creating Pacifist recipes");
+
+        //        GameObject woodArrowPrefab = __instance.GetItemPrefab("ArrowWood");
+        //        if (!woodArrowPrefab)
+        //        {
+        //            return;
+        //        }
+
+        //        GameObject thrallArrow = UnityEngine.Object.Instantiate(woodArrowPrefab);
+        //        thrallArrow.name = "ArrowThrall";
+
+        //        ItemDrop thrallArrowItemDrop = thrallArrow.GetComponent<ItemDrop>();
+        //        if (thrallArrowItemDrop != null)
+        //        {
+        //            ItemDrop.ItemData itemData = thrallArrowItemDrop.m_itemData;
+        //            if (itemData != null)
+        //            {
+        //                itemData.m_shared.m_name = "$item_arrow_thrall";
+        //                itemData.m_shared.m_description = "Those stuck with this splinter are under your thrall.";
+
+        //                __instance.m_items.Add(thrallArrow);
+        //                __instance.m_itemByHash[thrallArrow.name.GetStableHashCode()] = thrallArrow;
+        //            }
+        //        }
+
+        //        Recipe thrallArrowRecipe = ScriptableObject.CreateInstance<Recipe>();
+        //        if (thrallArrowRecipe != null)
+        //        {
+        //            thrallArrowRecipe.name = "Recipe_ArrowThrall";
+        //            thrallArrowRecipe.m_item = thrallArrowItemDrop;
+        //            thrallArrowRecipe.m_amount = 20;
+        //            thrallArrowRecipe.m_craftingStation = null;// __instance.GetItemPrefab("piece_workbench").GetComponent<CraftingStation>();
+        //            thrallArrowRecipe.m_resources = new Piece.Requirement[]
+        //            {
+        //                new Piece.Requirement()
+        //                {
+        //                    m_resItem = __instance.GetItemPrefab("Wood").GetComponent<ItemDrop>(),
+        //                    m_amount = 5,
+        //                    m_amountPerLevel = 0                        }
+        //            };
+        //        }
+
+        //        __instance.m_recipes.Add(thrallArrowRecipe);
+
+        //        //Recipe woodArrowRecipe = __instance.m_recipes.Find(r => r.name == "Recipe_ArrowWood");
+        //        //if (woodArrowRecipe)
+        //        //{
+        //        //    thrallArrowRecipe = UnityEngine.Object.Instantiate(woodArrowRecipe);
+        //        //}
+        //    }
+        //}
+
+        /*
+        public static bool IsObjectDBReady()
+        {
+            return ObjectDB.instance != null && ObjectDB.instance.m_items.Count != 0 && ObjectDB.instance.GetItemPrefab("Amber") != null;
+        }
+
+        [HarmonyPatch(typeof(ObjectDB), nameof(ObjectDB.CopyOtherDB))]
+        public static class ObjectDB_CopyOtherDB_Patch
+        {
+            static void Postfix(ObjectDB __instance)
+            {
+                if (GetGameMode() != TrophyGameMode.TrophyPacifist)
+                    return;
+
+                ThrallArrow.CreateItemDrop(__instance);
+                ThrallArrow.CreateRecipe(__instance);
+                //                ThrallArrow.CreateProjectile(__instance);
+            }
+        }
+
+        [HarmonyPatch(typeof(ObjectDB), nameof(ObjectDB.Awake))]
+        public static class ObjectDB_Awake_Patch
+        {
+            static void Postfix(ObjectDB __instance)
+            {
+                if (GetGameMode() != TrophyGameMode.TrophyPacifist)
+                    return;
+
+                ThrallArrow.CreateItemDrop(__instance);
+//                ThrallArrow.CreateProjectile(__instance);
+            }
+        }
+
+        [HarmonyPatch(typeof(ZNetScene), nameof(ZNetScene.Awake))]
+        public static class ZNetScene_Awake_Patch
+        {
+            static void Postfix(ZNetScene __instance)
+            {
+                //                    ThrallArrow.CreateProjectile(ObjectDB.instance, __instance);
+            }
+        }
+
+        public static class ThrallArrow
+        {
+            private static bool m_itemCreated = false;
+            private static bool m_projectileCreated = false;
+
+            private static GameObject m_thrallArrowPrefab;
+            private static GameObject m_thrallProjectilePrefab;
+
+            public static void CreateEasy(ObjectDB db)
+            {
+                // ------------------------------------
+                // 1. Find the vanilla arrow prefab
+                // ------------------------------------
+                GameObject vanillaArrow = db.GetItemPrefab("ArrowWood");
+                if (!vanillaArrow)
+                {
+                    Debug.LogError("Could not find ArrowWood prefab");
+                    return;
+                }
+
+                // ------------------------------------
+                // 2. Clone the prefab (ItemDrop prefab)
+                // ------------------------------------
+                //GameObject thrallArrow = UnityEngine.Object.Instantiate(vanillaArrow);
+                //thrallArrow.name = "ThrallArrow";   // IMPORTANT: unique GameObject name
+
+                //// Also rename ItemDrop internally
+                //ItemDrop item = thrallArrow.GetComponent<ItemDrop>();
+                //item.m_itemData.m_shared.m_name = "$item_thrallarrow";   // localized token
+                //item.m_itemData.m_shared.m_description = "$item_thrallarrow_desc";
+
+                //// ------------------------------------
+                //// 3. Register cloned item in ObjectDB
+                //// ------------------------------------
+                //int hash = thrallArrow.name.GetStableHashCode();
+
+                //// Add to items list
+                //db.m_items.Add(thrallArrow);
+
+                //// Add to hash lookup
+                //db.m_itemByHash[hash] = thrallArrow;
+
+                //db.m_itemByHash.Clear();
+                //foreach (GameObject curItem in db.m_items)
+                //{
+                //    db.m_itemByHash.Add(StringExtensionMethods.GetStableHashCode(curItem.name), curItem);
+                //}
+
+                // ------------------------------------
+                // 4. Create a recipe for ThrallArrow
+                // ------------------------------------
+
+                GameObject thrallArrow = GameObject.Instantiate(vanillaArrow);
+                db.m_items.Add(thrallArrow);
+
+                db.m_itemByHash.Clear();
+                foreach (GameObject curItem in db.m_items)
+                {
+                    db.m_itemByHash.Add(StringExtensionMethods.GetStableHashCode(curItem.name), curItem);
+                }
+
+                ItemDrop item = thrallArrow.GetComponent<ItemDrop>();
+
+                Recipe recipe = ScriptableObject.CreateInstance<Recipe>();
+                recipe.name = "Recipe_ThrallArrow";     // Must begin with "Recipe_"
+                recipe.m_item = item;
+                recipe.m_amount = 1;
+
+                // Ingredients
+                GameObject wood = db.GetItemPrefab("Wood");
+                recipe.m_resources = new Piece.Requirement[]
+                {
+                    new Piece.Requirement
+                    {
+                        m_resItem = wood.GetComponent<ItemDrop>(),
+                        m_amount = 5,
+                        m_amountPerLevel = 0
+                    }
+                };
+
+                // Crafting station — use an existing one
+                recipe.m_craftingStation = FindStation(db, "piece_workbench");
+
+                // Add to ObjectDB recipes
+                db.m_recipes.Add(recipe);
+
+                Debug.Log("Thrall Arrow recipe added.");
+            }
+
+            public static void CreateItemDrop(ObjectDB db)
+            {
+                if (!IsObjectDBReady())
+                {
+                    return;
+                }
+
+                if (m_itemCreated) return;
+                m_itemCreated = true;
+
+                CreateEasy(db);
+                return;
+                GameObject src = db.GetItemPrefab("ArrowWood");
+                if (!src)
+                {
+                    Debug.LogError("ThrallArrow: Missing ArrowWood!");
+                    return;
+                }
+
+                m_thrallArrowPrefab = GameObject.Instantiate(src);
+                m_thrallArrowPrefab.name = "ArrowThrall";
+
+                ItemDrop drop = m_thrallArrowPrefab.GetComponent<ItemDrop>();
+                drop.m_itemData.m_shared.m_name = "$item_arrowthrall";
+                drop.m_itemData.m_shared.m_description = "A thrall-binding arrow.";
+
+                drop.m_itemData.m_dropPrefab = m_thrallArrowPrefab;
+
+                // We'll fill this later once projectile exists
+//                drop.m_itemData.m_shared.m_attack.m_attackProjectile = null;
+
+                // Register in ObjectDB
+                db.m_items.Add(m_thrallArrowPrefab);
+                db.m_itemByHash[m_thrallArrowPrefab.name.GetStableHashCode()] = m_thrallArrowPrefab;
+
+                CreateRecipe(db);
+            }
+
+
+
+            // ------------------------------------------------------------
+            // 2. Create Projectile (ZNetScene only)
+            // ------------------------------------------------------------
+            public static void CreateProjectile(ObjectDB db, ZNetScene zns)
+            {
+                if (!IsObjectDBReady())
+                {
+                    return;
+                }
+
+                if (m_projectileCreated) return;
+                m_projectileCreated = true;
+
+                GameObject srcProj = db.GetItemPrefab("bow_projectile");
+                if (!srcProj)
+                {
+                    Debug.LogError("ThrallArrow: Missing bow_projectile!");
+                    return;
+                }
+
+                m_thrallProjectilePrefab = ZNetScene.Instantiate(srcProj);
+
+                if (!m_thrallProjectilePrefab.GetComponent<ZNetView>())
+                    m_thrallProjectilePrefab.AddComponent<ZNetView>();
+
+                if (!m_thrallProjectilePrefab.GetComponent<ZSyncTransform>())
+                    m_thrallProjectilePrefab.AddComponent<ZSyncTransform>();
+
+                if (!m_thrallProjectilePrefab.GetComponent<Projectile>())
+                    m_thrallProjectilePrefab.AddComponent<Projectile>();
+
+                // clone the *in-scene* projectile
+                m_thrallProjectilePrefab.name = "bow_projectile_thrall";
+
+                zns.m_prefabs.Add(m_thrallProjectilePrefab);
+                zns.m_namedPrefabs[m_thrallProjectilePrefab.name.GetStableHashCode()] = m_thrallProjectilePrefab;
+
+                // now link to item
+                if (m_thrallArrowPrefab)
+                {
+                    m_thrallArrowPrefab.GetComponent<ItemDrop>()
+                        .m_itemData.m_shared.m_attack.m_attackProjectile = m_thrallProjectilePrefab;
+                }
+            }
+
+            // ------------------------------------------------------------
+            // Recipe
+            // ------------------------------------------------------------
+            public static void CreateRecipe(ObjectDB db)
+            {
+                Recipe recipe = ScriptableObject.CreateInstance<Recipe>();
+                recipe.name = "Recipe_ThrallArrow";
+                recipe.m_item = m_thrallArrowPrefab.GetComponent<ItemDrop>();
+                recipe.m_amount = 20;
+                recipe.m_enabled = true;
+                // Workbench
+                recipe.m_craftingStation = FindStation(db, "piece_workbench");
+
+                recipe.m_resources = new Piece.Requirement[]
+                {
+                    new Piece.Requirement {
+                        m_resItem = db.GetItemPrefab("Wood").GetComponent<ItemDrop>(),
+                        m_amount = 5,
+                    }
+                };
+
+                db.m_recipes.Add(recipe);
+            }
+
+            public static CraftingStation FindStation(ObjectDB db, string name)
+            {
+                int hash = name.GetStableHashCode();
+
+                foreach (var go in db.m_items)
+                {
+                    if (!go) continue;
+                    if (go.name.GetStableHashCode() != hash) continue;
+
+                    CraftingStation cs = go.GetComponent<CraftingStation>();
+                    if (cs) return cs;
+                }
+
+                return null;
+            }
+        }
+        */
     }
 }
 
