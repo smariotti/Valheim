@@ -459,6 +459,10 @@ namespace TrophyHuntMod
                     return "Unknown";
             }
 
+            if (IsPacifist() && mode != TrophyGameMode.TrophyPacifist)
+            {
+                modeString += " <color=#F387C5>Pacifist</color>";
+            }
             return modeString;
         }
 
@@ -558,7 +562,7 @@ namespace TrophyHuntMod
             }
         }
 
-        static public string __m_saveDataVersionNumber = "6";
+        static public string __m_saveDataVersionNumber = "7";
 
         // WARNING!
         //
@@ -627,7 +631,7 @@ namespace TrophyHuntMod
 
         static string GetPersistentDataKey()
         {
-            return __m_saveDataVersionNumber + __m_storedGameMode.ToString() + __m_storedWorldSeed;
+            return __m_saveDataVersionNumber + __m_storedGameMode.ToString() + __m_storedWorldSeed + (IsPacifist() ? "P" : "_");
         }
 
         static void SavePersistentData()
@@ -1005,6 +1009,12 @@ namespace TrophyHuntMod
         public static void TogglePacifist()
         {
             __m_pacifistEnabled = !__m_pacifistEnabled;
+
+            if (__m_trophyHuntMainMenuText != null)
+            {
+                __m_trophyHuntMainMenuText.text = GetTrophyHuntMainMenuText();
+            }
+
         }
 
         public static void ToggleShowAllTrophyStats()
@@ -5416,15 +5426,15 @@ namespace TrophyHuntMod
             rectTransform.anchorMin = new Vector2(1.0f, 0.0f);
             rectTransform.anchorMax = new Vector2(1.0f, 0.0f);
             rectTransform.pivot = new Vector2(1.0f, 0.0f);
-            rectTransform.anchoredPosition = new Vector2(40, -200); // Position below the logo
-            rectTransform.sizeDelta = new Vector2(200, 25);
+            rectTransform.anchoredPosition = new Vector2(-10, -200); // Position below the logo
+            rectTransform.sizeDelta = new Vector2(150, 25);
             
             // Add the Button component
             UnityEngine.UI.Button button = togglePacifistButton.AddComponent<UnityEngine.UI.Button>();
 
             // Add an Image component for the button background
             UnityEngine.UI.Image image = togglePacifistButton.AddComponent<UnityEngine.UI.Image>();
-            image.color = Color.grey; // Set background color
+            image.color = new Color(0.25f, 0.25f, 0.25f); // Set background color
             if (IsPacifist())
             {
                 image.color = Color.green; // Set background color
@@ -7679,7 +7689,7 @@ namespace TrophyHuntMod
         {
             public static void Postfix(Character __instance, ref float __result)
             {
-                if (IsPacifist())
+                if (!IsPacifist())
                 {
                     return;
                 }
@@ -7697,7 +7707,7 @@ namespace TrophyHuntMod
         {
             public static void Postfix(Character __instance, ref float __result)
             {
-                if (IsPacifist())
+                if (!IsPacifist())
                 {
                     return;
                 }
@@ -7769,7 +7779,7 @@ namespace TrophyHuntMod
         {
             public static void Postfix(MonsterAI __instance, float dt)
             {
-                if (IsPacifist())
+                if (!IsPacifist())
                 {
                     return;
                 }
@@ -7936,7 +7946,7 @@ namespace TrophyHuntMod
             {
                 //                Debug.LogWarning($"Player_GiveDefaultItems_Patch Postfix called. Type: {__instance.GetType()}");
 
-                if (IsPacifist())
+                if (!IsPacifist())
                 {
                     return;
                 }
