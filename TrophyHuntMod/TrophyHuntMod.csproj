@@ -98,6 +98,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Pacifism.cs" />
     <Compile Include="ConsoleCommands.cs" />
     <Compile Include="DiscordAuthentication.cs" />
     <Compile Include="TrophyHuntMod.cs" />
