@@ -5,21 +5,63 @@ using System.Collections.Generic;
 using HarmonyLib;
 using static Skills;
 using System.Collections;
+using static TrophyHuntMod.TrophyHuntMod;
+using System;
+using System.Linq;
+using Newtonsoft.Json.Linq;
+using TMPro;
+using static EnemyHud;
 
 namespace TrophyHuntMod
 {
     public partial class TrophyHuntMod : BaseUnityPlugin
     {
         public static bool __m_charmTimerStarted = false;
-        
+
         static List<CharmedCharacter> __m_allCharmedCharacters = new List<CharmedCharacter>();
 
-        const float TROPHY_PACIFIST_CHARM_DURATION = 300; // seconds
-        
+        const float TROPHY_PACIFIST_CHARM_DURATION = 60; // seconds
+
         public const float cFollowDistance = 3.0f;
         public const float cRadiusScale = 2f;
-        
+
         public const float PACIFIST_THRALL_PLAYER_TARGET_DISTANCE = 50.0f;
+
+        public class GandrArrowData
+        {
+            public GandrArrowData(string arrowName, string ingredient, string name, string description, Type statusEffectType)
+            {
+                m_arrowName = arrowName;
+                m_ingredient = ingredient;
+                m_name = name;
+                m_description = description;
+                m_statusEffectType = statusEffectType;                
+            }
+
+            public string m_arrowName = "";
+            public string m_ingredient = "";
+            public string m_name = "";
+            public string m_description = "";
+            public Type m_statusEffectType;
+        }
+
+        public static GandrArrowData[] __m_gandrArrowData = new GandrArrowData[]
+        {
+            new GandrArrowData("ArrowWood", "Wood", "Wooden Gandr", "Thrall becomes stronger.", typeof(SE_GandrWood)),
+            new GandrArrowData("ArrowFlint", "Flint", "Flint Gandr", "Thrall hards like stone.", typeof(SE_GandrFlint)),
+            new GandrArrowData("ArrowFire", "Resin", "Fire Gandr", "Thrall burns its enemies.", typeof(SE_GandrFire)),
+            new GandrArrowData("ArrowBronze", "Bronze", "Bronze Gandr", "Thrall bristles with new strength.", typeof(SE_GandrBronze)),
+            new GandrArrowData("ArrowPoison", "Ooze", "Poison Gandr", "", typeof(SE_GandrPoison)),
+            new GandrArrowData("ArrowIron", "Iron", "Iron Gandr", "", typeof(SE_GandrIron)),
+            new GandrArrowData("ArrowFrost", "FreezeGland", "Frost Gandr", "", typeof(SE_GandrFrost)),
+            new GandrArrowData("ArrowObsidian", "Obsidian", "Glass Gandr", "", typeof(SE_GandrObsidian)),
+            new GandrArrowData("ArrowSilver", "Silver", "Silver Gandr", "", typeof(SE_GandrSilver)),
+            new GandrArrowData("ArrowNeedle", "Needle", "Needle Gandr", "", typeof(SE_GandrNeedle)),
+            new GandrArrowData("ArrowCarapace", "Carapace", "Bug Gandr", "", typeof(SE_GandrCarapace)),
+            new GandrArrowData("ArrowCharred", "Blackwood", "Charred Gandr", "", typeof(SE_GandrCharred)),
+        };
+
+        
 
         [HarmonyPatch(typeof(Character), nameof(Character.GetJogSpeedFactor))]
         public static class Character_GetJogSpeedFactor_Patch
@@ -355,7 +397,9 @@ namespace TrophyHuntMod
         public static float GetCharmDuration()
         {
             System.Random randomizer = new System.Random();
-            float duration = TROPHY_PACIFIST_CHARM_DURATION + (float)randomizer.NextDouble() * TROPHY_PACIFIST_CHARM_DURATION / 4 - TROPHY_PACIFIST_CHARM_DURATION / 8;
+            //            float duration = TROPHY_PACIFIST_CHARM_DURATION + (float)randomizer.NextDouble() * TROPHY_PACIFIST_CHARM_DURATION / 4 - TROPHY_PACIFIST_CHARM_DURATION / 8;
+            
+            float duration = TROPHY_PACIFIST_CHARM_DURATION;
 
             //            Debug.LogWarning($"[GetCharmDuration] {duration} seconds.");
 
@@ -406,6 +450,13 @@ namespace TrophyHuntMod
             bool result = guy != null;
 
             return result;
+        }
+
+        public static CharmedCharacter GetCharmedCharacter(Character character)
+        {
+            CharmedCharacter guy = __m_allCharmedCharacters.Find(c => c.m_zdoid == character.GetZDOID());
+
+            return guy;
         }
 
         public static void AddToCharmedList(Character enemy, long duration)
@@ -836,18 +887,10 @@ namespace TrophyHuntMod
                 {
                     Debug.LogWarning($"ObjectDB available");
 
-                    ChangeArrow(__instance, "ArrowBronze", "Bronze", "Bronze Gandr", "Thralls bristle with new strength.");
-                    ChangeArrow(__instance, "ArrowCarapace", "Carapace", "Bug Gandr", "");
-                    ChangeArrow(__instance, "ArrowCharred", "Blackwood", "Charred Gandr", "");
-                    ChangeArrow(__instance, "ArrowFire", "Resin", "Fire Gandr", "");
-                    ChangeArrow(__instance, "ArrowFlint", "Flint", "Flint Gandr", "Thralls harden like stone.");
-                    ChangeArrow(__instance, "ArrowFrost", "FreezeGland", "Frost Gandr", "");
-                    ChangeArrow(__instance, "ArrowIron", "Iron", "Iron Gandr", "");
-                    ChangeArrow(__instance, "ArrowNeedle", "Needle", "Needle Gandr", "");
-                    ChangeArrow(__instance, "ArrowObsidian", "Obsidian", "Glass Gandr", "");
-                    ChangeArrow(__instance, "ArrowPoison", "Ooze", "Poison Gandr", "");
-                    ChangeArrow(__instance, "ArrowSilver", "Silver", "Silver Gandr", "");
-                    ChangeArrow(__instance, "ArrowWood", "Wood", "Wooden Gandr", "Those struck with this evil splinter come under your thrall.");
+                    foreach (var arrowData in __m_gandrArrowData)
+                    {
+                        ChangeArrow(__instance, arrowData.m_arrowName, arrowData.m_ingredient, arrowData.m_name, arrowData.m_description);
+                    }
                 }
             }
         }
@@ -859,54 +902,34 @@ namespace TrophyHuntMod
 
             Debug.LogWarning($"ApplyGandrEffect: {arrowName} {hitChar.m_name}");
 
-            StatusEffect se = null;
-            string effectMessage = "";
-
-            if (arrowName.ToLower().Contains("flint".ToLower()))
+            foreach (var an in __m_gandrArrowData)
             {
-                SE_FlintSkin flintSkinEffect = ScriptableObject.CreateInstance<SE_FlintSkin>();
-                flintSkinEffect.m_ttl = 30;
-                flintSkinEffect.m_absorbDamage = 500;
-                flintSkinEffect.m_startEffects = new EffectList();
-
-
-                //EffectList myEffects = new EffectList();
-                //myEffects.m_effectPrefabs = new EffectList.EffectData[]
-                //{
-                //    new EffectList.EffectData()
-                //    {
-                //        m_prefab = ObjectDB.instance.GetItemPrefab("fx_bat_death"),
-                //        m_attach = true,
-                //        m_randomRotation = false,
-                //        m_enabled = true,
-                //    }
-                //};
-                //flintSkinEffect.m_startEffects = myEffects;
-
-                se = hitChar.m_seman.AddStatusEffect(flintSkinEffect);
-
-                effectMessage = "gains Flint Skin.";
+                Debug.LogWarning($"{an.m_arrowName} {an.m_ingredient} {an.m_name} {an.m_description}");
             }
-            else if (arrowName.ToLower().Contains("bronze".ToLower()))
+
+            GandrArrowData arrowData = __m_gandrArrowData.First(a => arrowName.ToLower() == a.m_name.ToLower());
+            if (arrowData == null)
             {
-                SE_BronzeStrength strengthEffect = ScriptableObject.CreateInstance<SE_BronzeStrength>();
-
-                strengthEffect.m_damageModifier = 1000.0f;
-                strengthEffect.m_modifyAttackSkill = Skills.SkillType.All;
-                strengthEffect.m_ttl = 30.0f;
-
-                se = hitChar.m_seman.AddStatusEffect(strengthEffect);
-
-                effectMessage = "gains Bronze Strength.";
+                Debug.LogError($"No GandrArrowData found for arrow {arrowName}");
+                return;
             }
+
+            StatusEffect se = ScriptableObject.CreateInstance(arrowData.m_statusEffectType) as StatusEffect;
+
+            se = hitChar.m_seman.AddStatusEffect(se);
+
             if (se != null)
             {
-                Debug.LogWarning($"STATUS EFFECT APPLIED: {se.m_name} {se.m_ttl} {hitChar?.GetHoverName()} {effectMessage}");
-                Player.m_localPlayer.Message(MessageHud.MessageType.TopLeft, $"{hitChar?.GetHoverName()} {effectMessage}.");
+                Debug.LogWarning($"STATUS EFFECT APPLIED: {se.m_name} {se.m_ttl} {hitChar?.GetHoverName()} {arrowData.m_description}");
+                Player.m_localPlayer.Message(MessageHud.MessageType.Center, $"{se.m_name} {se.m_ttl} {hitChar?.GetHoverName()} {arrowData.m_description}.");
             }
         }
 
-        public class SE_FlintSkin : SE_Shield
+        public class SE_GandrWood : SE_Stats
+        {
+        }
+
+        public class SE_GandrFlint : SE_Shield
         {
             public override void Setup(Character character)
             {
@@ -914,6 +937,8 @@ namespace TrophyHuntMod
 
                 if (m_character)
                 {
+                    m_ttl = 30;
+                    m_absorbDamage = 500;
                 }
             }
             public override void UpdateStatusEffect(float dt)
@@ -932,7 +957,7 @@ namespace TrophyHuntMod
         }
 
 
-        public class SE_BronzeStrength : SE_Stats
+        public class SE_GandrBronze : SE_Stats
         {
             public override void Setup(Character character)
             {
@@ -940,6 +965,9 @@ namespace TrophyHuntMod
 
                 if (m_character)
                 {
+                    m_damageModifier = 1000.0f;
+                    m_modifyAttackSkill = Skills.SkillType.All;
+                    m_ttl = 30.0f;
                 }
             }
             public override void UpdateStatusEffect(float dt)
@@ -954,6 +982,143 @@ namespace TrophyHuntMod
                 }
 
                 base.Stop();
+            }
+        }
+
+        public class SE_GandrFire : SE_Stats
+        {
+        }
+        public class SE_GandrPoison : SE_Stats
+        {
+        }
+        public class SE_GandrIron : SE_Stats
+        {
+        }
+        public class SE_GandrFrost : SE_Stats
+        {
+        }
+        public class SE_GandrObsidian : SE_Stats
+        {
+        }
+        public class SE_GandrSilver : SE_Stats
+        {
+        }
+        public class SE_GandrNeedle : SE_Stats
+        {
+        }
+        public class SE_GandrCarapace : SE_Stats
+        {
+        }
+        public class SE_GandrCharred : SE_Stats
+        {
+            
+        }
+
+        //[HarmonyPatch(typeof(EnemyHud), nameof(EnemyHud.ShowHud))]
+        //public class EnemyHud_ShowHud_Patch
+        //{
+        //    public static void Postfix(EnemyHud __instance, Character c, bool isMount)
+        //    {
+        //        if (!IsPacifist() || c == null)
+        //        {
+        //            return;
+        //        }
+                
+        //        EnemyHud.HudData hudData = null;
+        //        if (!__instance.m_huds.TryGetValue(c, out hudData))
+        //        {
+        //            Debug.LogError($"Could not find character {c?.name} in EnemyHud.m_huds list");
+        //            return;
+        //        }
+
+        //        //if (hudData != null)
+        //        //{
+        //        //    hudData.m_healthFast.SetColor(new Color(1.0f, 0.0f, 1.0f));
+        //        //    hudData.m_healthFastFriendly.SetColor(new Color(0.0f, 1.0f, 1.0f));
+        //        //    hudData.m_healthSlow.SetColor(new Color(1.0f, 1.0f, 0.0f)); // What IS this?
+        //        //}
+        //    }
+        //}
+
+        [HarmonyPatch(typeof(EnemyHud), nameof(EnemyHud.UpdateHuds))]
+        public class EnemyHud_UpdateHud_Patch
+        {
+            public static void Postfix(EnemyHud __instance, Player player, Sadle sadle, float dt)
+            {
+                if (!IsPacifist())
+                {
+                    return;
+                }
+
+                foreach (KeyValuePair<Character, EnemyHud.HudData> hudData in __instance.m_huds)
+                {
+                    Character c = hudData.Key;
+                    if (c == null)
+                        continue;
+
+                    EnemyHud.HudData data = hudData.Value;
+
+                    Transform charmTransform = data.m_gui.transform.Find("Charm");
+
+                    CharmedCharacter cc = GetCharmedCharacter(c);
+                    if (cc == null)
+                    {
+                        if (charmTransform && charmTransform.gameObject.activeSelf)
+                        {
+                            charmTransform.gameObject.SetActive(false);
+                        }
+                        continue;
+                    }
+                    
+                    if (IsCharmed(c))
+                    {
+                        float remainingTime = cc.m_charmExpireTime - __m_charmTimerSeconds;
+
+                        if (charmTransform && !charmTransform.gameObject.activeSelf)
+                        {
+                            charmTransform.gameObject.SetActive(true);
+                        }
+
+                        GuiBar charmBar = data.m_gui.transform.Find("Charm/health_fast_friendly").GetComponent<GuiBar>();
+                        charmBar.SetValue(remainingTime / GetCharmDuration());
+                        charmBar.SetColor(new Color((float)0xF3 / 255f, (float)0x87 / 255f, (float)0xC5 / 255f));
+                    }
+                }
+            }
+        }
+        [HarmonyPatch(typeof(EnemyHud), nameof(EnemyHud.Awake))]
+        public class EnemyHud_Awake_Patch
+        {
+            public static void Postfix(EnemyHud __instance)
+            {
+                Transform healthTransform = __instance.m_baseHud.transform.Find("Health");
+                GameObject healthObject = healthTransform.gameObject;
+
+                GameObject newBarObject = UnityEngine.Object.Instantiate(healthObject, healthTransform.parent);
+                newBarObject.name = "Charm";
+
+                Transform newTransform = newBarObject.transform;
+                newTransform.localPosition += new Vector3(0, -15, 0);
+
+                Transform healthFastTransform = newTransform.Find("health_fast");
+                if (healthFastTransform == null)
+                {
+                    Debug.LogError("Could not find health_fast transform!");
+                }
+                if (healthFastTransform?.gameObject == null)
+                {
+                    Debug.LogError("Could not find health_fast gameobject!");
+                }
+                healthFastTransform?.gameObject?.SetActive(false);
+                Debug.LogError("healthFastTransform set to Active?");
+
+                Transform healthSlowTransform = newTransform.Find("health_slow");
+                healthSlowTransform?.gameObject?.SetActive(false);
+
+                Transform healthFastFriendlyTransform = newTransform.Find("health_fast_friendly");
+                healthFastFriendlyTransform?.gameObject?.SetActive(true);
+
+                newBarObject.SetActive(false);
             }
         }
     }

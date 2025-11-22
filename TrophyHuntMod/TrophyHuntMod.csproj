@@ -38,6 +38,9 @@
     <Reference Include="0Harmony">
       <HintPath>..\Libs\0Harmony.dll</HintPath>
     </Reference>
+    <Reference Include="assembly_guiutils_publicized">
+      <HintPath>..\Libs\assembly_guiutils_publicized.dll</HintPath>
+    </Reference>
     <Reference Include="assembly_utils_publicized, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\Libs\assembly_utils_publicized.dll</HintPath>
