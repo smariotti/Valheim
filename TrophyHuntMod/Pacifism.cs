@@ -314,8 +314,19 @@ namespace TrophyHuntMod
 
                 if (hit.GetAttacker() == Player.m_localPlayer)
                 {
-                    //                    Debug.LogWarning($"[Character_RPC_Damage_Patch] Player is Attacker: {__instance?.name} : {hit.GetAttacker().name}");
                     return false;
+                }
+
+                // Debug
+                // List the status effects on the attacker
+                if (hit.GetAttacker() != null)
+                {
+                    Debug.LogWarning($"[RPC_Damage] {__instance?.name} hit by {hit.GetAttacker()?.name} : {hit?.m_damage.ToString()}");
+                    List<StatusEffect> statusFX = hit.GetAttacker().m_seman.GetStatusEffects();
+                    foreach (var se in statusFX)
+                    {
+                        Debug.LogWarning($"  Status Effect: {se.m_name} {se.GetType()} TTL: {se.m_ttl} {se.GetIconText()}");
+                    }
                 }
 
                 return true;
@@ -474,6 +485,15 @@ namespace TrophyHuntMod
             __m_allCharmedCharacters.Add(cc);
 
             SetCharmedState(cc);
+
+            if (__m_allCharmedCharacters.Count > 0 && Player.m_localPlayer.m_maxAdrenaline == 0)
+            {
+                if (Player.m_localPlayer != null)
+                {
+                    Player.m_localPlayer.m_maxAdrenaline = 30;
+                    Player.m_localPlayer.m_adrenaline = 0;
+                }
+            }
         }
 
         public static void RemoveFromCharmedList(Character enemy)
@@ -483,6 +503,15 @@ namespace TrophyHuntMod
             {
                 Minimap.instance.RemovePin(cc.m_pin);
                 __m_allCharmedCharacters.Remove(cc);
+            }
+
+            if (__m_allCharmedCharacters.Count < 1)
+            {
+                if (Player.m_localPlayer != null)
+                {
+                    Player.m_localPlayer.m_maxAdrenaline = 0;
+                    Player.m_localPlayer.m_adrenaline = 0;
+                }
             }
         }
 
@@ -809,15 +838,14 @@ namespace TrophyHuntMod
                     //                    Debug.LogWarning($"Hit char {hitChar.name} of faction {hitChar.GetFaction()} and group {hitChar.m_group} nview {hitChar.m_nview}");
 
                     // Skip if already charmed
-                    if (!IsCharmed(hitChar))
+                    if (IsCharmed(hitChar))
                     {
-                        AddToCharmedList(hitChar, (long)GetCharmDuration());
+                        hitChar.m_seman.RemoveAllStatusEffects();
+                        RemoveFromCharmedList(hitChar);
                     }
 
-                    if (!arrowName.ToLower().Contains("wood"))
-                    {
-                        ApplyGandrEffect(arrowName, hitChar);
-                    }
+                    AddToCharmedList(hitChar, (long)GetCharmDuration());
+                    ApplyGandrEffect(arrowName, hitChar);
                 }
 
                 catch (System.Exception ex)
@@ -902,10 +930,10 @@ namespace TrophyHuntMod
 
             Debug.LogWarning($"ApplyGandrEffect: {arrowName} {hitChar.m_name}");
 
-            foreach (var an in __m_gandrArrowData)
-            {
-                Debug.LogWarning($"{an.m_arrowName} {an.m_ingredient} {an.m_name} {an.m_description}");
-            }
+            //foreach (var an in __m_gandrArrowData)
+            //{
+            //    Debug.LogWarning($"{an.m_arrowName} {an.m_ingredient} {an.m_name} {an.m_description}");
+            //}
 
             GandrArrowData arrowData = __m_gandrArrowData.First(a => arrowName.ToLower() == a.m_name.ToLower());
             if (arrowData == null)
@@ -925,120 +953,306 @@ namespace TrophyHuntMod
             }
         }
 
-        public class SE_GandrWood : SE_Stats
+        [HarmonyPatch(typeof(SEMan), nameof(SEMan.ModifyAdrenaline))]
+        public static class SEMan_ModifyAdrenaline_Patch
         {
+            public static bool Prefix(SEMan __instance, float baseValue, ref float use)
+            {
+                if (!IsPacifist())
+                {
+                    return true;
+                }
+
+                if (__instance.m_character != Player.m_localPlayer)
+                {
+                    return true;
+                }
+
+                Player player = Player.m_localPlayer;
+
+                if (use > 0)
+                {
+                    if (player.m_adrenaline + use > player.m_maxAdrenaline)
+                    {
+                        bool trinketPopped = false;
+                        StatusEffect trinketStatusEffect = null;
+                        foreach (ItemDrop.ItemData item in player.GetInventory().GetAllItems())
+                        {
+                            if (item.m_equipped && item.m_shared.m_fullAdrenalineSE != null)
+                            {
+                                trinketPopped = true;
+                                trinketStatusEffect = item.m_shared.m_fullAdrenalineSE;
+                                break;
+                            }
+                        }
+
+                        foreach (var cc in __m_allCharmedCharacters)
+                        {
+                            Character c = GetCharacterFromZDOID(cc.m_zdoid);
+                            if (c)
+                            {
+                                c.Heal(c.GetMaxHealth() - c.GetHealth(), showText: true);
+                                Debug.LogWarning($"Healed charmed enemy {c.name} to full health due to adrenaline overflow.");
+                                if (trinketPopped)
+                                {
+                                    player.m_adrenalinePopEffects.Create(c.transform.position, Quaternion.identity);
+
+                                    StatusEffect activeSE = c.m_seman.GetStatusEffect(trinketStatusEffect.m_nameHash);
+                                    if (activeSE)
+                                    {
+                                        activeSE.ResetTime();
+                                    }
+                                    else
+                                    {
+                                        c.m_seman.AddStatusEffect(trinketStatusEffect);
+                                    }
+                                }
+                                else
+                                {
+                                    Hud.instance.AdrenalineBarFlash();
+                                    player.m_adrenaline = 0;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                return true;
+            }
         }
 
-        public class SE_GandrFlint : SE_Shield
+        public class SE_GandrEffect : SE_Stats
         {
+            float m_adrenalineScalar = 0.0f;
+            float m_adrenalineScaleMagnitude = 1.0f;
+
             public override void Setup(Character character)
             {
                 base.Setup(character);
 
-                if (m_character)
-                {
-                    m_ttl = 30;
-                    m_absorbDamage = 500;
-                }
+                // SE lasts for this many seconds
+                m_ttl = 30.0f;
+                m_damageModifier = 2.0f;
+                m_skillLevelModifier = 10.0f;
+                m_skillLevel = SkillType.All;
+                //                m_skillLevelModifier2 = 10.0f;
+                m_name = "Base Gandr Effect";
             }
             public override void UpdateStatusEffect(float dt)
             {
                 base.UpdateStatusEffect(dt);
+
+                if (Player.m_localPlayer.GetMaxAdrenaline() > 0)
+                {
+                    m_adrenalineScalar = Player.m_localPlayer.GetAdrenaline() / Player.m_localPlayer.GetMaxAdrenaline();
+                }
+                else 
+                {
+                    m_adrenalineScalar = 0.0f;
+                }
+
+//                Debug.LogWarning($"GandrEffect UpdateStatusEffect called. AdrenalineScalar: {m_adrenalineScalar}");
+            }
+
+            public override void ModifyAttack(Skills.SkillType skill, ref HitData hitData)
+            {
+                HitData.DamageTypes dt = m_percentigeDamageModifiers;
+                dt.Modify(1.0f + m_adrenalineScalar * m_adrenalineScaleMagnitude);
+                hitData.m_damage.Add(dt);
+
+                base.ModifyAttack(skill, ref hitData);
+            }
+
+            public override void OnDamaged(HitData hit, Character attacker)
+            {
+                base.OnDamaged(hit, attacker);
+
+                hit.m_damage.Modify(1/(1+m_adrenalineScalar*m_adrenalineScaleMagnitude));
             }
 
             public override void Stop()
             {
-                if (m_character)
-                {
-                }
-
                 base.Stop();
             }
+
         }
 
+/*
+ * 	"Hit Damage Armor
+(base health multiplier)"	"Damage Output
+(base damage multiplier)"	Bonus Damage Type	"Bonus Damage Output
+(base damage multiplier)"
+ArrowWood	    2.0	2.0	Default	
+ArrowFlint	    2.5	2.5	Pierce	    1.5
+ArrowFire	    3.0	3.0	Fire	    1.5
+ArrowBronze	    3.5	3.5	Blunt	    2.0
+ArrowPoison	    4.0	4.0	Poison	    2.5
+ArrowIron	    4.5	4.5	Slash	    3.0
+ArrowFrost	    5.0	5.0	Frost	    3.5
+ArrowObsidian	5.5	5.5	Slash	    4.0
+ArrowSilver	    6.0	6.0	Spirit	    4.5
+ArrowNeedle	    7.0	7.0	Pierce	    5.0
+ArrowCarapace	8.0	8.0	Blunt	    6.0
+ArrowCharred	9.0	9.0	Lightning	7.0
+ */
 
-        public class SE_GandrBronze : SE_Stats
+        public class SE_GandrWood : SE_GandrEffect
         {
             public override void Setup(Character character)
             {
                 base.Setup(character);
+                m_percentigeDamageModifiers.m_fire = 2;
+                m_percentigeDamageModifiers.m_frost = 2;
+                m_percentigeDamageModifiers.m_lightning = 2;
+                m_percentigeDamageModifiers.m_poison = 2;
+                m_percentigeDamageModifiers.m_spirit = 2;
 
-                if (m_character)
-                {
-                    m_damageModifier = 1000.0f;
-                    m_modifyAttackSkill = Skills.SkillType.All;
-                    m_ttl = 30.0f;
-                }
+                m_name = "Wood Gandr Effect";
             }
-            public override void UpdateStatusEffect(float dt)
+        }
+        public class SE_GandrFlint : SE_GandrEffect
+        {
+            public override void Setup(Character character)
             {
-                base.UpdateStatusEffect(dt);
-            }
+                base.Setup(character);
+                m_damageModifier = 2.5f;
+                m_addArmor = 0;
+                m_armorMultiplier = 2.5f;
+                m_percentigeDamageModifiers.m_pierce = 1.5f;
+                m_name = "Flint Gandr Effect";
 
-            public override void Stop()
+            }
+        }
+        public class SE_GandrFire : SE_GandrEffect
+        {
+            public override void Setup(Character character)
             {
-                if (m_character)
-                {
-                }
+                base.Setup(character);
+                m_damageModifier = 3f;
+                m_addArmor = 0;
+                m_armorMultiplier = 3f;
+                m_percentigeDamageModifiers.m_fire = 1.5f;
+                m_name = "Fire Gandr Effect";
 
-                base.Stop();
+                Debug.LogWarning($"SE_GandrFire Setup called { m_percentigeDamageModifiers.ToString()}");
             }
         }
 
-        public class SE_GandrFire : SE_Stats
+        public class SE_GandrBronze : SE_GandrEffect
         {
-        }
-        public class SE_GandrPoison : SE_Stats
-        {
-        }
-        public class SE_GandrIron : SE_Stats
-        {
-        }
-        public class SE_GandrFrost : SE_Stats
-        {
-        }
-        public class SE_GandrObsidian : SE_Stats
-        {
-        }
-        public class SE_GandrSilver : SE_Stats
-        {
-        }
-        public class SE_GandrNeedle : SE_Stats
-        {
-        }
-        public class SE_GandrCarapace : SE_Stats
-        {
-        }
-        public class SE_GandrCharred : SE_Stats
-        {
-            
+            public override void Setup(Character character)
+            {
+                base.Setup(character);
+                m_damageModifier = 3.5f;
+                m_addArmor = 0;
+                m_armorMultiplier = 3.5f;
+                m_percentigeDamageModifiers.m_blunt = 2f;
+                m_name = "Bronze Gandr Effect";
+
+            }
         }
 
-        //[HarmonyPatch(typeof(EnemyHud), nameof(EnemyHud.ShowHud))]
-        //public class EnemyHud_ShowHud_Patch
-        //{
-        //    public static void Postfix(EnemyHud __instance, Character c, bool isMount)
-        //    {
-        //        if (!IsPacifist() || c == null)
-        //        {
-        //            return;
-        //        }
-                
-        //        EnemyHud.HudData hudData = null;
-        //        if (!__instance.m_huds.TryGetValue(c, out hudData))
-        //        {
-        //            Debug.LogError($"Could not find character {c?.name} in EnemyHud.m_huds list");
-        //            return;
-        //        }
+        public class SE_GandrPoison : SE_GandrEffect
+        {
+            public override void Setup(Character character)
+            {
+                base.Setup(character);
+                m_damageModifier = 4f;
+                m_addArmor = 0;
+                m_armorMultiplier = 4f;
+                m_percentigeDamageModifiers.m_poison = 2f;
+                m_name = "Poison Gandr Effect";
+            }
+        }
+        public class SE_GandrIron : SE_GandrEffect
+        {
+            public override void Setup(Character character)
+            {
+                base.Setup(character);
+                m_damageModifier = 4.5f;
+                m_addArmor = 0;
+                m_armorMultiplier = 4.5f;
+                m_percentigeDamageModifiers.m_slash = 2.5f;
+                m_name = "Iron Gandr Effect";
+            }
+        }
+        public class SE_GandrFrost : SE_GandrEffect
+        {
+            public override void Setup(Character character)
+            {
+                base.Setup(character);
+                m_damageModifier = 5f;
+                m_addArmor = 0;
+                m_armorMultiplier = 5f;
+                m_percentigeDamageModifiers.m_frost = 3f;
+                m_name = "Frost Gandr Effect";
 
-        //        //if (hudData != null)
-        //        //{
-        //        //    hudData.m_healthFast.SetColor(new Color(1.0f, 0.0f, 1.0f));
-        //        //    hudData.m_healthFastFriendly.SetColor(new Color(0.0f, 1.0f, 1.0f));
-        //        //    hudData.m_healthSlow.SetColor(new Color(1.0f, 1.0f, 0.0f)); // What IS this?
-        //        //}
-        //    }
-        //}
+            }
+        }
+        public class SE_GandrObsidian : SE_GandrEffect
+        {
+            public override void Setup(Character character)
+            {
+                base.Setup(character);
+                m_damageModifier = 5.5f;
+                m_addArmor = 0;
+                m_armorMultiplier = 5.5f;
+                m_percentigeDamageModifiers.m_slash = 3f;
+                m_name = "Obsidian Gandr Effect";
+
+            }
+        }
+        public class SE_GandrSilver : SE_GandrEffect
+        {
+            public override void Setup(Character character)
+            {
+                base.Setup(character);
+                m_damageModifier = 6f;
+                m_addArmor = 0;
+                m_armorMultiplier = 6f;
+                m_percentigeDamageModifiers.m_spirit = 3.5f;
+                m_name = "Silver Gandr Effect";
+
+            }
+        }
+        public class SE_GandrNeedle : SE_GandrEffect
+        {
+            public override void Setup(Character character)
+            {
+                base.Setup(character);
+                m_damageModifier = 7f;
+                m_addArmor = 0;
+                m_armorMultiplier = 7f;
+                m_percentigeDamageModifiers.m_pierce = 4f;
+                m_name = "Needle Gandr Effect";
+
+            }
+        }
+        public class SE_GandrCarapace : SE_GandrEffect
+        {
+            public override void Setup(Character character)
+            {
+                base.Setup(character);
+                m_damageModifier = 8f;
+                m_addArmor = 0;
+                m_armorMultiplier = 7f;
+                m_percentigeDamageModifiers.m_blunt = 5f;
+                m_name = "Carapace Gandr Effect";
+
+            }
+        }
+        public class SE_GandrCharred : SE_GandrEffect
+        {
+            public override void Setup(Character character)
+            {
+                base.Setup(character);
+                m_damageModifier = 9f;
+                m_addArmor = 0;
+                m_armorMultiplier = 7f;
+                m_percentigeDamageModifiers.m_lightning = 6f;
+                m_name = "Charred Gandr Effect";
+            }
+        }
 
         [HarmonyPatch(typeof(EnemyHud), nameof(EnemyHud.UpdateHuds))]
         public class EnemyHud_UpdateHud_Patch
@@ -1098,7 +1312,7 @@ namespace TrophyHuntMod
                 newBarObject.name = "Charm";
 
                 Transform newTransform = newBarObject.transform;
-                newTransform.localPosition += new Vector3(0, -15, 0);
+                newTransform.localPosition += new Vector3(0, -10, 0);
 
                 Transform healthFastTransform = newTransform.Find("health_fast");
                 if (healthFastTransform == null)

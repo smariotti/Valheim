@@ -274,6 +274,16 @@ You can find the github at: https://github.com/smariotti/Valheim/tree/master/Tro
 
 
 ## Change Log
+v0.10.11
+- Fixed BiomeBonus reporting to Tracker for game modes that use Biome Bonus (sorry JV!)
+- Lots of Pacifist changes
+  - Charm fixes
+  - Charm bar on charmed enemies
+  - Thralls have Status Effects based on arrow type
+  - Better leashing of Thralls (50 meters)
+  - 
+
+## Change Log
 v0.10.10
 - Bug fixes for Trophy Pacifist mode
 
