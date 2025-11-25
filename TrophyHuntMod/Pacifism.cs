@@ -117,17 +117,6 @@ namespace TrophyHuntMod
                     return;
                 }
 
-                //var nview = __instance.m_nview;
-                //if (nview == null || !nview.IsValid())
-                //    return;
-
-                //// Record original faction
-                //if (!nview.GetZDO().GetBool("charmed"))
-                //{
-                //    return;
-                //}
-
-
                 if (__instance.m_character == null)
                 {
                     Debug.LogError("MonsterAI_UpdateAI_Patch: __instance.m_character is null!");
@@ -148,8 +137,6 @@ namespace TrophyHuntMod
 
                     //                    Debug.LogWarning($"MonsterAI.UpdateAI() {__instance.name} T: {target.name} distToTarget {targetDist} F: {__instance.GetFollowTarget().name} distToPlayer: {playerDist} ");
 
-                    //__instance.SetTarget(null);
-                    //__instance.SetTargetInfo(ZDOID.None);
                     __instance.SetFollowTarget(Player.m_localPlayer.gameObject);
                 }
             }
@@ -163,11 +150,6 @@ namespace TrophyHuntMod
             {
                 float distanceReduction = 0.0f;
 
-                //if (go == Player.m_localPlayer.gameObject)
-                //{
-                //    float velmag = Player.m_localPlayer.GetVelocity().magnitude;
-                //    distanceReduction = velmag * 0.5f;
-                //}
                 float num = Vector3.Distance(go.transform.position, __instance.m_character.transform.position);
                 bool run = num > 10f;
                 if (num < cFollowDistance + __instance.m_character.GetRadius() * cRadiusScale - distanceReduction)
@@ -887,17 +869,19 @@ namespace TrophyHuntMod
                     Debug.LogError($"Could not find Recipe_{prefabName}");
                 }
 
+                // TODO: Keep recipes the same, but create bigger stacks
+                // make station type and level requirements stay the same as vanilla
+                //
                 vanillaRecipe.m_item = itemDrop;
-                vanillaRecipe.m_amount = 5;
+                vanillaRecipe.m_amount = 100;
                 vanillaRecipe.m_enabled = true;
                 vanillaRecipe.m_craftingStation = null;
-                //                vanillaRecipe.m_repairStation = null;
                 vanillaRecipe.m_minStationLevel = 0;
                 vanillaRecipe.m_resources = new Piece.Requirement[] {
                         new Piece.Requirement()
                         {
                             m_resItem = db.GetItemPrefab(ingredient).GetComponent<ItemDrop>(),
-                            m_amount = 5,
+                            m_amount = 1,
                             m_amountPerLevel = 0
                         }
                     };
@@ -1021,11 +1005,14 @@ namespace TrophyHuntMod
             }
         }
 
+
+
         public class SE_GandrEffect : SE_Stats
         {
-            float m_adrenalineScalar = 0.0f;
-            float m_adrenalineScaleMagnitude = 1.0f;
-
+            public float m_adrenalineScalar = 0.0f;
+            public float m_adrenalineScaleMagnitude = 1.0f;
+            public float m_baseDamageModifier = 1.0f;
+            public float m_baseDamageReductionModifier = 1.0f;
             public override void Setup(Character character)
             {
                 base.Setup(character);
@@ -1037,6 +1024,8 @@ namespace TrophyHuntMod
                 m_skillLevel = SkillType.All;
                 //                m_skillLevelModifier2 = 10.0f;
                 m_name = "Base Gandr Effect";
+
+                // Add icon
             }
             public override void UpdateStatusEffect(float dt)
             {
@@ -1057,7 +1046,7 @@ namespace TrophyHuntMod
             public override void ModifyAttack(Skills.SkillType skill, ref HitData hitData)
             {
                 HitData.DamageTypes dt = m_percentigeDamageModifiers;
-                dt.Modify(1.0f + m_adrenalineScalar * m_adrenalineScaleMagnitude);
+                dt.Modify(1.0f + m_adrenalineScalar * m_baseDamageModifier);
                 hitData.m_damage.Add(dt);
 
                 base.ModifyAttack(skill, ref hitData);
@@ -1073,6 +1062,8 @@ namespace TrophyHuntMod
             public override void Stop()
             {
                 base.Stop();
+
+                // Remove icon
             }
 
         }
@@ -1101,13 +1092,10 @@ ArrowCharred	9.0	9.0	Lightning	7.0
             public override void Setup(Character character)
             {
                 base.Setup(character);
-                m_percentigeDamageModifiers.m_fire = 2;
-                m_percentigeDamageModifiers.m_frost = 2;
-                m_percentigeDamageModifiers.m_lightning = 2;
-                m_percentigeDamageModifiers.m_poison = 2;
-                m_percentigeDamageModifiers.m_spirit = 2;
 
-                m_name = "Wood Gandr Effect";
+                m_percentigeDamageModifiers.m_damage = 2.0f;
+                m_adrenalineScaleMagnitude = 1;
+                m_name = "Wood Gandr";
             }
         }
         public class SE_GandrFlint : SE_GandrEffect
@@ -1115,11 +1103,9 @@ ArrowCharred	9.0	9.0	Lightning	7.0
             public override void Setup(Character character)
             {
                 base.Setup(character);
-                m_damageModifier = 2.5f;
-                m_addArmor = 0;
-                m_armorMultiplier = 2.5f;
                 m_percentigeDamageModifiers.m_pierce = 1.5f;
-                m_name = "Flint Gandr Effect";
+                m_adrenalineScaleMagnitude = 1;
+                m_name = "Flint Gandr";
 
             }
         }
@@ -1128,11 +1114,9 @@ ArrowCharred	9.0	9.0	Lightning	7.0
             public override void Setup(Character character)
             {
                 base.Setup(character);
-                m_damageModifier = 3f;
-                m_addArmor = 0;
-                m_armorMultiplier = 3f;
+                m_adrenalineScaleMagnitude = 1;
                 m_percentigeDamageModifiers.m_fire = 1.5f;
-                m_name = "Fire Gandr Effect";
+                m_name = "Fire Gandr";
 
                 Debug.LogWarning($"SE_GandrFire Setup called { m_percentigeDamageModifiers.ToString()}");
             }
@@ -1143,11 +1127,9 @@ ArrowCharred	9.0	9.0	Lightning	7.0
             public override void Setup(Character character)
             {
                 base.Setup(character);
-                m_damageModifier = 3.5f;
-                m_addArmor = 0;
-                m_armorMultiplier = 3.5f;
+                m_adrenalineScaleMagnitude = 1;
                 m_percentigeDamageModifiers.m_blunt = 2f;
-                m_name = "Bronze Gandr Effect";
+                m_name = "Bronze Gandr";
 
             }
         }
@@ -1157,11 +1139,9 @@ ArrowCharred	9.0	9.0	Lightning	7.0
             public override void Setup(Character character)
             {
                 base.Setup(character);
-                m_damageModifier = 4f;
-                m_addArmor = 0;
-                m_armorMultiplier = 4f;
+                m_adrenalineScaleMagnitude = 1;
                 m_percentigeDamageModifiers.m_poison = 2f;
-                m_name = "Poison Gandr Effect";
+                m_name = "Poison Gandr";
             }
         }
         public class SE_GandrIron : SE_GandrEffect
@@ -1169,11 +1149,9 @@ ArrowCharred	9.0	9.0	Lightning	7.0
             public override void Setup(Character character)
             {
                 base.Setup(character);
-                m_damageModifier = 4.5f;
-                m_addArmor = 0;
-                m_armorMultiplier = 4.5f;
+                m_adrenalineScaleMagnitude = 1;
                 m_percentigeDamageModifiers.m_slash = 2.5f;
-                m_name = "Iron Gandr Effect";
+                m_name = "Iron Gandr";
             }
         }
         public class SE_GandrFrost : SE_GandrEffect
@@ -1181,11 +1159,9 @@ ArrowCharred	9.0	9.0	Lightning	7.0
             public override void Setup(Character character)
             {
                 base.Setup(character);
-                m_damageModifier = 5f;
-                m_addArmor = 0;
-                m_armorMultiplier = 5f;
+                m_adrenalineScaleMagnitude = 1;
                 m_percentigeDamageModifiers.m_frost = 3f;
-                m_name = "Frost Gandr Effect";
+                m_name = "Frost Gandr";
 
             }
         }
@@ -1194,11 +1170,9 @@ ArrowCharred	9.0	9.0	Lightning	7.0
             public override void Setup(Character character)
             {
                 base.Setup(character);
-                m_damageModifier = 5.5f;
-                m_addArmor = 0;
-                m_armorMultiplier = 5.5f;
+                m_adrenalineScaleMagnitude = 1;
                 m_percentigeDamageModifiers.m_slash = 3f;
-                m_name = "Obsidian Gandr Effect";
+                m_name = "Obsidian Gandr";
 
             }
         }
@@ -1207,11 +1181,9 @@ ArrowCharred	9.0	9.0	Lightning	7.0
             public override void Setup(Character character)
             {
                 base.Setup(character);
-                m_damageModifier = 6f;
-                m_addArmor = 0;
-                m_armorMultiplier = 6f;
+                m_adrenalineScaleMagnitude = 1;
                 m_percentigeDamageModifiers.m_spirit = 3.5f;
-                m_name = "Silver Gandr Effect";
+                m_name = "Silver Gandr";
 
             }
         }
@@ -1220,11 +1192,9 @@ ArrowCharred	9.0	9.0	Lightning	7.0
             public override void Setup(Character character)
             {
                 base.Setup(character);
-                m_damageModifier = 7f;
-                m_addArmor = 0;
-                m_armorMultiplier = 7f;
+                m_adrenalineScaleMagnitude = 1;
                 m_percentigeDamageModifiers.m_pierce = 4f;
-                m_name = "Needle Gandr Effect";
+                m_name = "Needle Gandr";
 
             }
         }
@@ -1233,11 +1203,9 @@ ArrowCharred	9.0	9.0	Lightning	7.0
             public override void Setup(Character character)
             {
                 base.Setup(character);
-                m_damageModifier = 8f;
-                m_addArmor = 0;
-                m_armorMultiplier = 7f;
+                m_adrenalineScaleMagnitude = 1;
                 m_percentigeDamageModifiers.m_blunt = 5f;
-                m_name = "Carapace Gandr Effect";
+                m_name = "Carapace Gandr";
 
             }
         }
@@ -1246,11 +1214,9 @@ ArrowCharred	9.0	9.0	Lightning	7.0
             public override void Setup(Character character)
             {
                 base.Setup(character);
-                m_damageModifier = 9f;
-                m_addArmor = 0;
-                m_armorMultiplier = 7f;
+                m_adrenalineScaleMagnitude = 1;
                 m_percentigeDamageModifiers.m_lightning = 6f;
-                m_name = "Charred Gandr Effect";
+                m_name = "Charred Gandr";
             }
         }
 
@@ -1300,6 +1266,52 @@ ArrowCharred	9.0	9.0	Lightning	7.0
                 }
             }
         }
+
+        public class ThrallStatusIconData
+        {
+            public ThrallStatusIconData(string name, string prefabName, Sprite sprite)
+            {
+                m_name = name;
+                m_prefabName = prefabName;
+                m_sprite = sprite;
+            }
+            public string m_name;
+            public string m_prefabName;
+            public Sprite m_sprite;
+        }
+
+        public static ThrallStatusIconData[] __m_thrallStatusIcons = new ThrallStatusIconData[]
+        {
+            // Arrows
+            new ThrallStatusIconData("Wood Gandr", "TrophyAbomination", null),
+            new ThrallStatusIconData("Flint Gandr", "Flint", null),
+            new ThrallStatusIconData("Fire Gandr", "skeleton_hildir_firenova", null),
+            new ThrallStatusIconData("Bronze Gandr", "Bronze", null),
+            new ThrallStatusIconData("Poison Gandr", "MeadPoisonResist", null),
+            new ThrallStatusIconData("Iron Gandr", "Iron", null),
+            new ThrallStatusIconData("Frost Gandr", "FreezeGland", null),
+            new ThrallStatusIconData("Obsidian Gandr", "Obsidian", null),
+            new ThrallStatusIconData("Silver Gandr", "Silver", null),
+            new ThrallStatusIconData("Needle Gandr", "Needle", null),
+            new ThrallStatusIconData("Carapace Gandr", "Carapace", null),
+            new ThrallStatusIconData("Charred Gandr", "Blackwood", null),
+
+            // Trinkets
+            new ThrallStatusIconData("$se_trinketbronzehealth", "TrinketBronzeHealth", null), // Heart of the Forest
+            new ThrallStatusIconData("$se_trinketbronzestamina", "TrinketBronzeStamina", null), // Bronze Pendant
+            new ThrallStatusIconData("$se_trinketironhealth", "TrinketIronHealth", null), // Iron Brooch
+            new ThrallStatusIconData("$se_trinketironstamina", "TrinketIronStamina", null), // Nimble Anklet
+            new ThrallStatusIconData("$se_trinketchitinswim", "TrinketChitinSwim", null), // Fins of Destiny
+            new ThrallStatusIconData("$se_trinketsilverdamage", "TrinketSilverDamage", null), // Wolf Sight
+            new ThrallStatusIconData("$se_trinketsilverresist", "TrinketSilverResist", null), // Crystal Heart
+            new ThrallStatusIconData("$se_trinketblackdtamina", "TrinketBlackStamina", null), // Evasion Mantle
+            new ThrallStatusIconData("$se_trinketblackdamagedealth", "TrinketBlackDamageHealth", null), // Bracelets of the Brave
+            new ThrallStatusIconData("$se_trinketcarapaceeitr", "TrinketCarapaceEitr", null), // Pulsating Earrings
+            new ThrallStatusIconData("$se_trinketscalestaminadamage", "TrinketScaleStaminaDamage", null), // Resounding Shackle
+            new ThrallStatusIconData("$se_trinketflametaleitr", "TrinketFlametalEitr", null), // Jörmundling
+            new ThrallStatusIconData("$se_trinketflametalstaminahealth", "TrinketFlametalStaminaHealth", null), // Brimstone
+        };
+
         [HarmonyPatch(typeof(EnemyHud), nameof(EnemyHud.Awake))]
         public class EnemyHud_Awake_Patch
         {
@@ -1333,6 +1345,57 @@ ArrowCharred	9.0	9.0	Lightning	7.0
                 healthFastFriendlyTransform?.gameObject?.SetActive(true);
 
                 newBarObject.SetActive(false);
+
+                GameObject charmIconElement1 = new GameObject("CharmIcon1");
+                charmIconElement1.transform.SetParent(newBarObject.transform);
+
+                // Add RectTransform component for positioning
+                RectTransform rectTransform = charmIconElement1.AddComponent<RectTransform>();
+                rectTransform.sizeDelta = new Vector2(20, 20);
+                rectTransform.anchoredPosition = new Vector2(-9, -16); // Set position
+                rectTransform.localScale = new Vector3(1.0f, 1.0f, 1.0f);
+
+                // Add an Image component
+                UnityEngine.UI.Image image = charmIconElement1.AddComponent<UnityEngine.UI.Image>();
+                image.sprite = __m_trophySprite;
+                image.color = Color.white;
+                image.raycastTarget = false;
+
+                GameObject charmIconElement2 = new GameObject("CharmIcon2");
+                charmIconElement2.transform.SetParent(newBarObject.transform);
+
+                // Add RectTransform component for positioning
+                rectTransform = charmIconElement2.AddComponent<RectTransform>();
+                rectTransform.sizeDelta = new Vector2(20, 20);
+                rectTransform.anchoredPosition = new Vector2(9, -16); // Set position
+                rectTransform.localScale = new Vector3(1.0f, 1.0f, 1.0f);
+
+                // Add an Image component
+                image = charmIconElement2.AddComponent<UnityEngine.UI.Image>();
+                image.sprite = __m_trophySprite;
+                image.color = Color.white;
+                image.raycastTarget = false;
+
+//                Transform previous = charmIconElement2.transform;
+//                foreach (var tsid in __m_thrallStatusIcons)
+//                {
+//                    GameObject icon = new GameObject("asdfasdf");
+//                    icon.transform.SetParent(previous);
+
+//                    // Add RectTransform component for positioning
+//                    rectTransform = icon.AddComponent<RectTransform>();
+//                    rectTransform.sizeDelta = new Vector2(20, 20);
+//                    rectTransform.anchoredPosition = new Vector2(9, -16); // Set position
+//                    rectTransform.localScale = new Vector3(1.0f, 1.0f, 1.0f);
+
+//                    // Add an Image component
+//                    image = icon.AddComponent<UnityEngine.UI.Image>();
+//                    image.sprite = GetTrophySprite(tsid.m_prefabName);
+////                    image.color = Color.white;
+//                    image.raycastTarget = false;
+
+//                    previous = icon.transform;
+//                }
             }
         }
     }

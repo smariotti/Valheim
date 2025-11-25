@@ -2980,6 +2980,7 @@ namespace TrophyHuntMod
                                 string bonusString = "Bonus" + biome.ToString();
                                 AddPlayerEvent(PlayerEventType.Misc, bonusString, __instance.transform.position);
                                 Debug.LogError("BIOME BONUS: " + bonusString);
+                                player.Message(MessageHud.MessageType.TopLeft, "Biome Bonus: " + biome.ToString());
                                 FlashBiomeTrophies(name);
                             }
                         }
