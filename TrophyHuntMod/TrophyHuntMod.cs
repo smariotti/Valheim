@@ -562,7 +562,7 @@ namespace TrophyHuntMod
             }
         }
 
-        static public string __m_saveDataVersionNumber = "7";
+        static public string __m_saveDataVersionNumber = "9";
 
         // WARNING!
         //
@@ -588,10 +588,12 @@ namespace TrophyHuntMod
                 public Vector3 m_pos;
                 public Minimap.PinType m_pinType;
                 public long m_charmTimeRemaining;
-                public ushort m_userKey;
-                public uint m_ID;
+                public Guid m_charmGUID;
+                //                public ushort m_userKey;
+                //                public uint m_ID;
                 public Character.Faction m_originalFaction;
                 public float m_swimSpeed;
+                public int m_charmLevel;
             }
 
             public List<THMSaveDataDropInfo> m_playerTrophyDropInfos = null;
@@ -710,12 +712,14 @@ namespace TrophyHuntMod
                 savedChar.m_pos = cc.m_pin.m_pos;
                 savedChar.m_pinType = cc.m_pin.m_type;
 
-                savedChar.m_userKey = cc.m_zdoid.UserKey;
-                savedChar.m_ID = cc.m_zdoid.ID;
+                savedChar.m_charmGUID = cc.m_charmGUID;
+//                savedChar.m_userKey = cc.m_zdoid.UserKey;
+//                savedChar.m_ID = cc.m_zdoid.ID;
 
                 savedChar.m_charmTimeRemaining = cc.m_charmExpireTime - __m_charmTimerSeconds;
                 savedChar.m_originalFaction = cc.m_originalFaction;
                 savedChar.m_swimSpeed = cc.m_swimSpeed;
+                savedChar.m_charmLevel = cc.m_charmLevel;
 
                 saveData.m_charmedCharacters.Add(savedChar);
             }
@@ -800,16 +804,18 @@ namespace TrophyHuntMod
             {
                 CharmedCharacter cc = new CharmedCharacter();
 
-                cc.m_zdoid = new ZDOID();
-                cc.m_zdoid.UserKey = thmsdcc.m_userKey;
-                cc.m_zdoid.ID = thmsdcc.m_ID;
+                //cc.m_zdoid = new ZDOID();
+                //cc.m_zdoid.UserKey = thmsdcc.m_userKey;
+                //cc.m_zdoid.ID = thmsdcc.m_ID;
 
+                cc.m_charmGUID = thmsdcc.m_charmGUID;
                 cc.m_charmExpireTime = __m_charmTimerSeconds + thmsdcc.m_charmTimeRemaining;
                 cc.m_originalFaction = thmsdcc.m_originalFaction;
                 cc.m_pin = new Minimap.PinData();
                 cc.m_pin.m_type = thmsdcc.m_pinType;
                 cc.m_pin.m_pos = thmsdcc.m_pos;
                 cc.m_swimSpeed = thmsdcc.m_swimSpeed;
+                cc.m_charmLevel = thmsdcc.m_charmLevel;
 
                 __m_allCharmedCharacters.Add(cc);
             }
@@ -3304,6 +3310,10 @@ namespace TrophyHuntMod
                 }
 
                 StopPeriodicTimer();
+                if (IsPacifist())
+                {
+                    StopCharmTimer();
+                }
             }
         }
 

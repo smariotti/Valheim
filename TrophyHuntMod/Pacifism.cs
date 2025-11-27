@@ -15,6 +15,7 @@ using UnityEngine.U2D;
 using System.Text;
 using System.IO;
 using static Player;
+using System.Security.Cryptography;
 
 namespace TrophyHuntMod
 {
@@ -54,17 +55,17 @@ namespace TrophyHuntMod
         public static GandrArrowData[] __m_gandrArrowData = new GandrArrowData[]
         {
             new GandrArrowData("ArrowWood", "Wood", "Wooden Gandr", "Thrall becomes stronger.", typeof(SE_GandrWood), CachedSpriteIndex.Wood),
-            new GandrArrowData("ArrowFlint", "Flint", "Flint Gandr", "Thrall hards like stone.", typeof(SE_GandrFlint), CachedSpriteIndex.Flint),
+            new GandrArrowData("ArrowFlint", "Flint", "Flint Gandr", "Thrall becomes piercing.", typeof(SE_GandrFlint), CachedSpriteIndex.Flint),
             new GandrArrowData("ArrowFire", "Resin", "Fire Gandr", "Thrall burns its enemies.", typeof(SE_GandrFire), CachedSpriteIndex.Fire),
-            new GandrArrowData("ArrowBronze", "Bronze", "Bronze Gandr", "Thrall bristles with new strength.", typeof(SE_GandrBronze), CachedSpriteIndex.Bronze),
-            new GandrArrowData("ArrowPoison", "Ooze", "Poison Gandr", "", typeof(SE_GandrPoison), CachedSpriteIndex.Poison),
-            new GandrArrowData("ArrowIron", "Iron", "Iron Gandr", "", typeof(SE_GandrIron), CachedSpriteIndex.Iron),
-            new GandrArrowData("ArrowFrost", "FreezeGland", "Frost Gandr", "", typeof(SE_GandrFrost), CachedSpriteIndex.Frost),
-            new GandrArrowData("ArrowObsidian", "Obsidian", "Glass Gandr", "", typeof(SE_GandrObsidian), CachedSpriteIndex.Obsidian),
-            new GandrArrowData("ArrowSilver", "Silver", "Silver Gandr", "", typeof(SE_GandrSilver), CachedSpriteIndex.Silver),
-            new GandrArrowData("ArrowNeedle", "Needle", "Needle Gandr", "", typeof(SE_GandrNeedle), CachedSpriteIndex.Needle),
-            new GandrArrowData("ArrowCarapace", "Carapace", "Bug Gandr", "", typeof(SE_GandrCarapace), CachedSpriteIndex.Carapace),
-            new GandrArrowData("ArrowCharred", "Blackwood", "Charred Gandr", "", typeof(SE_GandrCharred), CachedSpriteIndex.Charred),
+            new GandrArrowData("ArrowBronze", "Bronze", "Bronze Gandr", "Thrall becomes blunt.", typeof(SE_GandrBronze), CachedSpriteIndex.Bronze),
+            new GandrArrowData("ArrowPoison", "Ooze", "Poison Gandr", "Thrall becomes poisonous.", typeof(SE_GandrPoison), CachedSpriteIndex.Poison),
+            new GandrArrowData("ArrowIron", "Iron", "Iron Gandr", "Thrall becomes sharp.", typeof(SE_GandrIron), CachedSpriteIndex.Iron),
+            new GandrArrowData("ArrowFrost", "FreezeGland", "Frost Gandr", "Thrall becomes frosty.", typeof(SE_GandrFrost), CachedSpriteIndex.Frost),
+            new GandrArrowData("ArrowObsidian", "Obsidian", "Glass Gandr", "Thrall becomes very sharp.", typeof(SE_GandrObsidian), CachedSpriteIndex.Obsidian),
+            new GandrArrowData("ArrowSilver", "Silver", "Silver Gandr", "Thrall becomes spiritual.", typeof(SE_GandrSilver), CachedSpriteIndex.Silver),
+            new GandrArrowData("ArrowNeedle", "Needle", "Needle Gandr", "Thrall becomes very piercing.", typeof(SE_GandrNeedle), CachedSpriteIndex.Needle),
+            new GandrArrowData("ArrowCarapace", "Carapace", "Bug Gandr", "Thrall becomes very blunt.", typeof(SE_GandrCarapace), CachedSpriteIndex.Carapace),
+            new GandrArrowData("ArrowCharred", "Blackwood", "Charred Gandr", "Thrall charges with lightning.", typeof(SE_GandrCharred), CachedSpriteIndex.Charred),
         };
 
         
@@ -78,8 +79,8 @@ namespace TrophyHuntMod
                 {
                     return;
                 }
-
-                CharmedCharacter guy = __m_allCharmedCharacters.Find(c => c.m_zdoid == __instance.GetZDOID());
+                Guid cGUID = GetGUIDFromCharacter(__instance);
+                CharmedCharacter guy = __m_allCharmedCharacters.Find(c => c.m_charmGUID == cGUID);
                 if (guy != null)
                 {
                     __result = CHARMED_ENEMY_SPEED_MULTIPLIER; // Normal speed
@@ -97,7 +98,8 @@ namespace TrophyHuntMod
                     return;
                 }
 
-                CharmedCharacter guy = __m_allCharmedCharacters.Find(c => c.m_zdoid == __instance.GetZDOID());
+                Guid cGUID = GetGUIDFromCharacter(__instance);
+                CharmedCharacter guy = __m_allCharmedCharacters.Find(c => c.m_charmGUID == cGUID);
                 if (guy != null)
                 {
                     __result = CHARMED_ENEMY_SPEED_MULTIPLIER; // Normal speed
@@ -309,11 +311,11 @@ namespace TrophyHuntMod
                 // List the status effects on the attacker
                 if (hit.GetAttacker() != null)
                 {
-                    Debug.LogWarning($"[RPC_Damage] {__instance?.name} hit by {hit.GetAttacker()?.name} : {hit?.m_damage.ToString()}");
+//                    Debug.LogWarning($"[RPC_Damage] {__instance?.name} hit by {hit.GetAttacker()?.name} : {hit?.m_damage.ToString()}");
                     List<StatusEffect> statusFX = hit.GetAttacker().m_seman.GetStatusEffects();
                     foreach (var se in statusFX)
                     {
-                        Debug.LogWarning($"  Status Effect: {se.m_name} {se.GetType()} TTL: {se.m_ttl} {se.GetIconText()}");
+//                        Debug.LogWarning($"  Status Effect: {se.m_name} {se.GetType()} TTL: {se.m_ttl} {se.GetIconText()}");
                     }
                 }
 
@@ -382,15 +384,17 @@ namespace TrophyHuntMod
 
         public class CharmedCharacter
         {
-            public CharmedCharacter() { m_zdoid = ZDOID.None; m_pin = null; m_charmExpireTime = 0; m_originalFaction = Character.Faction.TrainingDummy; m_swimSpeed = 2f; }
-            public CharmedCharacter(ZDOID zdoid) { m_zdoid = zdoid; }
+//            public CharmedCharacter() { m_charmGUID = Guid.Empty; m_zdoid = ZDOID.None; m_pin = null; m_charmExpireTime = 0; m_originalFaction = Character.Faction.TrainingDummy; m_swimSpeed = 2f; m_charmLevel = 1; }
+//            public CharmedCharacter(ZDOID zdoid) { m_zdoid = zdoid; }
 
             // Data we store for the charmed guy
-            public ZDOID m_zdoid = ZDOID.None;
+            public Guid m_charmGUID = Guid.Empty;
+//            public ZDOID m_zdoid = ZDOID.None;
             public Minimap.PinData m_pin = null;
             public long m_charmExpireTime = 0;
             public Character.Faction m_originalFaction = Character.Faction.TrainingDummy;
             public float m_swimSpeed = 2f;
+            public int m_charmLevel = 1;
         }
 
         public static float GetCharmDuration()
@@ -405,28 +409,53 @@ namespace TrophyHuntMod
             return duration;
         }
 
-        public static ZDOID GetZDOIDFromCharacter(Character character)
+        public static Guid GetGUIDFromCharacter(Character character)
         {
-            if (character == null)
-            {
-                return ZDOID.None;
-            }
+            if (character == null) return Guid.Empty;
 
-            var nview = character.m_nview;
-            if (nview == null || !nview.IsValid())
+            ZDO zdo = character.GetComponent<ZNetView>()?.GetZDO();
+            if (zdo == null)
             {
-                return ZDOID.None;
+                return Guid.Empty;
             }
+            string guidString = zdo.GetString("CharmGUID");
+            Guid cGUID = Guid.Empty;
+            Guid.TryParse(guidString, out cGUID);
 
-            return character.GetZDOID();
+            return cGUID;
         }
 
-        public static Character GetCharacterFromZDOID(ZDOID zdoid)
+        //public static ZDOID GetZDOIDFromCharacter(Character character)
+        //{
+        //    if (character == null)
+        //    {
+        //        return ZDOID.None;
+        //    }
+
+        //    var nview = character.m_nview;
+        //    if (nview == null || !nview.IsValid())
+        //    {
+        //        return ZDOID.None;
+        //    }
+
+        //    return character.GetZDOID();
+        //}
+
+        public static Character GetCharacterFromGUID(Guid guid)
         {
             List<Character> allCharacters = Character.GetAllCharacters();
             foreach (Character character in allCharacters)
             {
-                if (character.GetZDOID() == zdoid)
+                ZDO zdo = character.GetComponent<ZNetView>()?.GetZDO();
+                if (zdo == null)
+                {
+                    continue;
+                }
+                string guidString = zdo.GetString("CharmGUID");
+                Guid cGUID = Guid.Empty;
+                Guid.TryParse(guidString, out cGUID);
+
+                if (cGUID == guid)
                 {
                     return character;
                 }
@@ -434,11 +463,58 @@ namespace TrophyHuntMod
             return null;
         }
 
+        //public static Character GetCharacterFromZDOID(ZDOID zdoid)
+        //{
+        //    List<Character> allCharacters = Character.GetAllCharacters();
+        //    foreach (Character character in allCharacters)
+        //    {
+        //        if (character.GetZDOID() == zdoid)
+        //        {
+        //            return character;
+        //        }
+        //    }
+        //    return null;
+        //}
+
+        [HarmonyPatch(typeof(ZNetView), nameof(ZNetView.Awake))]
+        public static class ZNetView_Awake_Patch
+        {
+            public static void Postfix(ZNetView __instance)
+            {
+                if (!IsPacifist())
+                {
+                    return;
+                }
+
+                Character character = __instance.GetComponent<Character>();
+                if (character == null)
+                {
+                    return;
+                }
+
+                Guid cGUID = GetGUIDFromCharacter(character);
+                CharmedCharacter guy = __m_allCharmedCharacters.Find(c => c.m_charmGUID == cGUID);
+                if (guy != null)
+                {
+                    SetCharmedState(guy);
+                }
+            }
+        }
+
         public static void RecharmAllCharmedEnemies()
         {
+            Debug.LogWarning("RECHARMING OLD CHARMED ENEMIES...");
+
             for (int i=__m_allCharmedCharacters.Count - 1; i >= 0; i--)
-            { 
-                if (!SetCharmedState(__m_allCharmedCharacters[i]))
+            {
+                CharmedCharacter cc = __m_allCharmedCharacters[i];
+                Character c = GetCharacterFromGUID(cc.m_charmGUID);
+                if (c)
+                {
+                    Debug.LogWarning(" Recharming " + c.name);
+                }
+
+                if (!SetCharmedState(cc, false))
                 {
                     __m_allCharmedCharacters.RemoveAt(i);
                 }
@@ -447,7 +523,8 @@ namespace TrophyHuntMod
 
         public static bool IsCharmed(Character character)
         {
-            CharmedCharacter guy = __m_allCharmedCharacters.Find(c => c.m_zdoid == character.GetZDOID());
+            Guid cGUID = GetGUIDFromCharacter(character);
+            CharmedCharacter guy = __m_allCharmedCharacters.Find(c => c.m_charmGUID == cGUID);
 
             bool result = guy != null;
 
@@ -456,7 +533,8 @@ namespace TrophyHuntMod
 
         public static CharmedCharacter GetCharmedCharacter(Character character)
         {
-            CharmedCharacter guy = __m_allCharmedCharacters.Find(c => c.m_zdoid == character.GetZDOID());
+            Guid cGUID = GetGUIDFromCharacter(character);
+            CharmedCharacter guy = __m_allCharmedCharacters.Find(c => c.m_charmGUID == cGUID);
 
             return guy;
         }
@@ -466,8 +544,15 @@ namespace TrophyHuntMod
             // Create a data structure to track the guy we charmed
             CharmedCharacter cc = new CharmedCharacter();
 
-            ZDOID zdoid = enemy.GetZDOID();
-            cc.m_zdoid = zdoid;
+            ZDO zdo = enemy.GetComponent<ZNetView>().GetZDO();
+            Guid cGUID = System.Guid.NewGuid();
+            zdo.Set("CharmGUID", cGUID.ToString());
+            
+            // Force ZDO to persist
+            zdo.Persistent = true;
+
+            cc.m_charmGUID = cGUID;
+//            cc.m_zdoid = zdoid;
             cc.m_pin = Minimap.instance.AddPin(enemy.transform.position, Minimap.PinType.Icon3, "", false, false);
             cc.m_originalFaction = enemy.m_faction;
             cc.m_charmExpireTime = __m_charmTimerSeconds + duration;
@@ -494,12 +579,17 @@ namespace TrophyHuntMod
                 return;
             }
 
-            RemoveZDOIDFromCharmedList(enemy.GetZDOID());
+            ZDO zdo = enemy.GetComponent<ZNetView>().GetZDO();
+            string guidString = zdo.GetString("CharmGUID");
+            Guid cGUID = Guid.Parse(guidString);
+            
+            RemoveGUIDFromCharmedList(cGUID);
+//            RemoveZDOIDFromCharmedList(enemy.GetZDOID());
         }
 
-        public static void RemoveZDOIDFromCharmedList(ZDOID zdoid)
+        public static void RemoveGUIDFromCharmedList(Guid guid)
         {
-            CharmedCharacter cc = __m_allCharmedCharacters.Find(c => c.m_zdoid == zdoid);
+            CharmedCharacter cc = __m_allCharmedCharacters.Find(c => c.m_charmGUID == guid);
             if (cc != null)
             {
                 Minimap.instance.RemovePin(cc.m_pin);
@@ -515,16 +605,34 @@ namespace TrophyHuntMod
                 }
             }
         }
+        //public static void RemoveZDOIDFromCharmedList(ZDOID zdoid)
+        //{
+        //    CharmedCharacter cc = __m_allCharmedCharacters.Find(c => c.m_zdoid == zdoid);
+        //    if (cc != null)
+        //    {
+        //        Minimap.instance.RemovePin(cc.m_pin);
+        //        __m_allCharmedCharacters.Remove(cc);
+        //    }
 
-        public static bool SetCharmedState(CharmedCharacter cc)
+        //    if (__m_allCharmedCharacters.Count < 1)
+        //    {
+        //        if (Player.m_localPlayer != null)
+        //        {
+        //            Player.m_localPlayer.m_maxAdrenaline = 0;
+        //            Player.m_localPlayer.m_adrenaline = 0;
+        //        }
+        //    }
+        //}
+
+        public static bool SetCharmedState(CharmedCharacter cc, bool playParticleEffect = true)
         {
-            CharmedCharacter guy = __m_allCharmedCharacters.Find(c => c.m_zdoid == cc.m_zdoid);
+            CharmedCharacter guy = __m_allCharmedCharacters.Find(c => c.m_charmGUID == cc.m_charmGUID);
             if (guy != null)
             {
-                Character enemy = GetCharacterFromZDOID(guy.m_zdoid);
+                Character enemy = GetCharacterFromGUID(guy.m_charmGUID);
                 if (enemy == null)
                 {
-                    Debug.LogError($"Unable to SetCharmedState for ZDOID {guy.m_zdoid} - character not found!");
+                    Debug.LogError($"Unable to SetCharmedState for ZDOID {guy.m_charmGUID.ToString()} - character not found!");
 
                     return false;
                 }
@@ -536,8 +644,8 @@ namespace TrophyHuntMod
 
                 enemy.m_swimSpeed *= 10;
 
-                // Optional: give a color tint or particle effect
-                AddCharmEffect(enemy);
+                // Color enemy and/or play particles
+                AddCharmEffect(enemy, playParticleEffect);
 
                 //                Debug.LogError($"SetCharmedState for {enemy.name} - success");
 
@@ -575,10 +683,10 @@ namespace TrophyHuntMod
 
         public static void SetUncharmedState(CharmedCharacter cc)
         {
-            Character enemy = GetCharacterFromZDOID(cc.m_zdoid);
+            Character enemy = GetCharacterFromGUID(cc.m_charmGUID);
             if (!enemy)
             {
-                Debug.LogError($"Unable to SetUncharmedState for ZDOID {cc.m_zdoid} - character not found!");
+                Debug.LogError($"Unable to SetUncharmedState for ZDOID {cc.m_charmGUID.ToString()} - character not found!");
                 return;
             }
 
@@ -599,26 +707,48 @@ namespace TrophyHuntMod
             }
         }
 
-        [HarmonyPatch(typeof(Character), nameof(Character.Awake))]
-        public static class Character_Awake_Patch
+        [HarmonyPatch(typeof(MonsterAI), nameof(MonsterAI.Awake))]
+        public static class MonsterAI_Awake_Patch
         {
-            public static void Postfix(Character __instance)
+            public static void Postfix(MonsterAI __instance)
             {
                 if (!IsPacifist())
                 {
                     return;
                 }
 
-                if (__instance == null)
+                if (__instance == null || __instance.m_character == null)
                     return;
 
-                CharmedCharacter guy = __m_allCharmedCharacters.Find(c => c.m_zdoid == __instance.GetZDOID());
+                Guid cGUID = GetGUIDFromCharacter(__instance.m_character);
+                CharmedCharacter guy = __m_allCharmedCharacters.Find(c => c.m_charmGUID == cGUID);
                 if (guy != null)
                 {
                     SetCharmedState(guy);
                 }
             }
         }
+
+        //[HarmonyPatch(typeof(Character), nameof(Character.Awake))]
+        //public static class Character_Awake_Patch
+        //{
+        //    public static void Postfix(Character __instance)
+        //    {
+        //        if (!IsPacifist())
+        //        {
+        //            return;
+        //        }
+
+        //        if (__instance == null)
+        //            return;
+
+        //        CharmedCharacter guy = __m_allCharmedCharacters.Find(c => c.m_zdoid == __instance.GetZDOID());
+        //        if (guy != null)
+        //        {
+        //            SetCharmedState(guy);
+        //        }
+        //    }
+        //}
 
         [HarmonyPatch(typeof(Character), nameof(Character.OnDestroy))]
         public static class Character_OnDestroy_Patch
@@ -648,6 +778,12 @@ namespace TrophyHuntMod
             //            Debug.LogWarning("[StartCharmTimer] Started Charm Timer.");
         }
 
+        public static void StopCharmTimer()
+        {
+            __m_charmTimerStarted = false;
+        }
+
+
         public static long __m_charmTimerSeconds = 0;
 
         static IEnumerator CharmTimerUpdate()
@@ -662,7 +798,7 @@ namespace TrophyHuntMod
                 for (var i = 0; i < __m_allCharmedCharacters.Count; i++)
                 {
                     var cc = __m_allCharmedCharacters[i];
-                    Debug.LogWarning($"  Charm {i}: ZDOID {cc.m_zdoid} ExpireTime: {cc.m_charmExpireTime} Orig Faction: {cc.m_originalFaction}");
+                    Debug.LogWarning($"  Charm {i}: ZDOID {cc.m_charmGUID.ToString()} ExpireTime: {cc.m_charmExpireTime} Orig Faction: {cc.m_originalFaction}");
                 }
 
                 // For all charmed characters
@@ -680,7 +816,7 @@ namespace TrophyHuntMod
                         break;
                     }
 
-                    Character target = GetCharacterFromZDOID(cc.m_zdoid);
+                    Character target = GetCharacterFromGUID(cc.m_charmGUID);
                     if (target)
                     {
                         cc.m_pin = Minimap.instance.AddPin(target.transform.position, Minimap.PinType.Icon3, "", false, false);
@@ -695,14 +831,14 @@ namespace TrophyHuntMod
                         Minimap.instance.RemovePin(toRemove.m_pin);
                     }
 
-                    Character target = GetCharacterFromZDOID(toRemove.m_zdoid);
+                    Character target = GetCharacterFromGUID(toRemove.m_charmGUID);
                     if (target)
                     {
                         Player.m_localPlayer.Message(MessageHud.MessageType.Center, $"{target?.GetHoverName()} is no longer yours.");
                     }
                     else
                     {
-                        Debug.LogWarning($"Target to uncharm not found for ZDOID {toRemove.m_zdoid}");
+                        Debug.LogWarning($"Target to uncharm not found for Guid {toRemove.m_charmGUID.ToString()}");
                     }
 
                     __m_allCharmedCharacters.Remove(toRemove);
@@ -712,7 +848,7 @@ namespace TrophyHuntMod
             }
         }
 
-        private static void AddCharmEffect(Character target)
+        private static void AddCharmEffect(Character target, bool particleEffect = true)
         {
             // Simple visual cue — give the charmed enemy a blue tint glow
             Renderer[] renderers = target.GetComponentsInChildren<Renderer>();
@@ -725,25 +861,28 @@ namespace TrophyHuntMod
                 }
             }
 
-            // Use a built-in pink-ish particle, such as vfx_surtling_death or vfx_pickaxe_sparks
-            // (replace with vfx_heart style prefab if your version has it)
-            GameObject heartVFX = ZNetScene.instance.GetPrefab("fx_hen_love");
-            if (heartVFX != null)
+            if (particleEffect)
             {
-                //                Debug.LogWarning($"[heartVFX] {heartVFX.name}");
-
-                var fx = UnityEngine.Object.Instantiate(heartVFX, target.transform.position, Quaternion.identity);
-                var ps = fx.GetComponentInChildren<ParticleSystem>();
-                if (ps != null)
+                // Use a built-in pink-ish particle, such as vfx_surtling_death or vfx_pickaxe_sparks
+                // (replace with vfx_heart style prefab if your version has it)
+                GameObject heartVFX = ZNetScene.instance.GetPrefab("fx_hen_love");
+                if (heartVFX != null)
                 {
-                    var main = ps.main;
-                    main.startColor = new ParticleSystem.MinMaxGradient(new Color(1f, 0.5f, 0.7f, 1f));
-                    ps.Play();
+                    //                Debug.LogWarning($"[heartVFX] {heartVFX.name}");
+
+                    var fx = UnityEngine.Object.Instantiate(heartVFX, target.transform.position, Quaternion.identity);
+                    var ps = fx.GetComponentInChildren<ParticleSystem>();
+                    if (ps != null)
+                    {
+                        var main = ps.main;
+                        main.startColor = new ParticleSystem.MinMaxGradient(new Color(1f, 0.5f, 0.7f, 1f));
+                        ps.Play();
+                    }
                 }
-            }
-            else
-            {
-                Debug.LogWarning($"[heartVFX] not found.");
+                else
+                {
+                    Debug.LogWarning($"[heartVFX] not found.");
+                }
             }
         }
 
@@ -889,11 +1028,12 @@ namespace TrophyHuntMod
                 Recipe vanillaRecipe = db.m_recipes.Find(r => r.name == $"Recipe_{prefabName}");
                 if (vanillaRecipe)
                 {
-                    Debug.LogWarning($"name: {vanillaRecipe.name} item: {vanillaRecipe?.m_item?.name} amount: {vanillaRecipe.m_amount} enabled: {vanillaRecipe.m_enabled} craftingStation = {vanillaRecipe.m_craftingStation?.m_name} repairStation = {vanillaRecipe.m_repairStation?.m_name}");
+//                    Debug.LogWarning($"name: {vanillaRecipe.name} item: {vanillaRecipe?.m_item?.name} amount: {vanillaRecipe.m_amount} enabled: {vanillaRecipe.m_enabled} craftingStation = {vanillaRecipe.m_craftingStation?.m_name} repairStation = {vanillaRecipe.m_repairStation?.m_name}");
                 }
                 else
                 {
                     Debug.LogError($"Could not find Recipe_{prefabName}");
+                    return;
                 }
 
                 // TODO: Keep recipes the same, but create bigger stacks
@@ -915,7 +1055,7 @@ namespace TrophyHuntMod
             }
             static void Postfix(ObjectDB __instance)
             {
-                Debug.LogWarning($"ObjectDB.Awake() called");
+//                Debug.LogWarning($"ObjectDB.Awake() called");
                 if (!IsPacifist())
                     return;
 
@@ -924,7 +1064,7 @@ namespace TrophyHuntMod
                     ObjectDB.instance.m_items.Count != 0
                     && ObjectDB.instance.GetItemPrefab("Amber") != null)
                 {
-                    Debug.LogWarning($"ObjectDB available");
+//                    Debug.LogWarning($"ObjectDB available");
 
                     foreach (var arrowData in __m_gandrArrowData)
                     {
@@ -939,7 +1079,7 @@ namespace TrophyHuntMod
             if (hitChar == null)
                 return;
 
-            Debug.LogWarning($"ApplyGandrEffect: {arrowName} {hitChar.m_name}");
+//            Debug.LogWarning($"ApplyGandrEffect: {arrowName} {hitChar.m_name}");
 
             //foreach (var an in __m_gandrArrowData)
             //{
@@ -960,8 +1100,9 @@ namespace TrophyHuntMod
 
             if (se != null)
             {
-                Debug.LogWarning($"STATUS EFFECT APPLIED: {se.m_name} {se.m_ttl} {hitChar?.GetHoverName()} {arrowData.m_description}");
-                Player.m_localPlayer.Message(MessageHud.MessageType.Center, $"{se.m_name} {se.m_ttl} {hitChar?.GetHoverName()} {arrowData.m_description}.");
+//                Debug.LogWarning($"STATUS EFFECT APPLIED: {se.m_name} {se.m_ttl} {hitChar?.GetHoverName()} {arrowData.m_description}");
+//                Player.m_localPlayer.Message(MessageHud.MessageType.Center, $"{se.m_name} {se.m_ttl} {hitChar?.GetHoverName()} {arrowData.m_description}.");
+                Player.m_localPlayer.Message(MessageHud.MessageType.Center, $"{arrowData.m_description}");
             }
         }
 
@@ -984,6 +1125,8 @@ namespace TrophyHuntMod
 
                 if (use > 0)
                 {
+                    Debug.LogError($"ADRENALINE: {player.m_adrenaline}/{player.m_maxAdrenaline} + {use}");
+
                     if (player.m_adrenaline + use > player.m_maxAdrenaline)
                     {
                         bool trinketPopped = false;
@@ -1000,13 +1143,15 @@ namespace TrophyHuntMod
 
                         foreach (var cc in __m_allCharmedCharacters)
                         {
-                            Character c = GetCharacterFromZDOID(cc.m_zdoid);
+                            Character c = GetCharacterFromGUID(cc.m_charmGUID);
                             if (c)
                             {
                                 c.Heal(c.GetMaxHealth() - c.GetHealth(), showText: true);
-                                Debug.LogWarning($"Healed charmed enemy {c.name} to full health due to adrenaline overflow.");
+                                Debug.LogError($"ADRENALINE: Healed charmed enemy {c.name} to full health due to adrenaline overflow.");
                                 if (trinketPopped)
                                 {
+                                    Debug.LogError($"TRINKET POPPED: {trinketStatusEffect.m_name}");
+
                                     player.m_adrenalinePopEffects.Create(c.transform.position, Quaternion.identity);
 
                                     StatusEffect activeSE = c.m_seman.GetStatusEffect(trinketStatusEffect.m_nameHash);
@@ -1018,12 +1163,14 @@ namespace TrophyHuntMod
                                     {
                                         c.m_seman.AddStatusEffect(trinketStatusEffect);
                                     }
+                                    cc.m_charmLevel++;
                                 }
                                 else
                                 {
-                                    Hud.instance.AdrenalineBarFlash();
                                     player.m_adrenaline = 0;
                                 }
+
+                                Hud.instance.AdrenalineBarFlash();
                             }
                         }
                     }
@@ -1039,7 +1186,7 @@ namespace TrophyHuntMod
         {
             public float m_adrenalineScalar = 0.0f;
             public float m_baseDamageInflictedModifier = 1.0f;
-            public float m_baseDamageReceivedModifier = 100.0f;
+            public float m_baseDamageReceivedModifier = 2.0f;
 
             public override void Setup(Character character)
             {
@@ -1047,10 +1194,6 @@ namespace TrophyHuntMod
 
                 // SE lasts for this many seconds
                 m_ttl = 300.0f;
-                m_damageModifier = 2.0f;
-                m_skillLevelModifier = 10.0f;
-                m_skillLevel = SkillType.All;
-                //                m_skillLevelModifier2 = 10.0f;
                 m_name = "Base Gandr Effect";
             }
             public override void UpdateStatusEffect(float dt)
@@ -1082,17 +1225,17 @@ namespace TrophyHuntMod
             {
                 base.OnDamaged(hit, attacker);
 
-                Debug.LogWarning($"BEFORE SCALING: {hit.m_damage.ToString()}");
+//                Debug.LogWarning($"BEFORE SCALING: {hit.m_damage.ToString()}");
                 hit.m_damage.Modify(1 / ((1 + m_adrenalineScalar) * m_baseDamageReceivedModifier));
-                Debug.LogWarning($"AFTER SCALING: {hit.m_damage.ToString()}");
+//                Debug.LogWarning($"AFTER SCALING: {hit.m_damage.ToString()}");
             }
 
-            public override void ModifyAdrenaline(float baseValue, ref float use)
-            {
-                use = baseValue * 100.0f;
+            //public override void ModifyAdrenaline(float baseValue, ref float use)
+            //{
+            //    use = baseValue * 100.0f;
 
-                base.ModifyAdrenaline(baseValue, ref use);
-            }
+            //    base.ModifyAdrenaline(baseValue, ref use);
+            //}
 
             public override void Stop()
             {
@@ -1100,7 +1243,6 @@ namespace TrophyHuntMod
 
                 // Remove icon
             }
-
         }
 
         public class SE_GandrWood : SE_GandrEffect
@@ -1108,9 +1250,9 @@ namespace TrophyHuntMod
             public override void Setup(Character character)
             {
                 base.Setup(character);
-            m_baseDamageInflictedModifier = 2.0f;
-            m_baseDamageReceivedModifier = 5.0f;
-            m_percentigeDamageModifiers.m_damage = 2f;
+                m_baseDamageInflictedModifier = 2.0f;
+                m_baseDamageReceivedModifier = 3.0f;
+                m_percentigeDamageModifiers.m_damage = 2f;
                 m_name = "Wood Gandr";
             }
         }
@@ -1120,7 +1262,7 @@ namespace TrophyHuntMod
             {
                 base.Setup(character);
                 m_baseDamageInflictedModifier = 2.5f;
-                m_baseDamageReceivedModifier = 6f;
+                m_baseDamageReceivedModifier = 4f;
                 m_percentigeDamageModifiers.m_pierce = 2.5f;
 
                 m_name = "Flint Gandr";
@@ -1133,11 +1275,11 @@ namespace TrophyHuntMod
             {
                 base.Setup(character);
                 m_baseDamageInflictedModifier = 3.0f;
-                m_baseDamageReceivedModifier = 7f;
+                m_baseDamageReceivedModifier = 5f;
                 m_percentigeDamageModifiers.m_fire = 2.5f;
                 m_name = "Fire Gandr";
 
-                Debug.LogWarning($"SE_GandrFire Setup called { m_percentigeDamageModifiers.ToString()}");
+//                Debug.LogWarning($"SE_GandrFire Setup called { m_percentigeDamageModifiers.ToString()}");
             }
         }
 
@@ -1147,7 +1289,7 @@ namespace TrophyHuntMod
             {
                 base.Setup(character);
                 m_baseDamageInflictedModifier = 3.5f;
-                m_baseDamageReceivedModifier = 8f;
+                m_baseDamageReceivedModifier = 6f;
                 m_percentigeDamageModifiers.m_blunt = 3f;
                 m_name = "Bronze Gandr";
 
@@ -1160,7 +1302,7 @@ namespace TrophyHuntMod
             {
                 base.Setup(character);
                 m_baseDamageInflictedModifier = 4;
-                m_baseDamageReceivedModifier = 9;
+                m_baseDamageReceivedModifier = 7;
                 m_percentigeDamageModifiers.m_poison = 3f;
                 m_name = "Poison Gandr";
             }
@@ -1171,7 +1313,7 @@ namespace TrophyHuntMod
             {
                 base.Setup(character);
                 m_baseDamageInflictedModifier = 4.5f;
-                m_baseDamageReceivedModifier = 10f;
+                m_baseDamageReceivedModifier = 8;
                 m_percentigeDamageModifiers.m_slash = 3.5f;
                 m_name = "Iron Gandr";
             }
@@ -1182,7 +1324,7 @@ namespace TrophyHuntMod
             {
                 base.Setup(character);
                 m_baseDamageInflictedModifier = 5;
-                m_baseDamageReceivedModifier = 11;
+                m_baseDamageReceivedModifier = 9;
                 m_percentigeDamageModifiers.m_frost = 4f;
                 m_name = "Frost Gandr";
 
@@ -1194,7 +1336,7 @@ namespace TrophyHuntMod
             {
                 base.Setup(character);
                 m_baseDamageInflictedModifier = 5.5f;
-                m_baseDamageReceivedModifier = 12f;
+                m_baseDamageReceivedModifier = 10;
                 m_percentigeDamageModifiers.m_slash = 4f;
                 m_name = "Obsidian Gandr";
 
@@ -1206,7 +1348,7 @@ namespace TrophyHuntMod
             {
                 base.Setup(character);
                 m_baseDamageInflictedModifier = 6;
-                m_baseDamageReceivedModifier = 13;
+                m_baseDamageReceivedModifier = 11;
                 m_percentigeDamageModifiers.m_spirit = 4.5f;
                 m_name = "Silver Gandr";
 
@@ -1218,7 +1360,7 @@ namespace TrophyHuntMod
             {
                 base.Setup(character);
                 m_baseDamageInflictedModifier = 6.5f;
-                m_baseDamageReceivedModifier = 14;
+                m_baseDamageReceivedModifier = 12;
                 m_percentigeDamageModifiers.m_pierce = 5f;
                 m_name = "Needle Gandr";
 
@@ -1230,7 +1372,7 @@ namespace TrophyHuntMod
             {
                 base.Setup(character);
                 m_baseDamageInflictedModifier = 7;
-                m_baseDamageReceivedModifier = 15;
+                m_baseDamageReceivedModifier = 13;
                 m_percentigeDamageModifiers.m_blunt = 6f;
                 m_name = "Carapace Gandr";
 
@@ -1242,7 +1384,7 @@ namespace TrophyHuntMod
             {
                 base.Setup(character);
                 m_baseDamageInflictedModifier = 7.5f;
-                m_baseDamageReceivedModifier = 7.5f;
+                m_baseDamageReceivedModifier = 14;
                 m_percentigeDamageModifiers.m_lightning = 7f;
                 m_name = "Charred Gandr";
             }
@@ -1264,116 +1406,105 @@ namespace TrophyHuntMod
                     if (c == null)
                         continue;
 
+                    // Get the root hud element for the Charm HUD
                     EnemyHud.HudData data = hudData.Value;
-                    Transform charmTransform = data.m_gui.transform.Find("Charm");
+                    Transform charmHudRootTransform = data.m_gui.transform.Find("Charm");
 
+                    // Get the hud elements for charm icons we've got to use
+                    List<GameObject> enemyHudElements = new List<GameObject>();
+                    for (int i = 0; i < MAX_NUM_CHARM_ICONS; i++)
+                    {
+                        GameObject hudElement = data.m_gui.transform.Find($"Charm/CharmIcon{i}").gameObject;
+                        hudElement.SetActive(false);
+                        enemyHudElements.Add(hudElement);
+                    }
+
+                    // Hide the Charm hud
                     CharmedCharacter cc = GetCharmedCharacter(c);
                     if (cc == null)
                     {
-                        if (charmTransform && charmTransform.gameObject.activeSelf)
+                        // Hide the icons
+                        if (charmHudRootTransform && charmHudRootTransform.gameObject.activeSelf)
                         {
-                            charmTransform.gameObject.SetActive(false);
+                            charmHudRootTransform.gameObject.SetActive(false);
                         }
                         continue;
                     }
                     
+                    // Unless they're charmed, then show them
                     if (IsCharmed(c))
                     {
+                        if (charmHudRootTransform && !charmHudRootTransform.gameObject.activeSelf)
+                        {
+                            // Show the Charm hud
+                            charmHudRootTransform.gameObject.SetActive(true);
+                        }
+
+                        // Get the UI objects to display the sprite icons
+                        int iconElementIndex = 0;
+
+                        List<StatusEffect> statusEffectList = c.m_seman.m_statusEffects;
+
+                        // For each sprite in the sprite list, set up a hud icon and position it
+                        foreach (var se in statusEffectList)
+                        {
+                            GameObject iconElement = enemyHudElements[iconElementIndex];
+
+                            iconElement.gameObject.SetActive(true);
+
+                            UnityEngine.UI.Image image = iconElement.GetComponent<UnityEngine.UI.Image>();
+                            image.sprite = se.m_icon;
+
+                            RectTransform rectTransform = iconElement.GetComponent<RectTransform>();
+                            int iconSize = 28;
+                            rectTransform.sizeDelta = new Vector2(iconSize, iconSize);
+                            rectTransform.localScale = Vector3.one;
+                            float iconPadding = 1;
+                            float leftJustify = ((iconSize + iconPadding) * (statusEffectList.Count - 1)) / 2;
+                            float iconOffset = (iconSize + iconPadding) * iconElementIndex;
+                            rectTransform.anchoredPosition = new Vector2( -leftJustify + iconOffset, -iconSize/2 - 1);
+
+                            iconElementIndex++;
+                        }
+
+                        // Update the pink Charm bar 
+                        GuiBar charmBar = data.m_gui.transform.Find("Charm/health_fast_friendly").GetComponent<GuiBar>();
+
                         float remainingTime = cc.m_charmExpireTime - __m_charmTimerSeconds;
 
-                        if (charmTransform && !charmTransform.gameObject.activeSelf)
-                        {
-                            charmTransform.gameObject.SetActive(true);
-                        }
-
-                        List<Sprite> spriteList = new List<Sprite>();
-
-                        foreach (var se in c.m_seman.m_statusEffects)
-                        {
-                            spriteList.Add(se.m_icon);
-                        }
-
-                        List<UnityEngine.UI.Image> charmIcons = new List<UnityEngine.UI.Image>();
-
-                        List<Transform> charmIconObjects = new List<Transform>();
-                        charmIconObjects.Add(data.m_gui.transform.Find("Charm/CharmIcon1"));
-                        charmIconObjects.Add(data.m_gui.transform.Find("Charm/CharmIcon2"));
-
-                        foreach (var cio in charmIconObjects)
-                        {
-                            cio.gameObject.SetActive(false);
-                        }
-
-                        for (int i = 0; i < spriteList.Count; i++)
-                        { 
-                            if (i < charmIconObjects.Count)
-                            {
-                                Transform cio = charmIconObjects[i];
-                                cio.gameObject.SetActive(true);
-
-                                UnityEngine.UI.Image image = charmIconObjects[i].GetComponent<UnityEngine.UI.Image>();
-                                RectTransform rectTransform = charmIconObjects[i].GetComponent<RectTransform>();
-
-                                image.sprite = spriteList[i];
-                                int iconSize = 32;
-                                rectTransform.sizeDelta = new Vector2(iconSize, iconSize);
-                                rectTransform.anchoredPosition = new Vector2(((-iconSize / 2) * (i + 1)) + iconSize * i + iconSize / 2, -16);
-                                rectTransform.anchoredPosition = new Vector2((-iconSize / 2) * i, -16);
-                            }
-                        }
-
-                        GuiBar charmBar = data.m_gui.transform.Find("Charm/health_fast_friendly").GetComponent<GuiBar>();
                         charmBar.SetValue(remainingTime / GetCharmDuration());
                         charmBar.SetColor(new Color((float)0xF3 / 255f, (float)0x87 / 255f, (float)0xC5 / 255f));
+
+                        GameObject textElement = data.m_gui.transform.Find($"Charm/CharmLevelText").gameObject;
+                        TextMeshProUGUI tm = textElement.GetComponent<TextMeshProUGUI>();
+                        tm.text = $"{cc.m_charmLevel}";
                     }
                 }
             }
         }
 
-        public class ThrallStatusIconData
+        public static int MAX_NUM_CHARM_ICONS = 13;
+
+        public static void CreateCharmIconsInMasterHud(Transform parentTransform)
         {
-            public ThrallStatusIconData(string name, string prefabName, Sprite sprite)
+            for (int i=0; i< MAX_NUM_CHARM_ICONS; i++)
             {
-                m_name = name;
-                m_prefabName = prefabName;
-                m_sprite = sprite;
+
+                GameObject charmIconElement = new GameObject($"CharmIcon{i}");
+                charmIconElement.transform.SetParent(parentTransform);
+
+                // Add RectTransform component for positioning
+                RectTransform rectTransform = charmIconElement.AddComponent<RectTransform>();
+                rectTransform.sizeDelta = new Vector2(32, 32);
+                rectTransform.anchoredPosition = new Vector2(0, 0); // Set position
+                rectTransform.localScale = new Vector3(1.0f, 1.0f, 1.0f);
+
+                // Add an Image component
+                UnityEngine.UI.Image image = charmIconElement.AddComponent<UnityEngine.UI.Image>();
+                image.color = Color.white;
+                image.raycastTarget = false;
             }
-            public string m_name;
-            public string m_prefabName;
-            public Sprite m_sprite;
         }
-
-        public static ThrallStatusIconData[] __m_thrallStatusIcons = new ThrallStatusIconData[]
-        {
-            // Arrows
-            new ThrallStatusIconData("Wood Gandr", "TrophyAbomination", null),
-            new ThrallStatusIconData("Flint Gandr", "Flint", null),
-            new ThrallStatusIconData("Fire Gandr", "skeleton_hildir_firenova", null),
-            new ThrallStatusIconData("Bronze Gandr", "Bronze", null),
-            new ThrallStatusIconData("Poison Gandr", "MeadPoisonResist", null),
-            new ThrallStatusIconData("Iron Gandr", "Iron", null),
-            new ThrallStatusIconData("Frost Gandr", "FreezeGland", null),
-            new ThrallStatusIconData("Obsidian Gandr", "Obsidian", null),
-            new ThrallStatusIconData("Silver Gandr", "Silver", null),
-            new ThrallStatusIconData("Needle Gandr", "Needle", null),
-            new ThrallStatusIconData("Carapace Gandr", "Carapace", null),
-            new ThrallStatusIconData("Charred Gandr", "Blackwood", null),
-
-            // Trinkets
-            new ThrallStatusIconData("$se_trinketbronzehealth", "TrinketBronzeHealth", null), // Heart of the Forest
-            new ThrallStatusIconData("$se_trinketbronzestamina", "TrinketBronzeStamina", null), // Bronze Pendant
-            new ThrallStatusIconData("$se_trinketironhealth", "TrinketIronHealth", null), // Iron Brooch
-            new ThrallStatusIconData("$se_trinketironstamina", "TrinketIronStamina", null), // Nimble Anklet
-            new ThrallStatusIconData("$se_trinketchitinswim", "TrinketChitinSwim", null), // Fins of Destiny
-            new ThrallStatusIconData("$se_trinketsilverdamage", "TrinketSilverDamage", null), // Wolf Sight
-            new ThrallStatusIconData("$se_trinketsilverresist", "TrinketSilverResist", null), // Crystal Heart
-            new ThrallStatusIconData("$se_trinketblackdtamina", "TrinketBlackStamina", null), // Evasion Mantle
-            new ThrallStatusIconData("$se_trinketblackdamagedealth", "TrinketBlackDamageHealth", null), // Bracelets of the Brave
-            new ThrallStatusIconData("$se_trinketcarapaceeitr", "TrinketCarapaceEitr", null), // Pulsating Earrings
-            new ThrallStatusIconData("$se_trinketscalestaminadamage", "TrinketScaleStaminaDamage", null), // Resounding Shackle
-            new ThrallStatusIconData("$se_trinketflametaleitr", "TrinketFlametalEitr", null), // Jörmundling
-            new ThrallStatusIconData("$se_trinketflametalstaminahealth", "TrinketFlametalStaminaHealth", null), // Brimstone
-        };
 
         [HarmonyPatch(typeof(EnemyHud), nameof(EnemyHud.Awake))]
         public class EnemyHud_Awake_Patch
@@ -1408,56 +1539,49 @@ namespace TrophyHuntMod
 
                 newBarObject.SetActive(false);
 
-                GameObject charmIconElement1 = new GameObject("CharmIcon1");
-                charmIconElement1.transform.SetParent(newBarObject.transform);
+                CreateCharmIconsInMasterHud(newBarObject.transform);
 
-                // Add RectTransform component for positioning
-                RectTransform rectTransform = charmIconElement1.AddComponent<RectTransform>();
-                rectTransform.sizeDelta = new Vector2(32, 32);
-                rectTransform.anchoredPosition = new Vector2(-9, -16); // Set position
-                rectTransform.localScale = new Vector3(1.0f, 1.0f, 1.0f);
+                GameObject charmLevelTextElement = new GameObject("CharmLevelText");
+                charmLevelTextElement.transform.SetParent(newBarObject.transform);
+                RectTransform rectTransform = charmLevelTextElement.AddComponent<RectTransform>();
+                rectTransform.sizeDelta = new Vector2(20, 20);
+                rectTransform.localScale = Vector3.one;
+                rectTransform.localPosition = Vector2.zero;
 
-                // Add an Image component
-                UnityEngine.UI.Image image = charmIconElement1.AddComponent<UnityEngine.UI.Image>();
-//                image.sprite = __m_cachedPacifistSprites[((int)CachedSpriteIndex.Wood)].m_sprite;
-                image.color = Color.white;
-                image.raycastTarget = false;
+                TMPro.TextMeshProUGUI tmText = AddTextMeshProComponent(charmLevelTextElement);
+                tmText.text = "X";
+                tmText.fontSize = 13;
+                tmText.fontStyle = FontStyles.Bold;
+                tmText.color = Color.white;
+                tmText.raycastTarget = false;
+                tmText.fontMaterial.EnableKeyword("OUTLINE_ON");
+                tmText.outlineColor = Color.black;
+                tmText.outlineWidth = 0.125f; // Adjust the thickness
+                tmText.verticalAlignment = VerticalAlignmentOptions.Middle;
+                tmText.horizontalAlignment = HorizontalAlignmentOptions.Center;
 
-                GameObject charmIconElement2 = new GameObject("CharmIcon2");
-                charmIconElement2.transform.SetParent(newBarObject.transform);
 
-                // Add RectTransform component for positioning
-                rectTransform = charmIconElement2.AddComponent<RectTransform>();
-                rectTransform.sizeDelta = new Vector2(32, 32);
-                rectTransform.anchoredPosition = new Vector2(9, -16); // Set position
-                rectTransform.localScale = new Vector3(1.0f, 1.0f, 1.0f);
 
-                // Add an Image component
-                image = charmIconElement2.AddComponent<UnityEngine.UI.Image>();
-//1                image.sprite = __m_cachedPacifistSprites[((int)CachedSpriteIndex.Wood)].m_sprite;
-                image.color = Color.white;
-                image.raycastTarget = false;
+                //                Transform previous = charmIconElement2.transform;
+                //                foreach (var tsid in __m_thrallStatusIcons)
+                //                {
+                //                    GameObject icon = new GameObject("asdfasdf");
+                //                    icon.transform.SetParent(previous);
 
-//                Transform previous = charmIconElement2.transform;
-//                foreach (var tsid in __m_thrallStatusIcons)
-//                {
-//                    GameObject icon = new GameObject("asdfasdf");
-//                    icon.transform.SetParent(previous);
+                //                    // Add RectTransform component for positioning
+                //                    rectTransform = icon.AddComponent<RectTransform>();
+                //                    rectTransform.sizeDelta = new Vector2(20, 20);
+                //                    rectTransform.anchoredPosition = new Vector2(9, -16); // Set position
+                //                    rectTransform.localScale = new Vector3(1.0f, 1.0f, 1.0f);
 
-//                    // Add RectTransform component for positioning
-//                    rectTransform = icon.AddComponent<RectTransform>();
-//                    rectTransform.sizeDelta = new Vector2(20, 20);
-//                    rectTransform.anchoredPosition = new Vector2(9, -16); // Set position
-//                    rectTransform.localScale = new Vector3(1.0f, 1.0f, 1.0f);
+                //                    // Add an Image component
+                //                    image = icon.AddComponent<UnityEngine.UI.Image>();
+                //                    image.sprite = GetTrophySprite(tsid.m_prefabName);
+                ////                    image.color = Color.white;
+                //                    image.raycastTarget = false;
 
-//                    // Add an Image component
-//                    image = icon.AddComponent<UnityEngine.UI.Image>();
-//                    image.sprite = GetTrophySprite(tsid.m_prefabName);
-////                    image.color = Color.white;
-//                    image.raycastTarget = false;
-
-//                    previous = icon.transform;
-//                }
+                //                    previous = icon.transform;
+                //                }
             }
         }
 
@@ -1492,18 +1616,18 @@ namespace TrophyHuntMod
 
         static CachedSprite[] __m_cachedPacifistSprites = new CachedSprite[]
         {
-            new CachedSprite(CachedSpriteIndex.Wood, "wood", null),
-            new CachedSprite(CachedSpriteIndex.Flint, "flint", null),
+            new CachedSprite(CachedSpriteIndex.Wood, "T_emote_flex", null),
+            new CachedSprite(CachedSpriteIndex.Flint, "SpearFlint", null),
             new CachedSprite(CachedSpriteIndex.Fire, "Burning", null),
-            new CachedSprite(CachedSpriteIndex.Bronze, "bronze", null),
+            new CachedSprite(CachedSpriteIndex.Bronze, "MaceBronze", null),
             new CachedSprite(CachedSpriteIndex.Poison, "Poison", null),
-            new CachedSprite(CachedSpriteIndex.Iron, "iron", null),
+            new CachedSprite(CachedSpriteIndex.Iron, "SwordIron", null),
             new CachedSprite(CachedSpriteIndex.Frost, "Frost", null),
-            new CachedSprite(CachedSpriteIndex.Obsidian, "obsidian", null),
-            new CachedSprite(CachedSpriteIndex.Silver, "silver", null),
+            new CachedSprite(CachedSpriteIndex.Obsidian, "ArrowObsidian", null),
+            new CachedSprite(CachedSpriteIndex.Silver, "SwordMistwalker", null),
             new CachedSprite(CachedSpriteIndex.Needle, "needle", null),
-            new CachedSprite(CachedSpriteIndex.Carapace, "carapace", null),
-            new CachedSprite(CachedSpriteIndex.Charred, "BlackWood", null),
+            new CachedSprite(CachedSpriteIndex.Carapace, "MaceIron", null),
+            new CachedSprite(CachedSpriteIndex.Charred, "Lightning", null),
         };
 
         public static void CacheSprites()
@@ -1538,7 +1662,7 @@ namespace TrophyHuntMod
 
                 if (atlas.GetSprite(spriteName) is Sprite s)
                 {
-                    Debug.LogWarning($"Found {spriteName} in atlas {atlasName}.");
+//                    Debug.LogWarning($"Found {spriteName} in atlas {atlasName}.");
                     return s;
                 }
             }
