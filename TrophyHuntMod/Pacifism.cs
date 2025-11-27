@@ -11,6 +11,10 @@ using System.Linq;
 using Newtonsoft.Json.Linq;
 using TMPro;
 using static EnemyHud;
+using UnityEngine.U2D;
+using System.Text;
+using System.IO;
+using static Player;
 
 namespace TrophyHuntMod
 {
@@ -20,7 +24,7 @@ namespace TrophyHuntMod
 
         static List<CharmedCharacter> __m_allCharmedCharacters = new List<CharmedCharacter>();
 
-        const float TROPHY_PACIFIST_CHARM_DURATION = 60; // seconds
+        const float TROPHY_PACIFIST_CHARM_DURATION = 300; // seconds
 
         public const float cFollowDistance = 3.0f;
         public const float cRadiusScale = 2f;
@@ -29,13 +33,14 @@ namespace TrophyHuntMod
 
         public class GandrArrowData
         {
-            public GandrArrowData(string arrowName, string ingredient, string name, string description, Type statusEffectType)
+            public GandrArrowData(string arrowName, string ingredient, string name, string description, Type statusEffectType, CachedSpriteIndex spriteIndex)
             {
                 m_arrowName = arrowName;
                 m_ingredient = ingredient;
                 m_name = name;
                 m_description = description;
-                m_statusEffectType = statusEffectType;                
+                m_statusEffectType = statusEffectType;
+                m_spriteIndex = spriteIndex;
             }
 
             public string m_arrowName = "";
@@ -43,22 +48,23 @@ namespace TrophyHuntMod
             public string m_name = "";
             public string m_description = "";
             public Type m_statusEffectType;
+            public CachedSpriteIndex m_spriteIndex;
         }
 
         public static GandrArrowData[] __m_gandrArrowData = new GandrArrowData[]
         {
-            new GandrArrowData("ArrowWood", "Wood", "Wooden Gandr", "Thrall becomes stronger.", typeof(SE_GandrWood)),
-            new GandrArrowData("ArrowFlint", "Flint", "Flint Gandr", "Thrall hards like stone.", typeof(SE_GandrFlint)),
-            new GandrArrowData("ArrowFire", "Resin", "Fire Gandr", "Thrall burns its enemies.", typeof(SE_GandrFire)),
-            new GandrArrowData("ArrowBronze", "Bronze", "Bronze Gandr", "Thrall bristles with new strength.", typeof(SE_GandrBronze)),
-            new GandrArrowData("ArrowPoison", "Ooze", "Poison Gandr", "", typeof(SE_GandrPoison)),
-            new GandrArrowData("ArrowIron", "Iron", "Iron Gandr", "", typeof(SE_GandrIron)),
-            new GandrArrowData("ArrowFrost", "FreezeGland", "Frost Gandr", "", typeof(SE_GandrFrost)),
-            new GandrArrowData("ArrowObsidian", "Obsidian", "Glass Gandr", "", typeof(SE_GandrObsidian)),
-            new GandrArrowData("ArrowSilver", "Silver", "Silver Gandr", "", typeof(SE_GandrSilver)),
-            new GandrArrowData("ArrowNeedle", "Needle", "Needle Gandr", "", typeof(SE_GandrNeedle)),
-            new GandrArrowData("ArrowCarapace", "Carapace", "Bug Gandr", "", typeof(SE_GandrCarapace)),
-            new GandrArrowData("ArrowCharred", "Blackwood", "Charred Gandr", "", typeof(SE_GandrCharred)),
+            new GandrArrowData("ArrowWood", "Wood", "Wooden Gandr", "Thrall becomes stronger.", typeof(SE_GandrWood), CachedSpriteIndex.Wood),
+            new GandrArrowData("ArrowFlint", "Flint", "Flint Gandr", "Thrall hards like stone.", typeof(SE_GandrFlint), CachedSpriteIndex.Flint),
+            new GandrArrowData("ArrowFire", "Resin", "Fire Gandr", "Thrall burns its enemies.", typeof(SE_GandrFire), CachedSpriteIndex.Fire),
+            new GandrArrowData("ArrowBronze", "Bronze", "Bronze Gandr", "Thrall bristles with new strength.", typeof(SE_GandrBronze), CachedSpriteIndex.Bronze),
+            new GandrArrowData("ArrowPoison", "Ooze", "Poison Gandr", "", typeof(SE_GandrPoison), CachedSpriteIndex.Poison),
+            new GandrArrowData("ArrowIron", "Iron", "Iron Gandr", "", typeof(SE_GandrIron), CachedSpriteIndex.Iron),
+            new GandrArrowData("ArrowFrost", "FreezeGland", "Frost Gandr", "", typeof(SE_GandrFrost), CachedSpriteIndex.Frost),
+            new GandrArrowData("ArrowObsidian", "Obsidian", "Glass Gandr", "", typeof(SE_GandrObsidian), CachedSpriteIndex.Obsidian),
+            new GandrArrowData("ArrowSilver", "Silver", "Silver Gandr", "", typeof(SE_GandrSilver), CachedSpriteIndex.Silver),
+            new GandrArrowData("ArrowNeedle", "Needle", "Needle Gandr", "", typeof(SE_GandrNeedle), CachedSpriteIndex.Needle),
+            new GandrArrowData("ArrowCarapace", "Carapace", "Bug Gandr", "", typeof(SE_GandrCarapace), CachedSpriteIndex.Carapace),
+            new GandrArrowData("ArrowCharred", "Blackwood", "Charred Gandr", "", typeof(SE_GandrCharred), CachedSpriteIndex.Charred),
         };
 
         
@@ -430,9 +436,12 @@ namespace TrophyHuntMod
 
         public static void RecharmAllCharmedEnemies()
         {
-            foreach (var cc in __m_allCharmedCharacters)
-            {
-                SetCharmedState(cc);
+            for (int i=__m_allCharmedCharacters.Count - 1; i >= 0; i--)
+            { 
+                if (!SetCharmedState(__m_allCharmedCharacters[i]))
+                {
+                    __m_allCharmedCharacters.RemoveAt(i);
+                }
             }
         }
 
@@ -480,7 +489,17 @@ namespace TrophyHuntMod
 
         public static void RemoveFromCharmedList(Character enemy)
         {
-            CharmedCharacter cc = __m_allCharmedCharacters.Find(c => c.m_zdoid == enemy.GetZDOID());
+            if (enemy == null)
+            {
+                return;
+            }
+
+            RemoveZDOIDFromCharmedList(enemy.GetZDOID());
+        }
+
+        public static void RemoveZDOIDFromCharmedList(ZDOID zdoid)
+        {
+            CharmedCharacter cc = __m_allCharmedCharacters.Find(c => c.m_zdoid == zdoid);
             if (cc != null)
             {
                 Minimap.instance.RemovePin(cc.m_pin);
@@ -497,7 +516,7 @@ namespace TrophyHuntMod
             }
         }
 
-        public static void SetCharmedState(CharmedCharacter cc)
+        public static bool SetCharmedState(CharmedCharacter cc)
         {
             CharmedCharacter guy = __m_allCharmedCharacters.Find(c => c.m_zdoid == cc.m_zdoid);
             if (guy != null)
@@ -506,7 +525,8 @@ namespace TrophyHuntMod
                 if (enemy == null)
                 {
                     Debug.LogError($"Unable to SetCharmedState for ZDOID {guy.m_zdoid} - character not found!");
-                    return;
+
+                    return false;
                 }
 
                 //            enemy.SetTamed(true);
@@ -541,15 +561,16 @@ namespace TrophyHuntMod
                     //                monsterAI.SetAlerted(alert: false);
                     monsterAI.m_fleeIfNotAlerted = false;
                     monsterAI.m_fleeIfLowHealth = 0;
-                    //                monsterAI.m_afraidOfFire = false;
-                    //                monsterAI.m_fleeIfHurtWhenTargetCantBeReached = false;
-                    //                monsterAI.m_circleTargetInterval = 0;
+                    monsterAI.m_afraidOfFire = false;
+                    monsterAI.m_fleeIfHurtWhenTargetCantBeReached = false;
+                    monsterAI.m_circleTargetInterval = 0;
                     monsterAI.m_character.m_group = "";
                     monsterAI.SetHuntPlayer(false);
                     monsterAI.SetTarget(null);
                     monsterAI.SetTargetInfo(ZDOID.None);
                 }
             }
+            return true;
         }
 
         public static void SetUncharmedState(CharmedCharacter cc)
@@ -648,7 +669,10 @@ namespace TrophyHuntMod
                 CharmedCharacter toRemove = null;
                 foreach (var cc in __m_allCharmedCharacters)
                 {
-                    Minimap.instance.RemovePin(cc.m_pin);
+                    if (Minimap.instance != null)
+                    {
+                        Minimap.instance.RemovePin(cc.m_pin);
+                    }
 
                     if (__m_charmTimerSeconds >= cc.m_charmExpireTime)
                     {
@@ -666,7 +690,10 @@ namespace TrophyHuntMod
                 if (toRemove != null)
                 {
                     SetUncharmedState(toRemove);
-                    Minimap.instance.RemovePin(toRemove.m_pin);
+                    if (Minimap.instance != null)
+                    {
+                        Minimap.instance.RemovePin(toRemove.m_pin);
+                    }
 
                     Character target = GetCharacterFromZDOID(toRemove.m_zdoid);
                     if (target)
@@ -929,6 +956,7 @@ namespace TrophyHuntMod
             StatusEffect se = ScriptableObject.CreateInstance(arrowData.m_statusEffectType) as StatusEffect;
 
             se = hitChar.m_seman.AddStatusEffect(se);
+            se.m_icon = __m_cachedPacifistSprites[(int)arrowData.m_spriteIndex].m_sprite;
 
             if (se != null)
             {
@@ -1010,25 +1038,23 @@ namespace TrophyHuntMod
         public class SE_GandrEffect : SE_Stats
         {
             public float m_adrenalineScalar = 0.0f;
-            public float m_adrenalineScaleMagnitude = 1.0f;
-            public float m_baseDamageModifier = 1.0f;
-            public float m_baseDamageReductionModifier = 1.0f;
+            public float m_baseDamageInflictedModifier = 1.0f;
+            public float m_baseDamageReceivedModifier = 100.0f;
+
             public override void Setup(Character character)
             {
                 base.Setup(character);
 
                 // SE lasts for this many seconds
-                m_ttl = 30.0f;
+                m_ttl = 300.0f;
                 m_damageModifier = 2.0f;
                 m_skillLevelModifier = 10.0f;
                 m_skillLevel = SkillType.All;
                 //                m_skillLevelModifier2 = 10.0f;
                 m_name = "Base Gandr Effect";
-
-                // Add icon
             }
             public override void UpdateStatusEffect(float dt)
-            {
+            { 
                 base.UpdateStatusEffect(dt);
 
                 if (Player.m_localPlayer.GetMaxAdrenaline() > 0)
@@ -1046,7 +1072,7 @@ namespace TrophyHuntMod
             public override void ModifyAttack(Skills.SkillType skill, ref HitData hitData)
             {
                 HitData.DamageTypes dt = m_percentigeDamageModifiers;
-                dt.Modify(1.0f + m_adrenalineScalar * m_baseDamageModifier);
+                dt.m_damage = 1.0f + m_adrenalineScalar * m_baseDamageInflictedModifier;
                 hitData.m_damage.Add(dt);
 
                 base.ModifyAttack(skill, ref hitData);
@@ -1056,7 +1082,16 @@ namespace TrophyHuntMod
             {
                 base.OnDamaged(hit, attacker);
 
-                hit.m_damage.Modify(1/(1+m_adrenalineScalar*m_adrenalineScaleMagnitude));
+                Debug.LogWarning($"BEFORE SCALING: {hit.m_damage.ToString()}");
+                hit.m_damage.Modify(1 / ((1 + m_adrenalineScalar) * m_baseDamageReceivedModifier));
+                Debug.LogWarning($"AFTER SCALING: {hit.m_damage.ToString()}");
+            }
+
+            public override void ModifyAdrenaline(float baseValue, ref float use)
+            {
+                use = baseValue * 100.0f;
+
+                base.ModifyAdrenaline(baseValue, ref use);
             }
 
             public override void Stop()
@@ -1068,33 +1103,14 @@ namespace TrophyHuntMod
 
         }
 
-/*
- * 	"Hit Damage Armor
-(base health multiplier)"	"Damage Output
-(base damage multiplier)"	Bonus Damage Type	"Bonus Damage Output
-(base damage multiplier)"
-ArrowWood	    2.0	2.0	Default	
-ArrowFlint	    2.5	2.5	Pierce	    1.5
-ArrowFire	    3.0	3.0	Fire	    1.5
-ArrowBronze	    3.5	3.5	Blunt	    2.0
-ArrowPoison	    4.0	4.0	Poison	    2.5
-ArrowIron	    4.5	4.5	Slash	    3.0
-ArrowFrost	    5.0	5.0	Frost	    3.5
-ArrowObsidian	5.5	5.5	Slash	    4.0
-ArrowSilver	    6.0	6.0	Spirit	    4.5
-ArrowNeedle	    7.0	7.0	Pierce	    5.0
-ArrowCarapace	8.0	8.0	Blunt	    6.0
-ArrowCharred	9.0	9.0	Lightning	7.0
- */
-
         public class SE_GandrWood : SE_GandrEffect
         {
             public override void Setup(Character character)
             {
                 base.Setup(character);
-
-                m_percentigeDamageModifiers.m_damage = 2.0f;
-                m_adrenalineScaleMagnitude = 1;
+            m_baseDamageInflictedModifier = 2.0f;
+            m_baseDamageReceivedModifier = 5.0f;
+            m_percentigeDamageModifiers.m_damage = 2f;
                 m_name = "Wood Gandr";
             }
         }
@@ -1103,8 +1119,10 @@ ArrowCharred	9.0	9.0	Lightning	7.0
             public override void Setup(Character character)
             {
                 base.Setup(character);
-                m_percentigeDamageModifiers.m_pierce = 1.5f;
-                m_adrenalineScaleMagnitude = 1;
+                m_baseDamageInflictedModifier = 2.5f;
+                m_baseDamageReceivedModifier = 6f;
+                m_percentigeDamageModifiers.m_pierce = 2.5f;
+
                 m_name = "Flint Gandr";
 
             }
@@ -1114,8 +1132,9 @@ ArrowCharred	9.0	9.0	Lightning	7.0
             public override void Setup(Character character)
             {
                 base.Setup(character);
-                m_adrenalineScaleMagnitude = 1;
-                m_percentigeDamageModifiers.m_fire = 1.5f;
+                m_baseDamageInflictedModifier = 3.0f;
+                m_baseDamageReceivedModifier = 7f;
+                m_percentigeDamageModifiers.m_fire = 2.5f;
                 m_name = "Fire Gandr";
 
                 Debug.LogWarning($"SE_GandrFire Setup called { m_percentigeDamageModifiers.ToString()}");
@@ -1127,8 +1146,9 @@ ArrowCharred	9.0	9.0	Lightning	7.0
             public override void Setup(Character character)
             {
                 base.Setup(character);
-                m_adrenalineScaleMagnitude = 1;
-                m_percentigeDamageModifiers.m_blunt = 2f;
+                m_baseDamageInflictedModifier = 3.5f;
+                m_baseDamageReceivedModifier = 8f;
+                m_percentigeDamageModifiers.m_blunt = 3f;
                 m_name = "Bronze Gandr";
 
             }
@@ -1139,8 +1159,9 @@ ArrowCharred	9.0	9.0	Lightning	7.0
             public override void Setup(Character character)
             {
                 base.Setup(character);
-                m_adrenalineScaleMagnitude = 1;
-                m_percentigeDamageModifiers.m_poison = 2f;
+                m_baseDamageInflictedModifier = 4;
+                m_baseDamageReceivedModifier = 9;
+                m_percentigeDamageModifiers.m_poison = 3f;
                 m_name = "Poison Gandr";
             }
         }
@@ -1149,8 +1170,9 @@ ArrowCharred	9.0	9.0	Lightning	7.0
             public override void Setup(Character character)
             {
                 base.Setup(character);
-                m_adrenalineScaleMagnitude = 1;
-                m_percentigeDamageModifiers.m_slash = 2.5f;
+                m_baseDamageInflictedModifier = 4.5f;
+                m_baseDamageReceivedModifier = 10f;
+                m_percentigeDamageModifiers.m_slash = 3.5f;
                 m_name = "Iron Gandr";
             }
         }
@@ -1159,8 +1181,9 @@ ArrowCharred	9.0	9.0	Lightning	7.0
             public override void Setup(Character character)
             {
                 base.Setup(character);
-                m_adrenalineScaleMagnitude = 1;
-                m_percentigeDamageModifiers.m_frost = 3f;
+                m_baseDamageInflictedModifier = 5;
+                m_baseDamageReceivedModifier = 11;
+                m_percentigeDamageModifiers.m_frost = 4f;
                 m_name = "Frost Gandr";
 
             }
@@ -1170,8 +1193,9 @@ ArrowCharred	9.0	9.0	Lightning	7.0
             public override void Setup(Character character)
             {
                 base.Setup(character);
-                m_adrenalineScaleMagnitude = 1;
-                m_percentigeDamageModifiers.m_slash = 3f;
+                m_baseDamageInflictedModifier = 5.5f;
+                m_baseDamageReceivedModifier = 12f;
+                m_percentigeDamageModifiers.m_slash = 4f;
                 m_name = "Obsidian Gandr";
 
             }
@@ -1181,8 +1205,9 @@ ArrowCharred	9.0	9.0	Lightning	7.0
             public override void Setup(Character character)
             {
                 base.Setup(character);
-                m_adrenalineScaleMagnitude = 1;
-                m_percentigeDamageModifiers.m_spirit = 3.5f;
+                m_baseDamageInflictedModifier = 6;
+                m_baseDamageReceivedModifier = 13;
+                m_percentigeDamageModifiers.m_spirit = 4.5f;
                 m_name = "Silver Gandr";
 
             }
@@ -1192,8 +1217,9 @@ ArrowCharred	9.0	9.0	Lightning	7.0
             public override void Setup(Character character)
             {
                 base.Setup(character);
-                m_adrenalineScaleMagnitude = 1;
-                m_percentigeDamageModifiers.m_pierce = 4f;
+                m_baseDamageInflictedModifier = 6.5f;
+                m_baseDamageReceivedModifier = 14;
+                m_percentigeDamageModifiers.m_pierce = 5f;
                 m_name = "Needle Gandr";
 
             }
@@ -1203,8 +1229,9 @@ ArrowCharred	9.0	9.0	Lightning	7.0
             public override void Setup(Character character)
             {
                 base.Setup(character);
-                m_adrenalineScaleMagnitude = 1;
-                m_percentigeDamageModifiers.m_blunt = 5f;
+                m_baseDamageInflictedModifier = 7;
+                m_baseDamageReceivedModifier = 15;
+                m_percentigeDamageModifiers.m_blunt = 6f;
                 m_name = "Carapace Gandr";
 
             }
@@ -1214,8 +1241,9 @@ ArrowCharred	9.0	9.0	Lightning	7.0
             public override void Setup(Character character)
             {
                 base.Setup(character);
-                m_adrenalineScaleMagnitude = 1;
-                m_percentigeDamageModifiers.m_lightning = 6f;
+                m_baseDamageInflictedModifier = 7.5f;
+                m_baseDamageReceivedModifier = 7.5f;
+                m_percentigeDamageModifiers.m_lightning = 7f;
                 m_name = "Charred Gandr";
             }
         }
@@ -1237,7 +1265,6 @@ ArrowCharred	9.0	9.0	Lightning	7.0
                         continue;
 
                     EnemyHud.HudData data = hudData.Value;
-
                     Transform charmTransform = data.m_gui.transform.Find("Charm");
 
                     CharmedCharacter cc = GetCharmedCharacter(c);
@@ -1257,6 +1284,42 @@ ArrowCharred	9.0	9.0	Lightning	7.0
                         if (charmTransform && !charmTransform.gameObject.activeSelf)
                         {
                             charmTransform.gameObject.SetActive(true);
+                        }
+
+                        List<Sprite> spriteList = new List<Sprite>();
+
+                        foreach (var se in c.m_seman.m_statusEffects)
+                        {
+                            spriteList.Add(se.m_icon);
+                        }
+
+                        List<UnityEngine.UI.Image> charmIcons = new List<UnityEngine.UI.Image>();
+
+                        List<Transform> charmIconObjects = new List<Transform>();
+                        charmIconObjects.Add(data.m_gui.transform.Find("Charm/CharmIcon1"));
+                        charmIconObjects.Add(data.m_gui.transform.Find("Charm/CharmIcon2"));
+
+                        foreach (var cio in charmIconObjects)
+                        {
+                            cio.gameObject.SetActive(false);
+                        }
+
+                        for (int i = 0; i < spriteList.Count; i++)
+                        { 
+                            if (i < charmIconObjects.Count)
+                            {
+                                Transform cio = charmIconObjects[i];
+                                cio.gameObject.SetActive(true);
+
+                                UnityEngine.UI.Image image = charmIconObjects[i].GetComponent<UnityEngine.UI.Image>();
+                                RectTransform rectTransform = charmIconObjects[i].GetComponent<RectTransform>();
+
+                                image.sprite = spriteList[i];
+                                int iconSize = 32;
+                                rectTransform.sizeDelta = new Vector2(iconSize, iconSize);
+                                rectTransform.anchoredPosition = new Vector2(((-iconSize / 2) * (i + 1)) + iconSize * i + iconSize / 2, -16);
+                                rectTransform.anchoredPosition = new Vector2((-iconSize / 2) * i, -16);
+                            }
                         }
 
                         GuiBar charmBar = data.m_gui.transform.Find("Charm/health_fast_friendly").GetComponent<GuiBar>();
@@ -1336,7 +1399,6 @@ ArrowCharred	9.0	9.0	Lightning	7.0
                     Debug.LogError("Could not find health_fast gameobject!");
                 }
                 healthFastTransform?.gameObject?.SetActive(false);
-                Debug.LogError("healthFastTransform set to Active?");
 
                 Transform healthSlowTransform = newTransform.Find("health_slow");
                 healthSlowTransform?.gameObject?.SetActive(false);
@@ -1351,13 +1413,13 @@ ArrowCharred	9.0	9.0	Lightning	7.0
 
                 // Add RectTransform component for positioning
                 RectTransform rectTransform = charmIconElement1.AddComponent<RectTransform>();
-                rectTransform.sizeDelta = new Vector2(20, 20);
+                rectTransform.sizeDelta = new Vector2(32, 32);
                 rectTransform.anchoredPosition = new Vector2(-9, -16); // Set position
                 rectTransform.localScale = new Vector3(1.0f, 1.0f, 1.0f);
 
                 // Add an Image component
                 UnityEngine.UI.Image image = charmIconElement1.AddComponent<UnityEngine.UI.Image>();
-                image.sprite = __m_trophySprite;
+//                image.sprite = __m_cachedPacifistSprites[((int)CachedSpriteIndex.Wood)].m_sprite;
                 image.color = Color.white;
                 image.raycastTarget = false;
 
@@ -1366,13 +1428,13 @@ ArrowCharred	9.0	9.0	Lightning	7.0
 
                 // Add RectTransform component for positioning
                 rectTransform = charmIconElement2.AddComponent<RectTransform>();
-                rectTransform.sizeDelta = new Vector2(20, 20);
+                rectTransform.sizeDelta = new Vector2(32, 32);
                 rectTransform.anchoredPosition = new Vector2(9, -16); // Set position
                 rectTransform.localScale = new Vector3(1.0f, 1.0f, 1.0f);
 
                 // Add an Image component
                 image = charmIconElement2.AddComponent<UnityEngine.UI.Image>();
-                image.sprite = __m_trophySprite;
+//1                image.sprite = __m_cachedPacifistSprites[((int)CachedSpriteIndex.Wood)].m_sprite;
                 image.color = Color.white;
                 image.raycastTarget = false;
 
@@ -1398,5 +1460,230 @@ ArrowCharred	9.0	9.0	Lightning	7.0
 //                }
             }
         }
+
+        public class CachedSprite
+        {
+            public CachedSprite(CachedSpriteIndex index, string name, Sprite sprite)
+            {
+                m_index = index;
+                m_name = name;
+                m_sprite = sprite;
+            }
+            
+            public CachedSpriteIndex m_index;
+            public string m_name;
+            public Sprite m_sprite;
+        }
+        public enum CachedSpriteIndex
+        {
+            Wood = 0,
+            Flint,
+            Fire,
+            Bronze,
+            Poison,
+            Iron,
+            Frost,
+            Obsidian,
+            Silver,
+            Needle,
+            Carapace,
+            Charred,
+        }
+
+        static CachedSprite[] __m_cachedPacifistSprites = new CachedSprite[]
+        {
+            new CachedSprite(CachedSpriteIndex.Wood, "wood", null),
+            new CachedSprite(CachedSpriteIndex.Flint, "flint", null),
+            new CachedSprite(CachedSpriteIndex.Fire, "Burning", null),
+            new CachedSprite(CachedSpriteIndex.Bronze, "bronze", null),
+            new CachedSprite(CachedSpriteIndex.Poison, "Poison", null),
+            new CachedSprite(CachedSpriteIndex.Iron, "iron", null),
+            new CachedSprite(CachedSpriteIndex.Frost, "Frost", null),
+            new CachedSprite(CachedSpriteIndex.Obsidian, "obsidian", null),
+            new CachedSprite(CachedSpriteIndex.Silver, "silver", null),
+            new CachedSprite(CachedSpriteIndex.Needle, "needle", null),
+            new CachedSprite(CachedSpriteIndex.Carapace, "carapace", null),
+            new CachedSprite(CachedSpriteIndex.Charred, "BlackWood", null),
+        };
+
+        public static void CacheSprites()
+        {
+            foreach (CachedSprite cs in __m_cachedPacifistSprites)
+            {
+                if (cs.m_sprite == null)
+                {
+                    cs.m_sprite = GetSpriteFromAtlas(cs.m_name, "IconAtlas");
+                }
+            }
+        }
+
+        public static Sprite LoadSpriteByName(string spriteName)
+        {
+            Sprite sprite = null;
+
+            var sprites = Resources.FindObjectsOfTypeAll<Sprite>();
+
+            sprite = sprites.FirstOrDefault(s => s.name == spriteName);
+
+            return sprite;
+        }
+  
+        public static Sprite GetSpriteFromAtlas(string spriteName, string atlasName)
+        {
+            var atlases = Resources.FindObjectsOfTypeAll<SpriteAtlas>();
+            foreach (var atlas in atlases)
+            {
+                if (atlas.name != atlasName)
+                    continue;
+
+                if (atlas.GetSprite(spriteName) is Sprite s)
+                {
+                    Debug.LogWarning($"Found {spriteName} in atlas {atlasName}.");
+                    return s;
+                }
+            }
+            return null;
+        }
+
+        /*
+
+        public static void DumpSprites()
+        {
+            DumpAtlas("IconAtlas");
+        }
+        
+        private static SpriteAtlas FindAtlas(string name)
+        {
+            foreach (var atlas in Resources.FindObjectsOfTypeAll<SpriteAtlas>())
+            {
+                if (atlas.name.Equals(name, System.StringComparison.OrdinalIgnoreCase))
+                    return atlas;
+            }
+            return null;
+        }
+
+        private static void DumpAtlas(string atlasName)
+        {
+            SpriteAtlas atlas = FindAtlas(atlasName);
+            if (atlas == null)
+            {
+                Debug.LogError($"SpriteAtlas '{atlasName}' not found.");
+                return;
+            }
+
+            int spriteCount = atlas.spriteCount;
+            Sprite[] sprites = new Sprite[spriteCount];
+            atlas.GetSprites(sprites);
+
+            string outDir = Path.Combine("C:\\dev\\", "SpriteDump", atlasName);
+            Directory.CreateDirectory(outDir);
+
+            Debug.LogWarning($"Dumping {spriteCount} sprites from atlas '{atlasName}' → {outDir}");
+
+            int exported = 0;
+
+            // Cache one RT per source texture to avoid reallocating for every sprite
+            var rtCache = new Dictionary<Texture2D, RenderTexture>();
+
+            foreach (var sprite in sprites)
+            {
+                if (sprite == null)
+                    continue;
+
+                try
+                {
+                    // create or reuse RT for this sprite's source texture
+                    Texture2D sourceTex = sprite.texture;
+
+                    if (sourceTex == null)
+                    {
+                        Debug.LogWarning($"Sprite {sprite.name} has no texture, skipping.");
+                        continue;
+                    }
+
+                    if (!rtCache.ContainsKey(sourceTex))
+                    {
+                        // Create an RT that exactly matches the source texture size
+                        RenderTexture rt = RenderTexture.GetTemporary(
+                            sourceTex.width,
+                            sourceTex.height,
+                            0,
+                            RenderTextureFormat.ARGB32,
+                            RenderTextureReadWrite.sRGB);
+
+                        rt.wrapMode = TextureWrapMode.Clamp;
+                        rt.filterMode = FilterMode.Point;
+
+                        // Blit the source texture into the RT once
+                        // Note: Graphics.Blit accepts a Texture, not just RenderTexture
+                        Graphics.Blit(sourceTex, rt);
+
+                        rtCache[sourceTex] = rt;
+                    }
+
+                    RenderTexture cachedRT = rtCache[sourceTex];
+                    // Extract only the sprite rectangle from the cached RT
+                    DumpSpriteFromCachedRT(sprite, cachedRT, outDir);
+                    exported++;
+                }
+                catch (System.Exception ex)
+                {
+                    Debug.LogError($"Error dumping {sprite.name}: {ex}");
+                }
+            }
+
+            // Release cached RTs
+            foreach (var kv in rtCache)
+            {
+                RenderTexture.ReleaseTemporary(kv.Value);
+            }
+
+            Debug.LogWarning($"Finished dumping atlas '{atlasName}'. {exported}/{spriteCount} sprites exported.");
+        }
+
+        private static void DumpSpriteFromCachedRT(Sprite sprite, RenderTexture atlasRT, string folder)
+        {
+            Rect r = sprite.textureRect;
+            int x = Mathf.RoundToInt(r.x);
+            int y = Mathf.RoundToInt(r.y);
+            int w = Mathf.RoundToInt(r.width);
+            int h = Mathf.RoundToInt(r.height);
+
+            if (w == 0 || h == 0)
+            {
+                Debug.LogWarning($"Sprite {sprite.name} has zero size, skipping.");
+                return;
+            }
+
+            // Activate the atlas RT and read the sprite rect out of it
+            RenderTexture prev = RenderTexture.active;
+            RenderTexture.active = atlasRT;
+
+            // Create a Texture2D to hold the sprite pixels
+            Texture2D tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
+
+            // ReadPixels uses bottom-left origin, and sprite.textureRect uses pixel coordinates in the same space,
+            // so this rect should be correct.
+            tex.ReadPixels(new Rect(x, y, w, h), 0, 0, false);
+            tex.Apply();
+
+            RenderTexture.active = prev;
+
+            // Encode and write
+            byte[] png = tex.EncodeToPNG();
+            UnityEngine.Object.Destroy(tex);
+
+            string filename = SafeFilename(sprite.name) + ".png";
+            string path = Path.Combine(folder, filename);
+            File.WriteAllBytes(path, png);
+        }
+
+        private static string SafeFilename(string name)
+        {
+            foreach (char c in Path.GetInvalidFileNameChars())
+                name = name.Replace(c, '_');
+            return name;
+        }
+        */
     }
 }

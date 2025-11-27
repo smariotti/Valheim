@@ -1455,6 +1455,8 @@ namespace TrophyHuntMod
 
                 if (IsPacifist())
                 {
+                    CacheSprites();
+
                     RecharmAllCharmedEnemies();
 
                     if (!__m_introMessageDisplayed)
