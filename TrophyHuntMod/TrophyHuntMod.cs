@@ -450,7 +450,7 @@ namespace TrophyHuntMod
                         "<color=#F00000>t</color>" +
                         "<color=#D00000>z</color>";
                     break;
-                case TrophyGameMode.TrophyTrailblazer: modeString = "<color=#70FFA0>Trailblazer!</color>"; break;
+                case TrophyGameMode.TrophyTrailblazer: modeString = "<color=#D080FF>Trailblazer!</color>"; break;
                 case TrophyGameMode.TrophyPacifist: modeString = "<color=#F387C5>Trophy Pacifist</color>"; break;
                 case TrophyGameMode.CulinarySaga: modeString = "<color=#8080FF>Culinary Saga</color>"; break;
                 case TrophyGameMode.CasualSaga: modeString = "<color=yellow>Casual Saga</color>"; break;
@@ -1468,6 +1468,8 @@ namespace TrophyHuntMod
                         Player.m_localPlayer.Message(MessageHud.MessageType.Center, "<color=#F387C5>Trophy Pacifist</color>\nUse Wood Arrows to charm enemies!");
                         __m_introMessageDisplayed = true;
                     }
+
+                    DoPacifistPostPlayerSpawnTasks();
                 }
             }
         }
