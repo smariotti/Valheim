@@ -562,7 +562,7 @@ namespace TrophyHuntMod
             }
         }
 
-        static public string __m_saveDataVersionNumber = "9";
+        static public string __m_saveDataVersionNumber = "7";
 
         // WARNING!
         //
@@ -1462,8 +1462,6 @@ namespace TrophyHuntMod
                 if (IsPacifist())
                 {
                     CacheSprites();
-
-                    RecharmAllCharmedEnemies();
 
                     if (!__m_introMessageDisplayed)
                     {
@@ -4769,10 +4767,9 @@ namespace TrophyHuntMod
             {
                 if (IsPacifist())
                 {
-                    Debug.LogWarning($"Trophy Pacifist Mode: Removing charmed enemy {__instance.m_name} {__instance.GetZDOID()} on death.");
                     if (IsCharmed(__instance))
                     {
-                        Debug.LogWarning($"Trophy Pacifist Mode: {__instance.m_name} was charmed and has died.");
+//                        Debug.LogWarning($"Trophy Pacifist Mode: {__instance.m_name} was charmed and has died.");
 
                         // Post player message saying charmed enemy died
                         if (Player.m_localPlayer != null)
