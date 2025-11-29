@@ -569,16 +569,32 @@ namespace TrophyHuntMod
                         monsterAI.SetFollowTarget(Player.m_localPlayer.gameObject);
                     }
 
+                    //                    enemy.m_canSwim = true;
+                    // enemy.m_swimDepth = 10f;
+
                     monsterAI.m_attackPlayerObjects = false;
+
                     monsterAI.m_fleeIfNotAlerted = false;
                     monsterAI.m_fleeIfLowHealth = 0;
-                    monsterAI.m_afraidOfFire = false;
+
                     monsterAI.m_fleeIfHurtWhenTargetCantBeReached = false;
+
+                    monsterAI.m_afraidOfFire = false;
+                    monsterAI.m_avoidFire = false;
+                    monsterAI.m_avoidLand = false;
+                    monsterAI.m_avoidWater = false;
+                    
+                    monsterAI.m_circulateWhileCharging = false;
                     monsterAI.m_circleTargetInterval = 0;
+                    monsterAI.m_passiveAggresive = true;
+
                     monsterAI.m_character.m_group = "";
                     monsterAI.SetHuntPlayer(false);
-                    monsterAI.SetTarget(null);
+                    monsterAI.SetTarget(monsterAI.FindEnemy());
                     monsterAI.SetTargetInfo(ZDOID.None);
+                    monsterAI.SetAlerted(true);
+
+                    Debug.Log($"Swim ({enemy.m_canSwim}) Depth: {enemy.m_swimDepth} Water level: {enemy.m_waterLevel}");
                 }
             }
 
@@ -1550,29 +1566,6 @@ namespace TrophyHuntMod
                 tmText.outlineWidth = 0.125f; // Adjust the thickness
                 tmText.verticalAlignment = VerticalAlignmentOptions.Middle;
                 tmText.horizontalAlignment = HorizontalAlignmentOptions.Center;
-
-
-
-                //                Transform previous = charmIconElement2.transform;
-                //                foreach (var tsid in __m_thrallStatusIcons)
-                //                {
-                //                    GameObject icon = new GameObject("asdfasdf");
-                //                    icon.transform.SetParent(previous);
-
-                //                    // Add RectTransform component for positioning
-                //                    rectTransform = icon.AddComponent<RectTransform>();
-                //                    rectTransform.sizeDelta = new Vector2(20, 20);
-                //                    rectTransform.anchoredPosition = new Vector2(9, -16); // Set position
-                //                    rectTransform.localScale = new Vector3(1.0f, 1.0f, 1.0f);
-
-                //                    // Add an Image component
-                //                    image = icon.AddComponent<UnityEngine.UI.Image>();
-                //                    image.sprite = GetTrophySprite(tsid.m_prefabName);
-                ////                    image.color = Color.white;
-                //                    image.raycastTarget = false;
-
-                //                    previous = icon.transform;
-                //                }
             }
         }
 
