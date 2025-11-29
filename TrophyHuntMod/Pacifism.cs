@@ -443,6 +443,22 @@ namespace TrophyHuntMod
         //    }
         //}
 
+        public static void SetNonTrinketAdrenaline()
+        {
+            if (Player.m_localPlayer?.m_trinketItem != null)
+            {
+//                Debug.LogError($"Has Trinket {Player.m_localPlayer.m_trinketItem?.m_shared?.m_name}");
+            }
+            else
+            {
+                if (__m_allCharmedCharacters.Count > 0 && Player.m_localPlayer.m_maxAdrenaline == 0)
+                {
+                    Player.m_localPlayer.m_maxAdrenaline = 30;
+                    Player.m_localPlayer.m_adrenaline = 0;
+                }
+            }
+        }
+
         public static void DoPacifistPostPlayerSpawnTasks()
         {
             if (!IsPacifist())
@@ -451,12 +467,6 @@ namespace TrophyHuntMod
             if (!Player.m_localPlayer)
                 return;
 
-            if (__m_allCharmedCharacters.Count > 0 && Player.m_localPlayer.m_maxAdrenaline == 0)
-            {
-                Player.m_localPlayer.m_maxAdrenaline = 30;
-                Player.m_localPlayer.m_adrenaline = 0;
-            }
-
             foreach (var cc in __m_allCharmedCharacters)
             {
                 if (cc != null)
@@ -464,6 +474,8 @@ namespace TrophyHuntMod
                     SetCharmedState(cc, false);
                 }
             }
+
+            SetNonTrinketAdrenaline();
         }
 
         public static bool IsCharmed(Character character)
@@ -594,9 +606,11 @@ namespace TrophyHuntMod
                     monsterAI.SetTargetInfo(ZDOID.None);
                     monsterAI.SetAlerted(true);
 
-                    Debug.Log($"Swim ({enemy.m_canSwim}) Depth: {enemy.m_swimDepth} Water level: {enemy.m_waterLevel}");
+//                    Debug.Log($"Swim ({enemy.m_canSwim}) Depth: {enemy.m_swimDepth} Water level: {enemy.m_waterLevel}");
                 }
             }
+
+            SetNonTrinketAdrenaline();
 
             return true;
         }
@@ -697,18 +711,21 @@ namespace TrophyHuntMod
             {
                 __m_charmTimerSeconds++;
 
-                Debug.LogWarning($"Charm List: {__m_allCharmedCharacters.Count} Timer: {__m_charmTimerSeconds}");
-                for (var i = 0; i < __m_allCharmedCharacters.Count; i++)
+                if (__m_showCharmList)
                 {
-                    var cc = __m_allCharmedCharacters[i];
-                    Debug.LogWarning($"  Charm {i}: GUID {cc.m_charmGUID.ToString()} ExpireTime: {cc.m_charmExpireTime} Orig Faction: {cc.m_originalFaction}");
-
-                    Character character = GetCharacterFromGUID(cc.m_charmGUID);
-                    if (character != null)
+                    Debug.LogWarning($"Charm List: {__m_allCharmedCharacters.Count} Timer: {__m_charmTimerSeconds}");
+                    for (var i = 0; i < __m_allCharmedCharacters.Count; i++)
                     {
-                        foreach (var statusEffect in character.m_seman.GetStatusEffects())
+                        var cc = __m_allCharmedCharacters[i];
+                        Debug.LogWarning($"  Charm {i}: GUID {cc.m_charmGUID.ToString()} ExpireTime: {cc.m_charmExpireTime} Orig Faction: {cc.m_originalFaction}");
+
+                        Character character = GetCharacterFromGUID(cc.m_charmGUID);
+                        if (character != null)
                         {
-                            Debug.LogWarning($"    Status Effect: {statusEffect.m_name} TTL: {statusEffect.m_ttl}");
+                            foreach (var statusEffect in character.m_seman.GetStatusEffects())
+                            {
+                                Debug.LogWarning($"    Status Effect: {statusEffect.m_name} TTL: {statusEffect.m_ttl}");
+                            }
                         }
                     }
                 }
@@ -1050,8 +1067,8 @@ namespace TrophyHuntMod
                     if (IsCharmed(__instance.m_character) && __instance.GetStatusEffects().Count == 0)
                     {
                         CharmedCharacter cc = GetCharmedCharacter(__instance.m_character);
-                        
-                        hitData.ApplyModifier(1.0f + (cc.m_charmLevel / 10.0f));
+
+                        hitData.ApplyModifier(1.0f + (cc.m_charmLevel/5));
                     }
                 }
 
@@ -1105,7 +1122,10 @@ namespace TrophyHuntMod
 
                 if (use > 0)
                 {
-                    Debug.LogError($"ADRENALINE: {player.m_adrenaline}/{player.m_maxAdrenaline} + {use}");
+                    // Adrenaline increases much faster
+                    use *= 2;
+
+//                    Debug.LogError($"ADRENALINE: {player.m_adrenaline}/{player.m_maxAdrenaline} + {use}");
 
                     if (player.m_adrenaline + use > player.m_maxAdrenaline)
                     {
@@ -1127,10 +1147,10 @@ namespace TrophyHuntMod
                             if (c)
                             {
                                 c.Heal(c.GetMaxHealth() - c.GetHealth(), showText: true);
-                                Debug.LogError($"ADRENALINE: Healed charmed enemy {c.name} to full health due to adrenaline overflow.");
+//                                Debug.LogError($"ADRENALINE: Healed charmed enemy {c.name} to full health due to adrenaline overflow.");
                                 if (trinketPopped)
                                 {
-                                    Debug.LogError($"TRINKET POPPED: {trinketStatusEffect.m_name}");
+//                                    Debug.LogError($"TRINKET POPPED: {trinketStatusEffect.m_name}");
 
                                     player.m_adrenalinePopEffects.Create(c.transform.position, Quaternion.identity);
 
@@ -1252,19 +1272,19 @@ namespace TrophyHuntMod
 
             public override void ModifyAttack(Skills.SkillType skill, ref HitData hitData)
             {
-                Debug.Log($"{m_character.GetHoverName()} Modifiers: {m_percentigeDamageModifiers}");
-                Debug.Log($"{m_character.GetHoverName()} Attack Pre Damage: {hitData.m_damage}");
+//                Debug.Log($"{m_character.GetHoverName()} Modifiers: {m_percentigeDamageModifiers}");
+//                Debug.Log($"{m_character.GetHoverName()} Attack Pre Damage: {hitData.m_damage}");
                 HitData.DamageTypes dt = m_percentigeDamageModifiers;
 
                 float largestDamage = 0.0f;
                 hitData.m_damage.GetMajorityDamageType(out largestDamage);
                 dt.Modify(largestDamage);
-                Debug.Log($"{m_character.GetHoverName()} Scaled Modifiers: {m_percentigeDamageModifiers}");
+//                Debug.Log($"{m_character.GetHoverName()} Scaled Modifiers: {m_percentigeDamageModifiers}");
                 hitData.m_damage.Add(dt);
 
                 hitData.m_damage.Modify((Math.Max(1, m_charmLevel/2 + m_adrenalineScalar)) * m_baseDamageInflictedModifier);
 
-                Debug.Log($"{m_character.GetHoverName()} Attack Post Damage: {hitData.m_damage} (CharmLevel: {m_charmLevel} Adrenaline Scalar: {m_adrenalineScalar} inflictedModifier: {m_baseDamageInflictedModifier}");
+//                Debug.Log($"{m_character.GetHoverName()} Attack Post Damage: {hitData.m_damage} (CharmLevel: {m_charmLevel} Adrenaline Scalar: {m_adrenalineScalar} inflictedModifier: {m_baseDamageInflictedModifier}");
 
                 base.ModifyAttack(skill, ref hitData);
             }
@@ -1273,9 +1293,9 @@ namespace TrophyHuntMod
             {
                 base.OnDamaged(hit, attacker);
 
-                Debug.Log($"{m_character.GetHoverName()} Incoming Pre Damage: {hit.m_damage}");
+//                Debug.Log($"{m_character.GetHoverName()} Incoming Pre Damage: {hit.m_damage}");
                 hit.m_damage.Modify(1 / ((Math.Max(1, m_charmLevel/2 + m_adrenalineScalar)) * m_baseDamageReceivedModifier));
-                Debug.Log($"{m_character.GetHoverName()} Incoming Post Damage :{hit.m_damage} (CharmLevel: {m_charmLevel} Adrenaline Scalar: {m_adrenalineScalar} recievedModifier: {m_baseDamageReceivedModifier}");
+//                Debug.Log($"{m_character.GetHoverName()} Incoming Post Damage :{hit.m_damage} (CharmLevel: {m_charmLevel} Adrenaline Scalar: {m_adrenalineScalar} recievedModifier: {m_baseDamageReceivedModifier}");
             }
 
             //public override void ModifyAdrenaline(float baseValue, ref float use)

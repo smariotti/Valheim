@@ -277,11 +277,17 @@ You can find the github at: https://github.com/smariotti/Valheim/tree/master/Tro
 v0.10.11
 - Fixed BiomeBonus reporting to Tracker for game modes that use Biome Bonus (sorry JV!)
 - Lots of Pacifist changes
-  - Charm fixes
+  - Bosses cannot be charmed
+  - Adrenaline accumulates when you've got any Thralls
+	- Charm bar levels up when Adrenaline bar fills
+	- Leveled up Charm bar increases Thrall damage and damage mitigation
+  - Trinket powers are granted to all Thralls when they pop
   - Charm bar on charmed enemies
   - Thralls have Status Effects based on arrow type
+	- Status effects increase Thrall damage and add elemental damage
   - Better leashing of Thralls (50 meters)
-  - 
+  - Charm fixes
+  - More aggressive/direct Thrall behavior
 
 ## Change Log
 v0.10.10
