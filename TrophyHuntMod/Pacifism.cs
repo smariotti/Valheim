@@ -1462,10 +1462,10 @@ namespace TrophyHuntMod
                         }
 
                         // Update the pink Charm bar 
-                        GuiBar charmBar = data.m_gui.transform.Find("Charm/health_fast_friendly").GetComponent<GuiBar>();
-
+                        GuiBar charmBar = data.m_gui.transform.Find("Charm/CharmBar").GetComponent<GuiBar>();
                         float remainingTime = cc.m_charmExpireTime - __m_charmTimerSeconds;
-
+                        //                        Debug.Log($"Bar {c.name} {remainingTime}/{GetCharmDuration()} {charmBar.m_value}/{charmBar.m_maxValue}\n  wid:{charmBar.m_width} smoothVal:{charmBar.m_smoothValue} smoothSpeed:{charmBar.m_smoothSpeed}");
+                        charmBar.SetWidth(100.0f);
                         charmBar.SetValue(remainingTime / GetCharmDuration());
                         charmBar.SetColor(new Color((float)0xF3 / 255f, (float)0x87 / 255f, (float)0xC5 / 255f));
 
@@ -1510,28 +1510,25 @@ namespace TrophyHuntMod
 
                 GameObject newBarObject = UnityEngine.Object.Instantiate(healthObject, healthTransform.parent);
                 newBarObject.name = "Charm";
+                newBarObject.SetActive(false);
 
                 Transform newTransform = newBarObject.transform;
                 newTransform.localPosition += new Vector3(0, -10, 0);
 
                 Transform healthFastTransform = newTransform.Find("health_fast");
-                if (healthFastTransform == null)
+                if (healthFastTransform != null)
                 {
-                    Debug.LogError("Could not find health_fast transform!");
+                    GameObject.Destroy(healthFastTransform.gameObject);
                 }
-                if (healthFastTransform?.gameObject == null)
-                {
-                    Debug.LogError("Could not find health_fast gameobject!");
-                }
-                healthFastTransform?.gameObject?.SetActive(false);
-
                 Transform healthSlowTransform = newTransform.Find("health_slow");
-                healthSlowTransform?.gameObject?.SetActive(false);
+                if (healthSlowTransform != null)
+                {
+                    GameObject.Destroy(healthSlowTransform.gameObject);
+                }
 
                 Transform healthFastFriendlyTransform = newTransform.Find("health_fast_friendly");
-                healthFastFriendlyTransform?.gameObject?.SetActive(true);
-
-                newBarObject.SetActive(false);
+                healthFastFriendlyTransform.name = "CharmBar";
+                GuiBar bar = healthFastFriendlyTransform?.gameObject?.GetComponent<GuiBar>();
 
                 CreateCharmIconsInMasterHud(newBarObject.transform);
 
