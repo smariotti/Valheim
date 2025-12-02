@@ -3006,7 +3006,10 @@ namespace TrophyHuntMod
                             {
                                 MessageHud.instance.ShowBiomeFoundMsg("Odin is Pleased", playStinger: true);
                                 string bonusString = "BonusAll";
-                                CalculateExtraTimeScore();
+                                if (GetGameMode() == TrophyGameMode.TrophyBlitz || GetGameMode() == TrophyGameMode.TrophyTrailblazer)
+                                {
+                                    CalculateExtraTimeScore();
+                                }
                                 UpdateModUI(Player.m_localPlayer);
                                 AddPlayerEvent(PlayerEventType.Misc, bonusString, __instance.transform.position);
                                 __m_completedAllBiomeBonuses = true;
