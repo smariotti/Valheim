@@ -141,15 +141,6 @@ namespace TrophyHuntMod
                 }
             });
 
-            ConsoleCommand showPathCommand = new ConsoleCommand("showpath", "Show the path the player took", delegate (ConsoleEventArgs args)
-            {
-                if (!Game.instance)
-                {
-                    PrintToConsole("'showpath' console command can only be used in-game.");
-                }
-
-                ShowPlayerPath(!__m_pathAddedToMinimap);
-            });
 
             ConsoleCommand showBossesCommand = new ConsoleCommand("showbosses", "Show all potential boss locations", delegate (ConsoleEventArgs args)
             {
@@ -159,7 +150,7 @@ namespace TrophyHuntMod
                 }
 
                 RevealAllBosses(Player.m_localPlayer);
-            });
+            }, true);
 
             /*
             ConsoleCommand instaSmelt = new ConsoleCommand("instasmelt", "Toggle Insta-Smelt", delegate (ConsoleEventArgs args)
@@ -479,6 +470,43 @@ namespace TrophyHuntMod
                 __m_sagaSailingSpeedMultiplier = int.Parse(args[1]);
                 UpdateModUI(Player.m_localPlayer);
             });
+
+            ConsoleCommand showCharmList = new ConsoleCommand("showcharmlist", "Show the list of charmed enemies in the debug log", delegate (ConsoleEventArgs args)
+            {
+                if (!Game.instance)
+                {
+                    PrintToConsole("'showcharmlist' console command can only be used in-game.");
+                }
+
+                __m_showCharmList = !__m_showCharmList;
+            });
+
+            ConsoleCommand releaseThralls = new ConsoleCommand("releasethralls", "On-charm all current Thralls", delegate (ConsoleEventArgs args)
+            {
+                if (!Game.instance)
+                {
+                    PrintToConsole("'releasethralls' console command can only be used in-game.");
+                }
+
+                ReleaseAllThralls();
+            }, true);
+
+            ConsoleCommand charmLevel = new ConsoleCommand("charmLevel", "Set charm level of all thralls", delegate (ConsoleEventArgs args)
+            {
+                if (!Game.instance)
+                {
+                    PrintToConsole("'charmLevel' console command can only be used in-game.");
+                }
+                
+                int level = 0;
+
+                if (args.Length > 1)
+                {
+                    level = int.Parse(args[1]);
+                }
+
+                SetCharmLevel(level);
+            }, true);
 
         }
         #endregion

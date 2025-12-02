@@ -274,6 +274,24 @@ You can find the github at: https://github.com/smariotti/Valheim/tree/master/Tro
 
 
 ## Change Log
+v0.10.13
+- Fixed numerous bugs in Trophy Pacifist
+    - Modified the way Thrall incoming and outgoing damage is calculated
+	- Adrenaline builds faster and decays slower when you have thralls
+	- the Shaman heal buff shows up on your thralls as a white square in their buff bar
+	- punching, woodcutting mining could hurt mobs
+
+	- Some thralls don't uncharm and show empty charm bars
+	- After going through a portal, some thralls aren't darkened
+	- Mini map pins are not moving/updating for all thralls
+	- /showpath seems broken now for everyone
+	- night spawned thralls despawn at daytime without telling you
+	- Pacifist button on Menu gets confused
+
+v0.10.12
+- Oops! Uploaded the wrong one to Thunderstore. Version bumped to 0.10.12.
+- Added some debug instrumentation
+
 v0.10.11
 - Fixed BiomeBonus reporting to Tracker for game modes that use Biome Bonus (sorry JV!)
 - Lots of Pacifist changes
@@ -285,11 +303,12 @@ v0.10.11
   - Charm bar on charmed enemies
   - Thralls have Status Effects based on arrow type
 	- Status effects increase Thrall damage and add elemental damage
+  - Thrall buffs and debuffs appear under Thrall Charm bar
   - Better leashing of Thralls (50 meters)
   - Charm fixes
   - More aggressive/direct Thrall behavior
+  - Thralls are remembered between portals, logouts and re-loads of Valheim
 
-## Change Log
 v0.10.10
 - Bug fixes for Trophy Pacifist mode
 

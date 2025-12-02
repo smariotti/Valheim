@@ -39,7 +39,7 @@ namespace TrophyHuntMod
 
         private const Boolean UPDATE_LEADERBOARD = false; // SET TO TRUE WHEN PTB IS LIVE
 
-        public const string PluginVersion = "0.10.11";
+        public const string PluginVersion = "0.10.12";
         private readonly Harmony harmony = new Harmony(PluginGUID);
 
         // Configuration variables

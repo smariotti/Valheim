@@ -33,6 +33,8 @@ namespace TrophyHuntMod
 
         public const float PACIFIST_THRALL_PLAYER_TARGET_DISTANCE = 50.0f;
 
+        public static bool __m_showCharmList = false;
+
         public class GandrArrowData
         {
             public GandrArrowData(string arrowName, string ingredient, string name, string description, Type statusEffectType, GandrTypeIndex spriteIndex)
@@ -292,14 +294,31 @@ namespace TrophyHuntMod
 
         public static bool IsThrallArrow(string ammoName)
         {
-//            Debug.LogWarning($"[IsThrallArrow] Checking ammo name: {ammoName}");
-
             if (ammoName.ToLower().Contains("Gandr".ToLower()))
             {
                 return true;
             }
 
             return false;
+        }
+
+        [HarmonyPatch(typeof(Character), nameof(Character.RPC_Damage))]
+        public static class Character_RPC_Damage_Patch
+        {
+            public static bool Prefix(Character __instance, long sender, HitData hit)
+            {
+                if (!IsPacifist())
+                {
+                    return true;
+                }
+
+                if (hit.GetAttacker() == Player.m_localPlayer)
+                {
+                    return false;
+                }
+
+                return true;
+            }
         }
 
         [HarmonyPatch(typeof(Humanoid), nameof(Humanoid.StartAttack))]
@@ -334,8 +353,8 @@ namespace TrophyHuntMod
 
                             if (weapon.m_shared.m_skillType == SkillType.Axes ||
                                 weapon.m_shared.m_skillType == SkillType.Pickaxes ||
-                                weapon.m_shared.m_skillType == SkillType.WoodCutting ||
-                                weapon.m_shared.m_skillType == SkillType.Unarmed)
+                                weapon.m_shared.m_skillType == SkillType.WoodCutting)
+//                                weapon.m_shared.m_skillType == SkillType.Unarmed)
                             {
                                 return true;
                             }
@@ -358,6 +377,13 @@ namespace TrophyHuntMod
             public Character.Faction m_originalFaction = Character.Faction.TrainingDummy;
             public float m_swimSpeed = 2f;
             public int m_charmLevel = 1;
+        }
+        public static bool HasThrall()
+        {
+            if (!IsPacifist()) 
+                return false;
+
+            return (__m_allCharmedCharacters.Count > 0);
         }
 
         public static float GetCharmDuration()
@@ -1056,53 +1082,32 @@ namespace TrophyHuntMod
             }
         }
 
-        // Patching Charmed but unbuffed thralls to do slightly more and receive slightly less damage
-        [HarmonyPatch(typeof(SEMan), nameof(SEMan.ModifyAttack))]
-        public class SEMan_ModifyAttack_Patch
+        [HarmonyPatch(typeof(Player), nameof(Player.AddAdrenaline))]
+        public static class Player_AddAdrenaline_Patch
         {
-            public static bool Prefix(SEMan __instance, SkillType skill, ref HitData hitData)
+            public static bool Prefix(Player __instance, ref float v)
             {
-                if (IsPacifist())
+                if (!IsPacifist())
                 {
-                    if (IsCharmed(__instance.m_character) && __instance.GetStatusEffects().Count == 0)
-                    {
-                        CharmedCharacter cc = GetCharmedCharacter(__instance.m_character);
-
-                        hitData.ApplyModifier(1.0f + (cc.m_charmLevel/5));
-                    }
+                    return true;
                 }
 
+                Debug.LogWarning($"AddAdrenaline: {__instance.GetAdrenaline()}/{__instance.GetMaxAdrenaline()} + {v}");
+
+                if (HasThrall())
+                {
+                    if (v > 0)
+                    {
+                        v *= 2.0f;
+                    }
+                    else
+                    {
+                        v *= 0.5f;
+                    }
+                }
                 return true;
             }
         }
-
-        [HarmonyPatch(typeof(SEMan), nameof(SEMan.ApplyDamageMods))]
-        public class SEMan_ApplyDamageMods_Patch
-        {
-            public static bool Prefix(SEMan __instance, ref DamageModifiers mods)
-            {
-                if (IsPacifist())
-                {
-                    if (IsCharmed(__instance.m_character) && __instance.GetStatusEffects().Count == 0)
-                    {
-                        CharmedCharacter cc = GetCharmedCharacter(__instance.m_character);
-                        DamageModifier modifier = DamageModifier.Normal;
-                        if (cc.m_charmLevel > 2) modifier = DamageModifier.SlightlyResistant;
-                        if (cc.m_charmLevel > 5) modifier = DamageModifier.Resistant;
-                        if (cc.m_charmLevel > 8) modifier = DamageModifier.VeryResistant;
-
-                        List<DamageModPair> modifiers = new List<DamageModPair>();
-                        modifiers.Add(new DamageModPair() { m_type = DamageType.Damage, m_modifier = modifier });  
-                        mods.Apply(modifiers);
-                    }
-                }
-
-                return true;
-            }
-        }
-
-
-
         [HarmonyPatch(typeof(SEMan), nameof(SEMan.ModifyAdrenaline))]
         public static class SEMan_ModifyAdrenaline_Patch
         {
@@ -1180,6 +1185,68 @@ namespace TrophyHuntMod
             }
         }
 
+        public static void ScaleThrallIncomingDamage(Character me, ref HitData hit, float charmLevel = 1f, float adrenalineScalar = 0.5f, float damageReceivedModifier = 1.0f)
+        {
+                            Debug.Log($"{me.GetHoverName()} Incoming Pre Damage: {hit.m_damage}");
+            hit.m_damage.Modify((1.0f / Math.Max(1, charmLevel / 2 + adrenalineScalar)) * damageReceivedModifier);
+                            Debug.Log($"{me.GetHoverName()} Incoming Post Damage :{hit.m_damage} (CharmLevel: {charmLevel} Adrenaline Scalar: {adrenalineScalar} recievedModifier: {damageReceivedModifier}");
+        }
+
+        public static void ScaleThrallOutgoingDamage(ref HitData hit, float charmLevel = 1f, float adrenalineScalar = 0.5f, float damageInflictedModifier = 1.0f)
+        {
+                            Debug.Log($"{hit.GetAttacker().GetHoverName()} Attack Pre Damage: {hit.m_damage}");
+            hit.m_damage.Modify((Math.Max(1, charmLevel / 2 + adrenalineScalar)) * damageInflictedModifier);
+                            Debug.Log($"{hit.GetAttacker().GetHoverName()} Attack Post Damage: {hit.m_damage} (CharmLevel: {charmLevel} Adrenaline Scalar: {adrenalineScalar} inflictedModifier: {damageInflictedModifier}");
+
+        }
+
+        [HarmonyPatch(typeof(Attack), nameof(Attack.ModifyDamage))]
+        public class Attack_ModifyDamage_Patch
+        {
+            public static bool Prefix(Attack __instance, HitData hitData, float damageFactor)
+            {
+                Character me = __instance.m_character;
+                if (IsPacifist())
+                {
+                    if (IsCharmed(me) && me?.m_seman.GetStatusEffects().Count == 0)
+                    {
+                        CharmedCharacter cc = GetCharmedCharacter(me);
+                        if (cc != null)
+                        {
+                            Debug.Log($"Unbuffed thrall {me.GetHoverName()}");
+                            float adrenaline = Player.m_localPlayer.GetAdrenaline() / Player.m_localPlayer.GetMaxAdrenaline();
+                            ScaleThrallOutgoingDamage(ref hitData, cc.m_charmLevel, adrenaline, DEFAULT_THRALL_OUTGOING_DAMAGE_SCALAR);
+                        }
+                    }
+                }
+                return true;
+            }
+        }
+
+        [HarmonyPatch(typeof(Character), nameof(Character.Damage))]
+        public class Character_Damage_Patch
+        {
+            public static bool Prefix(Character __instance, HitData hit)
+            {
+                if (IsPacifist())
+                {
+                    if (IsCharmed(__instance) && __instance?.m_seman.GetStatusEffects().Count == 0)
+                    {
+                        CharmedCharacter cc = GetCharmedCharacter(__instance);
+                        if (cc != null)
+                        {
+                            Debug.Log($"Unbuffed thrall {__instance.GetHoverName()}");
+                            float adrenaline = Player.m_localPlayer.GetAdrenaline() / Player.m_localPlayer.GetMaxAdrenaline();
+                            ScaleThrallIncomingDamage(__instance, ref hit, cc.m_charmLevel, adrenaline, DEFAULT_THRALL_INCOMING_DAMAGE_SCALAR);
+                        }
+                    }
+                }
+                return true;
+            }
+        }
+
+
+
         public class GandrSEData
         {
             public GandrSEData(Type type, float inflited, float received, float typedDamage, string name)
@@ -1198,20 +1265,23 @@ namespace TrophyHuntMod
             public string m_name;
         }
 
+        public const float DEFAULT_THRALL_INCOMING_DAMAGE_SCALAR = 0.7f;
+        public const float DEFAULT_THRALL_OUTGOING_DAMAGE_SCALAR = 1.1f;
+
         public static GandrSEData[] __m_gandrSEData = new GandrSEData[]
         {
             //                                   inflicted   received  typedDamage   name
-            new GandrSEData(typeof(SE_GandrFlint),      1.10f,  1.10f,   0.50f,    "Flint Gandr" ),  // Flint
-            new GandrSEData(typeof(SE_GandrFire),       1.20f,  1.20f,   0.60f,    "Fire Gandr" ),  // Fire
-            new GandrSEData(typeof(SE_GandrBronze),     1.30f,  1.30f,   0.70f,    "Bronze Gandr"  ),    // Bronze
-            new GandrSEData(typeof(SE_GandrPoison),     1.40f,  1.40f,   0.80f,    "Poison Gandr"  ),    // Poison
-            new GandrSEData(typeof(SE_GandrIron),       1.50f,  1.50f,   0.90f,    "Iron Gandr"  ),  // Iron
-            new GandrSEData(typeof(SE_GandrFrost),      1.60f,  1.60f,   1.00f,    "Frost Gandr"  ),    // Frost
-            new GandrSEData(typeof(SE_GandrObsidian),   1.70f,  1.70f,   1.10f,    "Glass Gandr"  ),   // Obsidian
-            new GandrSEData(typeof(SE_GandrSilver),     1.80f,  1.80f,   1.20f,    "Silver Gandr"  ), // Silver
-            new GandrSEData(typeof(SE_GandrNeedle),     1.90f,  1.90f,   1.30f,    "Needle Gandr"  ),   // Needle
-            new GandrSEData(typeof(SE_GandrCarapace),   2.00f,  2.00f,   1.40f,    "Bug Gandr"  ),   // Carapace
-            new GandrSEData(typeof(SE_GandrCharred),    2.50f,  2.50f,   1.50f,    "Charred Gandr"  ),   // Charred
+            new GandrSEData(typeof(SE_GandrFlint),      1.10f,  0.70f,   0.50f,    "Flint Gandr" ),  // Flint
+            new GandrSEData(typeof(SE_GandrFire),       1.20f,  0.65f,   0.60f,    "Fire Gandr" ),  // Fire
+            new GandrSEData(typeof(SE_GandrBronze),     1.30f,  0.60f,   0.70f,    "Bronze Gandr"  ),    // Bronze
+            new GandrSEData(typeof(SE_GandrPoison),     1.40f,  0.55f,   0.80f,    "Poison Gandr"  ),    // Poison
+            new GandrSEData(typeof(SE_GandrIron),       1.50f,  0.50f,   0.90f,    "Iron Gandr"  ),  // Iron
+            new GandrSEData(typeof(SE_GandrFrost),      1.60f,  0.45f,   1.00f,    "Frost Gandr"  ),    // Frost
+            new GandrSEData(typeof(SE_GandrObsidian),   1.70f,  0.40f,   1.10f,    "Glass Gandr"  ),   // Obsidian
+            new GandrSEData(typeof(SE_GandrSilver),     1.80f,  0.35f,   1.20f,    "Silver Gandr"  ), // Silver
+            new GandrSEData(typeof(SE_GandrNeedle),     1.90f,  0.30f,   1.30f,    "Needle Gandr"  ),   // Needle
+            new GandrSEData(typeof(SE_GandrCarapace),   2.00f,  0.25f,   1.40f,    "Bug Gandr"  ),   // Carapace
+            new GandrSEData(typeof(SE_GandrCharred),    2.50f,  0.20f,   1.50f,    "Charred Gandr"  ),   // Charred
         };
 
 
@@ -1220,6 +1290,7 @@ namespace TrophyHuntMod
             public float m_adrenalineScalar = 0.0f;
             public float m_baseDamageInflictedModifier = 1.0f;
             public float m_baseDamageReceivedModifier = 1.2f;
+            public float m_baseTypedDamageModifier = 0.5f;
             public float m_charmLevel = 1.0f;
             public GandrSEData m_seData = null;
 
@@ -1241,6 +1312,7 @@ namespace TrophyHuntMod
                 {
                     m_baseDamageInflictedModifier = seData.m_inflicted;
                     m_baseDamageReceivedModifier = seData.m_received;
+                    m_baseTypedDamageModifier = seData.m_typedDamage;
 
                     m_name = seData.m_name;
                     m_nameHash = m_name.GetStableHashCode();
@@ -1266,26 +1338,20 @@ namespace TrophyHuntMod
                 {
                     m_adrenalineScalar = 0.0f;
                 }
-
-//                Debug.LogWarning($"GandrEffect UpdateStatusEffect called. AdrenalineScalar: {m_adrenalineScalar}");
             }
 
             public override void ModifyAttack(Skills.SkillType skill, ref HitData hitData)
             {
-//                Debug.Log($"{m_character.GetHoverName()} Modifiers: {m_percentigeDamageModifiers}");
-//                Debug.Log($"{m_character.GetHoverName()} Attack Pre Damage: {hitData.m_damage}");
                 HitData.DamageTypes dt = m_percentigeDamageModifiers;
 
+                // Add damage typed damage
                 float largestDamage = 0.0f;
                 hitData.m_damage.GetMajorityDamageType(out largestDamage);
-                dt.Modify(largestDamage);
-//                Debug.Log($"{m_character.GetHoverName()} Scaled Modifiers: {m_percentigeDamageModifiers}");
+                dt.Modify(largestDamage * m_baseTypedDamageModifier);
                 hitData.m_damage.Add(dt);
 
-                hitData.m_damage.Modify((Math.Max(1, m_charmLevel/2 + m_adrenalineScalar)) * m_baseDamageInflictedModifier);
-
-//                Debug.Log($"{m_character.GetHoverName()} Attack Post Damage: {hitData.m_damage} (CharmLevel: {m_charmLevel} Adrenaline Scalar: {m_adrenalineScalar} inflictedModifier: {m_baseDamageInflictedModifier}");
-
+                ScaleThrallOutgoingDamage(ref hitData, m_charmLevel, m_adrenalineModifier, m_baseDamageInflictedModifier);
+                                
                 base.ModifyAttack(skill, ref hitData);
             }
 
@@ -1293,17 +1359,8 @@ namespace TrophyHuntMod
             {
                 base.OnDamaged(hit, attacker);
 
-//                Debug.Log($"{m_character.GetHoverName()} Incoming Pre Damage: {hit.m_damage}");
-                hit.m_damage.Modify(1 / ((Math.Max(1, m_charmLevel/2 + m_adrenalineScalar)) * m_baseDamageReceivedModifier));
-//                Debug.Log($"{m_character.GetHoverName()} Incoming Post Damage :{hit.m_damage} (CharmLevel: {m_charmLevel} Adrenaline Scalar: {m_adrenalineScalar} recievedModifier: {m_baseDamageReceivedModifier}");
+                ScaleThrallIncomingDamage(m_character, ref hit, m_charmLevel, m_adrenalineScalar, m_baseDamageReceivedModifier);
             }
-
-            //public override void ModifyAdrenaline(float baseValue, ref float use)
-            //{
-            //    use = baseValue * 100.0f;
-
-            //    base.ModifyAdrenaline(baseValue, ref use);
-            //}
 
             public override void Stop()
             {
@@ -1478,6 +1535,9 @@ namespace TrophyHuntMod
                         // For each sprite in the sprite list, set up a hud icon and position it
                         foreach (var se in statusEffectList)
                         {
+                            if (se.m_icon == null)
+                                continue;
+
                             GameObject iconElement = enemyHudElements[iconElementIndex];
 
                             iconElement.gameObject.SetActive(true);
@@ -1513,7 +1573,7 @@ namespace TrophyHuntMod
             }
         }
 
-        public static int MAX_NUM_CHARM_ICONS = 13;
+        public static int MAX_NUM_CHARM_ICONS = 16;
 
         public static void CreateCharmIconsInMasterHud(Transform parentTransform)
         {
@@ -1672,6 +1732,25 @@ namespace TrophyHuntMod
                 }
             }
             return null;
+        }
+
+        public static void ReleaseAllThralls()
+        {
+            for (int i = __m_allCharmedCharacters.Count-1; i >= 0; i--)
+            {
+                CharmedCharacter cc = __m_allCharmedCharacters[i]; 
+                SetUncharmedState(cc);
+                RemoveGUIDFromCharmedList(cc.m_charmGUID);
+            }
+        }
+
+        public static void SetCharmLevel(int charmLevel)
+        {
+            for (int i = __m_allCharmedCharacters.Count - 1; i >= 0; i--)
+            {
+                CharmedCharacter cc = __m_allCharmedCharacters[i];
+                cc.m_charmLevel = charmLevel;
+            }
         }
 
         /*
