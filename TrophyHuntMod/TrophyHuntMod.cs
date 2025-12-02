@@ -2977,6 +2977,9 @@ namespace TrophyHuntMod
                         // Update Trophy cache
                         __m_trophyCache = player.GetTrophies();
 
+                        // log the trophy event prior to any bonuses
+                        AddPlayerEvent(PlayerEventType.Trophy, name, player.transform.position);
+
                         if (GetGameMode() == TrophyGameMode.TrophyRush || GetGameMode() == TrophyGameMode.TrophyBlitz || GetGameMode() == TrophyGameMode.TrophyTrailblazer || GetGameMode() == TrophyGameMode.TrophyPacifist)
                         {
                             // Did we complete a biome bonus with this trophy?
@@ -3006,8 +3009,6 @@ namespace TrophyHuntMod
                         }
 
                         UpdateModUI(player);
-
-                        AddPlayerEvent(PlayerEventType.Trophy, name, player.transform.position);
 
                         AddTrophyPin(player.transform.position, name);
 
