@@ -35,6 +35,7 @@ namespace TrophyHuntMod
 
         public static bool __m_showCharmList = false;
 
+        public static Color __m_pinkColor = new Color(0.95f, 0.53f, 0.77f);
         public class GandrArrowData
         {
             public GandrArrowData(string arrowName, string ingredient, string name, string description, Type statusEffectType, GandrTypeIndex spriteIndex)
@@ -436,39 +437,6 @@ namespace TrophyHuntMod
             return null;
         }
 
-        //[HarmonyPatch(typeof(ZNetView), nameof(ZNetView.Awake))]
-        //public static class ZNetView_Awake_Patch
-        //{
-        //    public static void Postfix(ZNetView __instance)
-        //    {
-        //        if (!IsPacifist())
-        //        {
-        //            return;
-        //        }
-
-        //        Character character = __instance.GetComponent<Character>();
-        //        if (character == null)
-        //        {
-        //            return;
-        //        }
-
-        //        Guid cGUID = GetGUIDFromCharacter(character);
-        //        CharmedCharacter guy = __m_allCharmedCharacters.Find(c => c.m_charmGUID == cGUID);
-        //        if (guy != null)
-        //        {
-        //            if (guy != null)
-        //            {
-        //                Debug.LogWarning($"ZNetView.Awake(): re-charming {__instance.GetComponent<Character>().name} {guy.m_charmGUID}");
-        //                SetCharmedState(guy);
-        //            }
-        //            else
-        //            {
-        //                Debug.LogError($"ZNetView.Awake(): Unable to re-charm {__instance.GetComponent<Character>().name} {cGUID}");
-        //            }
-        //        }
-        //    }
-        //}
-
         public static void SetNonTrinketAdrenaline()
         {
             if (Player.m_localPlayer?.m_trinketItem != null)
@@ -545,6 +513,12 @@ namespace TrophyHuntMod
             SetCharmedState(cc);
         }
 
+        public static void RemoveFromCharmedList(CharmedCharacter cc)
+        {
+            if (cc == null) return;
+
+            RemoveGUIDFromCharmedList(cc.m_charmGUID);
+        }
         public static void RemoveFromCharmedList(Character enemy)
         {
             if (enemy == null)
@@ -632,6 +606,8 @@ namespace TrophyHuntMod
                     monsterAI.SetTargetInfo(ZDOID.None);
                     monsterAI.SetAlerted(true);
 
+                    monsterAI.SetDespawnInDay(false);
+
 //                    Debug.Log($"Swim ({enemy.m_canSwim}) Depth: {enemy.m_swimDepth} Water level: {enemy.m_waterLevel}");
                 }
             }
@@ -686,11 +662,6 @@ namespace TrophyHuntMod
                 {
 //                    Debug.LogWarning($"MonsterAI.Awake(): re-charming {__instance.m_character.name} {guy.m_charmGUID}");
                     SetCharmedState(guy);
-                }
-                else
-                {
-//                    Debug.LogError($"MonsterAI.Awake(): Unable to re-charm {__instance.m_character.name} {cGUID}");
-
                 }
             }
         }
@@ -775,6 +746,8 @@ namespace TrophyHuntMod
                     if (target)
                     {
                         cc.m_pin = Minimap.instance.AddPin(target.transform.position, Minimap.PinType.Icon3, "", false, false);
+
+                        DarkenThrall(target);
                     }
                 }
 
@@ -796,7 +769,7 @@ namespace TrophyHuntMod
                         Debug.LogWarning($"Target to uncharm not found for Guid {toRemove.m_charmGUID.ToString()}");
                     }
 
-                    RemoveFromCharmedList(target);
+                    RemoveFromCharmedList(toRemove);
 //                    __m_allCharmedCharacters.Remove(toRemove);
                 }
 
@@ -804,18 +777,40 @@ namespace TrophyHuntMod
             }
         }
 
-        private static void AddCharmEffect(Character target, bool particleEffect = true)
+        public static void DarkenThrall(Character target)
         {
-            // Simple visual cue — give the charmed enemy a blue tint glow
             Renderer[] renderers = target.GetComponentsInChildren<Renderer>();
             foreach (var r in renderers)
             {
                 foreach (var mat in r.materials)
                 {
                     if (mat.HasProperty("_Color"))
+                    {
                         mat.color = new Color(0.0f, 0f, 0f, 1f);
+                    }
                 }
             }
+        }
+
+        public static void LightenThrall(Character target)
+        {
+            // Reset color
+            Renderer[] renderers = target.GetComponentsInChildren<Renderer>();
+            foreach (var r in renderers)
+            {
+                foreach (var mat in r.materials)
+                {
+                    if (mat.HasProperty("_Color"))
+                    {
+                        mat.color = Color.white;
+                    }
+                }
+            }
+        }
+
+        public static void AddCharmEffect(Character target, bool particleEffect = true)
+        {
+            DarkenThrall(target);
 
             if (particleEffect)
             {
@@ -826,12 +821,13 @@ namespace TrophyHuntMod
                 {
                     //                Debug.LogWarning($"[heartVFX] {heartVFX.name}");
 
-                    var fx = UnityEngine.Object.Instantiate(heartVFX, target.transform.position, Quaternion.identity);
+                    GameObject fx = UnityEngine.Object.Instantiate(heartVFX, target.transform.position, Quaternion.identity);
                     var ps = fx.GetComponentInChildren<ParticleSystem>();
                     if (ps != null)
                     {
-                        var main = ps.main;
-                        main.startColor = new ParticleSystem.MinMaxGradient(new Color(1f, 0.5f, 0.7f, 1f));
+                        ps.Stop();
+                        ParticleSystem.MainModule main = ps.main;
+                        main.startColor = new ParticleSystem.MinMaxGradient(__m_pinkColor);
                         ps.Play();
                     }
                 }
@@ -844,19 +840,7 @@ namespace TrophyHuntMod
 
         private static void RemoveCharmEffect(Character target)
         {
-            // Reset color
-            Renderer[] renderers = target.GetComponentsInChildren<Renderer>();
-            foreach (var r in renderers)
-            {
-                foreach (var mat in r.materials)
-                {
-                    if (mat.HasProperty("_Color"))
-                        mat.color = Color.white;
-                }
-            }
-
-            //            Debug.LogWarning($"{target?.name} is no longer doing your bidding.");
-
+            LightenThrall(target);
         }
 
         [HarmonyPatch(typeof(Projectile), nameof(Projectile.OnHit))]
@@ -925,7 +909,7 @@ namespace TrophyHuntMod
                     Character hitChar = obj.GetComponent<Character>();
                     if (hitChar == null || hitChar.IsPlayer() || hitChar.IsDead())
                     {
-                        Debug.LogWarning($"Invalid hit char.");
+//                        Debug.LogWarning($"Invalid hit char.");
 
                         return;
                     }
@@ -1005,10 +989,13 @@ namespace TrophyHuntMod
                 // make station type and level requirements stay the same as vanilla
                 //
                 vanillaRecipe.m_item = itemDrop;
-                vanillaRecipe.m_amount = 100;
+                vanillaRecipe.m_amount = 20;
                 vanillaRecipe.m_enabled = true;
-                vanillaRecipe.m_craftingStation = null;
-                vanillaRecipe.m_minStationLevel = 0;
+                if (prefabName == "ArrowWood")
+                {
+                    vanillaRecipe.m_craftingStation = null;
+                    vanillaRecipe.m_minStationLevel = 0;
+                }
                 vanillaRecipe.m_resources = new Piece.Requirement[] {
                         new Piece.Requirement()
                         {
@@ -1092,7 +1079,7 @@ namespace TrophyHuntMod
                     return true;
                 }
 
-                Debug.LogWarning($"AddAdrenaline: {__instance.GetAdrenaline()}/{__instance.GetMaxAdrenaline()} + {v}");
+//                Debug.LogWarning($"AddAdrenaline: {__instance.GetAdrenaline()}/{__instance.GetMaxAdrenaline()} + {v}");
 
                 if (HasThrall())
                 {
@@ -1187,16 +1174,16 @@ namespace TrophyHuntMod
 
         public static void ScaleThrallIncomingDamage(Character me, ref HitData hit, float charmLevel = 1f, float adrenalineScalar = 0.5f, float damageReceivedModifier = 1.0f)
         {
-                            Debug.Log($"{me.GetHoverName()} Incoming Pre Damage: {hit.m_damage}");
+//                            Debug.Log($"{me.GetHoverName()} Incoming Pre Damage: {hit.m_damage}");
             hit.m_damage.Modify((1.0f / Math.Max(1, charmLevel / 2 + adrenalineScalar)) * damageReceivedModifier);
-                            Debug.Log($"{me.GetHoverName()} Incoming Post Damage :{hit.m_damage} (CharmLevel: {charmLevel} Adrenaline Scalar: {adrenalineScalar} recievedModifier: {damageReceivedModifier}");
+//                            Debug.Log($"{me.GetHoverName()} Incoming Post Damage :{hit.m_damage} (CharmLevel: {charmLevel} Adrenaline Scalar: {adrenalineScalar} recievedModifier: {damageReceivedModifier}");
         }
 
         public static void ScaleThrallOutgoingDamage(ref HitData hit, float charmLevel = 1f, float adrenalineScalar = 0.5f, float damageInflictedModifier = 1.0f)
         {
-                            Debug.Log($"{hit.GetAttacker().GetHoverName()} Attack Pre Damage: {hit.m_damage}");
+ //                           Debug.Log($"{hit.GetAttacker().GetHoverName()} Attack Pre Damage: {hit.m_damage}");
             hit.m_damage.Modify((Math.Max(1, charmLevel / 2 + adrenalineScalar)) * damageInflictedModifier);
-                            Debug.Log($"{hit.GetAttacker().GetHoverName()} Attack Post Damage: {hit.m_damage} (CharmLevel: {charmLevel} Adrenaline Scalar: {adrenalineScalar} inflictedModifier: {damageInflictedModifier}");
+ //                           Debug.Log($"{hit.GetAttacker().GetHoverName()} Attack Post Damage: {hit.m_damage} (CharmLevel: {charmLevel} Adrenaline Scalar: {adrenalineScalar} inflictedModifier: {damageInflictedModifier}");
 
         }
 
@@ -1213,7 +1200,7 @@ namespace TrophyHuntMod
                         CharmedCharacter cc = GetCharmedCharacter(me);
                         if (cc != null)
                         {
-                            Debug.Log($"Unbuffed thrall {me.GetHoverName()}");
+//                            Debug.Log($"Unbuffed thrall {me.GetHoverName()}");
                             float adrenaline = Player.m_localPlayer.GetAdrenaline() / Player.m_localPlayer.GetMaxAdrenaline();
                             ScaleThrallOutgoingDamage(ref hitData, cc.m_charmLevel, adrenaline, DEFAULT_THRALL_OUTGOING_DAMAGE_SCALAR);
                         }
@@ -1235,7 +1222,7 @@ namespace TrophyHuntMod
                         CharmedCharacter cc = GetCharmedCharacter(__instance);
                         if (cc != null)
                         {
-                            Debug.Log($"Unbuffed thrall {__instance.GetHoverName()}");
+//                            Debug.Log($"Unbuffed thrall {__instance.GetHoverName()}");
                             float adrenaline = Player.m_localPlayer.GetAdrenaline() / Player.m_localPlayer.GetMaxAdrenaline();
                             ScaleThrallIncomingDamage(__instance, ref hit, cc.m_charmLevel, adrenaline, DEFAULT_THRALL_INCOMING_DAMAGE_SCALAR);
                         }
@@ -1563,7 +1550,7 @@ namespace TrophyHuntMod
                         //                        Debug.Log($"Bar {c.name} {remainingTime}/{GetCharmDuration()} {charmBar.m_value}/{charmBar.m_maxValue}\n  wid:{charmBar.m_width} smoothVal:{charmBar.m_smoothValue} smoothSpeed:{charmBar.m_smoothSpeed}");
                         charmBar.SetWidth(100.0f);
                         charmBar.SetValue(remainingTime / GetCharmDuration());
-                        charmBar.SetColor(new Color((float)0xF3 / 255f, (float)0x87 / 255f, (float)0xC5 / 255f));
+                        charmBar.SetColor(__m_pinkColor);
 
                         GameObject textElement = data.m_gui.transform.Find($"Charm/CharmLevelText").gameObject;
                         TextMeshProUGUI tm = textElement.GetComponent<TextMeshProUGUI>();

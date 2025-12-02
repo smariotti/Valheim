@@ -275,18 +275,23 @@ You can find the github at: https://github.com/smariotti/Valheim/tree/master/Tro
 
 ## Change Log
 v0.10.13
+- Fixed `/showpath` command, which I somehow completely removed from the command list
+- Added score update after biome bonus calculation and data-send to tracker
 - Fixed numerous bugs in Trophy Pacifist
-    - Modified the way Thrall incoming and outgoing damage is calculated
-	- Adrenaline builds faster and decays slower when you have thralls
-	- the Shaman heal buff shows up on your thralls as a white square in their buff bar
-	- punching, woodcutting mining could hurt mobs
-
-	- Some thralls don't uncharm and show empty charm bars
-	- After going through a portal, some thralls aren't darkened
-	- Mini map pins are not moving/updating for all thralls
-	- /showpath seems broken now for everyone
-	- night spawned thralls despawn at daytime without telling you
-	- Pacifist button on Menu gets confused
+  - Only Wood Arrows are craftable in-inventory, all other arrows require their Vanilla workbench and level
+	- All arrows still require only one ingredient, their main ingredient
+  - Reduced arrows-per material from 100 to 20 when making Gandr arrows
+  - Modified the way Thrall incoming and outgoing damage is calculated
+	- Thralls are tankier, but also do less damage unless leveled up
+  - Adrenaline builds faster and decays slower when you have thralls
+  - the Shaman heal buff shows up on your thralls as a white square in their buff bar
+  - punching, woodcutting mining could hurt mobs
+  - Some thralls don't uncharm and show empty charm bars
+  - After going through a portal, some thralls aren't darkened
+  - night spawned thralls despawn at daytime without telling you
+  - Pacifist button on Menu gets confused with colors after logout
+- TODO:
+	- Mini map pins are not moving/updating for all thralls (no repro)
 
 v0.10.12
 - Oops! Uploaded the wrong one to Thunderstore. Version bumped to 0.10.12.

@@ -39,7 +39,7 @@ namespace TrophyHuntMod
 
         private const Boolean UPDATE_LEADERBOARD = false; // SET TO TRUE WHEN PTB IS LIVE
 
-        public const string PluginVersion = "0.10.12";
+        public const string PluginVersion = "0.10.13";
         private readonly Harmony harmony = new Harmony(PluginGUID);
 
         // Configuration variables
@@ -2977,6 +2977,12 @@ namespace TrophyHuntMod
                         // Update Trophy cache
                         __m_trophyCache = player.GetTrophies();
 
+                        UpdateModUI(player);
+
+                        AddPlayerEvent(PlayerEventType.Trophy, name, player.transform.position);
+
+                        AddTrophyPin(player.transform.position, name);
+
                         if (GetGameMode() == TrophyGameMode.TrophyRush || GetGameMode() == TrophyGameMode.TrophyBlitz || GetGameMode() == TrophyGameMode.TrophyTrailblazer || GetGameMode() == TrophyGameMode.TrophyPacifist)
                         {
                             // Did we complete a biome bonus with this trophy?
@@ -2986,6 +2992,7 @@ namespace TrophyHuntMod
                                 MessageHud.instance.ShowBiomeFoundMsg("Biome Bonus", playStinger: true);
 
                                 string bonusString = "Bonus" + biome.ToString();
+                                UpdateModUI(Player.m_localPlayer);
                                 AddPlayerEvent(PlayerEventType.Misc, bonusString, __instance.transform.position);
                                 Debug.LogError("BIOME BONUS: " + bonusString);
                                 player.Message(MessageHud.MessageType.TopLeft, "Biome Bonus: " + biome.ToString());
@@ -2999,17 +3006,12 @@ namespace TrophyHuntMod
                             {
                                 MessageHud.instance.ShowBiomeFoundMsg("Odin is Pleased", playStinger: true);
                                 string bonusString = "BonusAll";
+                                CalculateExtraTimeScore();
+                                UpdateModUI(Player.m_localPlayer);
                                 AddPlayerEvent(PlayerEventType.Misc, bonusString, __instance.transform.position);
                                 __m_completedAllBiomeBonuses = true;
-                                CalculateExtraTimeScore();
                             }
                         }
-
-                        UpdateModUI(player);
-
-                        AddPlayerEvent(PlayerEventType.Trophy, name, player.transform.position);
-
-                        AddTrophyPin(player.transform.position, name);
 
                         if (MessageHud.instance)
                         {
@@ -5447,10 +5449,6 @@ namespace TrophyHuntMod
             // Add an Image component for the button background
             UnityEngine.UI.Image image = togglePacifistButton.AddComponent<UnityEngine.UI.Image>();
             image.color = new Color(0.25f, 0.25f, 0.25f); // Set background color
-            if (IsPacifist())
-            {
-                image.color = Color.green; // Set background color
-            }
 
             // Create a sub-object for the text because the GameObject can't have an Image and a Text object
             GameObject textObject = new GameObject("TogglePacifistButtonText");
