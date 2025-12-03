@@ -274,6 +274,9 @@ You can find the github at: https://github.com/smariotti/Valheim/tree/master/Tro
 
 
 ## Change Log
+v0.10.14
+- Minor fix for presenting trophy, biome and all-biome bonus data to the backend in proper order
+
 v0.10.13
 - Fixed `/showpath` command, which I somehow completely removed from the command list
 - Added score update after biome bonus calculation and data-send to tracker
@@ -291,7 +294,7 @@ v0.10.13
   - night spawned thralls despawn at daytime without telling you
   - Pacifist button on Menu gets confused with colors after logout
 - TODO:
-	- Mini map pins are not moving/updating for all thralls (no repro)
+	- Mini map pins are not moving/up dating for all thralls (no repro)
 
 v0.10.12
 - Oops! Uploaded the wrong one to Thunderstore. Version bumped to 0.10.12.

@@ -19,14 +19,6 @@ using System.Xml.Serialization;
 using BepInEx.Configuration;
 using Newtonsoft.Json;
 using System.Net.Http;
-using static UnityEngine.EventSystems.EventTrigger;
-using static UnityEngine.GraphicsBuffer;
-using UnityEngine.Assertions;
-using System.Security.Policy;
-using Newtonsoft.Json.Linq;
-using System.ComponentModel;
-using static TrophyHuntMod.TrophyHuntMod;
-using System.Runtime.InteropServices.WindowsRuntime;
 
 namespace TrophyHuntMod
 {
@@ -39,7 +31,7 @@ namespace TrophyHuntMod
 
         private const Boolean UPDATE_LEADERBOARD = false; // SET TO TRUE WHEN PTB IS LIVE
 
-        public const string PluginVersion = "0.10.13";
+        public const string PluginVersion = "0.10.14";
         private readonly Harmony harmony = new Harmony(PluginGUID);
 
         // Configuration variables
@@ -536,6 +528,15 @@ namespace TrophyHuntMod
         static List<Biome> __m_completedBiomeBonuses = new List<Biome>();
         static bool __m_completedAllBiomeBonuses = false;
         static int ALL_BIOME_BONUS_SCORE = 50;
+
+        void DoStackCrawl() 
+        {
+            System.Diagnostics.StackTrace st = new System.Diagnostics.StackTrace(true); // true to capture file and line info
+            foreach (System.Diagnostics.StackFrame sf in st.GetFrames())
+            {
+                Debug.LogWarning($" Method: {sf.GetMethod().Name}, File: {sf.GetFileName()}, Line: {sf.GetFileLineNumber()}");
+            }
+        }
 
         //
         // SAVE DATA SECTION
@@ -3010,9 +3011,9 @@ namespace TrophyHuntMod
                                 {
                                     CalculateExtraTimeScore();
                                 }
+                                __m_completedAllBiomeBonuses = true;
                                 UpdateModUI(Player.m_localPlayer);
                                 AddPlayerEvent(PlayerEventType.Misc, bonusString, __instance.transform.position);
-                                __m_completedAllBiomeBonuses = true;
                             }
                         }
 
@@ -4863,6 +4864,9 @@ namespace TrophyHuntMod
 
         public static void ConvertMetal(ref ItemDrop.ItemData itemData)
         {
+            if (!IsSagaMode() || !__m_instaSmelt)
+                return;
+
             if (itemData == null)
                 return;
 
@@ -5019,11 +5023,13 @@ namespace TrophyHuntMod
             static void Prefix(Inventory __instance, ref ItemDrop.ItemData item, bool __result)
             {
                 //            Debug.LogWarning($"Inventory.AddItem() {item.m_dropPrefab.name}");
-
-                if (__instance != null && Player.m_localPlayer != null
-                    && __instance == Player.m_localPlayer.GetInventory())
+                if (IsSagaMode() && __m_instaSmelt)
                 {
-                    ConvertMetalOresIfNecessary(ref item);
+                    if (__instance != null && Player.m_localPlayer != null
+                        && __instance == Player.m_localPlayer.GetInventory())
+                    {
+                        ConvertMetalOresIfNecessary(ref item);
+                    }
                 }
             }
         }
@@ -5219,7 +5225,6 @@ namespace TrophyHuntMod
                 {
                     //                    Debug.LogWarning($"Inventory.CanAddItem() {item.m_dropPrefab.name}");
 
-
                     if (IsSagaMode())
                     {
                         // Item successfully added to inventory
@@ -5258,7 +5263,7 @@ namespace TrophyHuntMod
             // Used in Trophy Saga to auto-convert metals on pickup
             static void Prefix(Humanoid __instance, GameObject go, bool autoequip, bool autoPickupDelay, bool __result)
             {
-                // Before pickup occurs, see if it's auto-smeltable ore and convert it
+                // Before pickup occurs, see if it's auto-smeltable ore and convert it^
                 if (__instance == null || __instance != Player.m_localPlayer)
                 {
                     return;
@@ -5771,7 +5776,7 @@ namespace TrophyHuntMod
 
         private static void RevealBoss(string bossCharacterId)
         {
-            Debug.Log("RevealBoss: " + bossCharacterId);
+//            Debug.Log("RevealBoss: " + bossCharacterId);
             BossDetails foundDetails = __m_bossNames.FirstOrDefault<BossDetails>(t => t.m_bossCharacterId == bossCharacterId);
             if (foundDetails == default)
             {
@@ -5780,7 +5785,7 @@ namespace TrophyHuntMod
                 return;
             }
 
-            Debug.Log("RevealBoss: Found details for " + foundDetails.m_bossName + " at " + foundDetails.m_bossLocationName + " with id" + foundDetails.m_bossCharacterId);
+//            Debug.Log("RevealBoss: Found details for " + foundDetails.m_bossName + " at " + foundDetails.m_bossLocationName + " with id" + foundDetails.m_bossCharacterId);
 
             RevealByName(foundDetails.m_bossLocationName, foundDetails.m_bossName, Minimap.PinType.Boss, 500);
         }
@@ -5950,7 +5955,7 @@ namespace TrophyHuntMod
                     {
                         __instance.m_delay = 9.0f;
 
-                        Debug.LogError("SE_Cozy_Setup_Patch: StatusEffect: " + __instance.m_statusEffect);
+//                        Debug.LogError("SE_Cozy_Setup_Patch: StatusEffect: " + __instance.m_statusEffect);
                     }
                 }
             }
@@ -6242,7 +6247,7 @@ namespace TrophyHuntMod
                 }
             }
 
-            Debug.LogWarning($"AddPlayerEvent() Logging Event: {eventType.ToString()}, {eventName}, {eventPos}");
+//            Debug.LogWarning($"AddPlayerEvent() Logging Event: {eventType.ToString()}, {eventName}, {eventPos}");
 
             // Add the event to our internal tracking log
             __m_playerEventLog.Add(new PlayerEventLog(eventType, eventName, eventPos, DateTime.UtcNow));
@@ -6406,7 +6411,7 @@ namespace TrophyHuntMod
 
             string json = JsonConvert.SerializeObject(entry);
 
-            Debug.LogWarning($"PostTrackLogEntry: {json}");
+//            Debug.LogWarning($"PostTrackLogEntry: {json}");
 
             string url = "https://valheim.help/api/track/log";
 
