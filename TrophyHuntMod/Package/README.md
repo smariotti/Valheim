@@ -274,6 +274,9 @@ You can find the github at: https://github.com/smariotti/Valheim/tree/master/Tro
 
 
 ## Change Log
+v0.10.15
+- Fix for score display update when calculating end of game all-biome bonus and time-remaining bonuses
+
 v0.10.14
 - Minor fix for presenting trophy, biome and all-biome bonus data to the backend in proper order
 
