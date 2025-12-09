@@ -55,6 +55,9 @@
     <Reference Include="Newtonsoft.Json">
       <HintPath>..\Libs\Newtonsoft.Json.dll</HintPath>
     </Reference>
+    <Reference Include="SoftReferenceableAssets_publicized">
+      <HintPath>..\Libs\SoftReferenceableAssets_publicized.dll</HintPath>
+    </Reference>
     <Reference Include="Splatform">
       <HintPath>..\Libs\Splatform.dll</HintPath>
     </Reference>

@@ -1740,6 +1740,309 @@ namespace TrophyHuntMod
             }
         }
 
+
+        // Spawn Density
+        //
+
+        [HarmonyPatch(typeof(ZoneSystem), "SetupLocations")]
+        public static class ZoneSystem_SetupLocations_Patch
+        {
+            public static void Postfix(ZoneSystem __instance)
+            {
+                if (!IsPacifist())
+                    return;
+
+                // ensure ZNetScene is present
+                if (ZNetScene.instance == null)
+                {
+                    Debug.LogWarning("[MyMod] ZNetScene not loaded when SetupLocations patched.");
+                    return;
+                }
+
+                var locations = __instance.m_locations;
+                if (locations == null) return;
+
+                foreach (var loc in locations)
+                {
+                    if (loc == null) continue;
+                    if (!loc.m_prefab.IsValid) continue; // no prefab -> nothing to spawn
+
+                    // check whether prefab actually spawns or contains enemy Characters
+//                    bool hasSpawner = loc.m_prefab.Asset.GetComponentInChildren<CharacterSpawn>() != null;
+//                    bool containsCharacter = loc.m_prefab.Asset.GetComponentsInChildren<Character>(true).Any();
+
+//                    if (hasSpawner || containsCharacter)
+                    {
+                        // Double the requested quantity
+                        int oldQty = loc.m_quantity;
+                        loc.m_quantity = Mathf.Max(1, Mathf.RoundToInt(oldQty * 10f));
+
+                        // Optional: relax minimum spacing slightly so more placements succeed.
+                        // Be conservative: reduce by 15% but not lower than some sensible floor.
+                        if (loc.m_minDistance > 10f)
+                        {
+                            loc.m_minDistance = Mathf.Max(10f, loc.m_minDistance * 0.10f);
+                        }
+
+                        Debug.Log($"[MyMod] Increased enemy location '{loc.m_prefab.Asset.name}' quantity {oldQty} -> {loc.m_quantity}. minDist={loc.m_minDistance}");
+                    }
+                }
+            }
+        }
+
+        /*
+        [HarmonyPatch(typeof(DungeonGenerator), "Generate")]
+        public class DungeonGenerator_Generate_Patch
+        {
+            public static void Postfix(DungeonGenerator __instance)
+            {
+                var root = __instance.m_rootInstance;
+                if (!root) return;
+
+                // Existing spawners
+                foreach (var spawn in root.GetComponentsInChildren<CharacterSpawn>())
+                {
+                    spawn.m_maxSpawned *= 2;   // Double enemy density
+                    spawn.m_spawnInterval *= 0.5f; // More frequent respawns
+                }
+
+                // Add new spawners to rooms (advanced)
+                foreach (Transform t in root.GetComponentsInChildren<Transform>())
+                {
+                    if (UnityEngine.Random.value < 0.1f)
+                    {
+                        var spawner = Object.Instantiate(ZNetScene.instance.GetPrefab("Spawner"), t);
+                        var cs = spawner.GetComponent<CharacterSpawn>();
+                        cs.m_charPrefab = ZNetScene.instance.GetPrefab("Draugr");
+                        cs.m_maxSpawned = 3;
+                    }
+                }
+            }
+        }
+        */
+
+        public class SpawnModifierData
+        {
+            public float m_spawnChanceModifier = 1.0f;
+            public float m_maxSpawnedModifier = 1.0f;
+            public float m_spawnIntervalModifier = 1.0f;
+            public float m_spawnRadiusMinModifier = 1.0f;
+            public float m_spawnRadiusMaxModifier = 1.0f;
+            public float m_spawnDistanceModifier = 1.0f;
+        }
+
+        public static Dictionary<string, SpawnModifierData> __m_spawnMultipliers = new Dictionary<string, SpawnModifierData>()
+        {
+            // Creature Name, Spawn Chance Multiplier, Max Spawned Multiplier, Spawn Interval Multiplier
+            {"Abomination",         new SpawnModifierData() {  } },// Default:  100% Max: 1 Interval:4000 RadiusMin:0 RadiusMax:0 SpawnDistance: 30
+            {"Asksvin",             new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:220 RadiusMin:50 RadiusMax:0 SpawnDistance: 25
+            {"Bjorn",               new SpawnModifierData() {  } },// Default:  100% Max: 1 Interval:700 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
+            {"Blob",                new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:500 RadiusMin:0 RadiusMax:0 SpawnDistance: 20
+            {"BlobElite",           new SpawnModifierData() {  } },// Default:  100% Max: 1 Interval:120 RadiusMin:0 RadiusMax:0 SpawnDistance: 20
+            {"BlobLava",            new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:260 RadiusMin:50 RadiusMax:0 SpawnDistance: 10
+            {"Boar",                new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:150 RadiusMin:0 RadiusMax:0 SpawnDistance: 64
+            {"BonemawSerpent",      new SpawnModifierData() {  } },// Default:  100% Max: 1 Interval:1000 RadiusMin:0 RadiusMax:0 SpawnDistance: 50
+            {"Charred_Archer",      new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:320 RadiusMin:50 RadiusMax:0 SpawnDistance: 10
+                                                                             // 100% Max: 2 Interval:3000 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
+            {"Charred_Melee",       new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:320 RadiusMin:50 RadiusMax:0 SpawnDistance: 10
+                                                                             // 100% Max: 2 Interval:3000 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
+            {"Charred_Twitcher",    new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:200 RadiusMin:50 RadiusMax:0 SpawnDistance: 10
+                                                                             // 100% Max: 2 Interval:160 RadiusMin:50 RadiusMax:0 SpawnDistance: 10
+            {"CinderSky",           new SpawnModifierData() {  } },// Default:  100% Max: 0 Interval:6 RadiusMin:1 RadiusMax:60 SpawnDistance: 0
+            {"CinderStorm",         new SpawnModifierData() {  } },// Default:  100% Max: 0 Interval:1 RadiusMin:1 RadiusMax:40 SpawnDistance: 0
+            {"Deathsquito",         new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:500 RadiusMin:0 RadiusMax:0 SpawnDistance: 30
+            {"Deer",                new SpawnModifierData() { m_maxSpawnedModifier = 4.0f, m_spawnDistanceModifier = 0.2f } }, // Default:  100% Max: 2 Interval:100 RadiusMin:0 RadiusMax:0 SpawnDistance: 64
+            {"Draugr",              new SpawnModifierData() {  } },// Default:  100% Max: 1 Interval:300 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
+                                                                             // 100% Max: 2 Interval:120 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
+            {"Draugr_Elite",        new SpawnModifierData() {  } },// Default:  100% Max: 1 Interval:300 RadiusMin:0 RadiusMax:0 SpawnDistance: 15
+            {"Dverger",             new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:1000 RadiusMin:0 RadiusMax:0 SpawnDistance: 30
+            {"DvergerAshlands",     new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:1000 RadiusMin:50 RadiusMax:0 SpawnDistance: 30
+            {"FallenValkyrie",      new SpawnModifierData() {  } },// Default:  100% Max: 1 Interval:4000 RadiusMin:50 RadiusMax:0 SpawnDistance: 15
+            {"Fenring",             new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:400 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
+            {"FireFlies",           new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:20 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
+            {"Fish1",               new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:120 RadiusMin:0 RadiusMax:0 SpawnDistance: 20
+            {"Fish10",              new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:70 RadiusMin:0 RadiusMax:0 SpawnDistance: 12
+            {"Fish11",              new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:80 RadiusMin:0 RadiusMax:0 SpawnDistance: 8
+            {"Fish12",              new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:80 RadiusMin:0 RadiusMax:0 SpawnDistance: 12
+            {"Fish2",               new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:120 RadiusMin:0 RadiusMax:0 SpawnDistance: 20
+            {"Fish3",               new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:120 RadiusMin:0 RadiusMax:0 SpawnDistance: 20
+            {"Fish5",               new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:80 RadiusMin:0 RadiusMax:0 SpawnDistance: 12
+            {"Fish6",               new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:80 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
+            {"Fish7",               new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:80 RadiusMin:0 RadiusMax:0 SpawnDistance: 20
+            {"Fish8",               new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:80 RadiusMin:0 RadiusMax:0 SpawnDistance: 12
+            {"Fish9",               new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:60 RadiusMin:0 RadiusMax:0 SpawnDistance: 12
+            {"Gjall",               new SpawnModifierData() {  } },// Default:  100% Max: 1 Interval:4000 RadiusMin:0 RadiusMax:0 SpawnDistance: 50
+            {"Goblin",              new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:3000 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
+                                                                              //100% Max: 2 Interval:60 RadiusMin:0 RadiusMax:0 SpawnDistance: 30
+                                                                              //100% Max: 2 Interval:1000 RadiusMin:0 RadiusMax:0 SpawnDistance: 30
+            {"GoblinBrute",         new SpawnModifierData() {  } },// Default:  100% Max: 1 Interval:1000 RadiusMin:0 RadiusMax:0 SpawnDistance: 100
+            {"Greydwarf",           new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:120 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
+                                                                             // 100% Max: 1 Interval:120 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
+                                                                             // 100% Max: 2 Interval:60 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
+                                                                             // 100% Max: 2 Interval:200 RadiusMin:0 RadiusMax:0 SpawnDistance: 20
+            {"Greydwarf_Elite",		new SpawnModifierData() {  } },// Default:  100% Max: 1 Interval:120 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
+            {"Greydwarf_Shaman",	new SpawnModifierData() {  } },// Default:  100% Max: 1 Interval:120 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
+                                                                             // 100% Max: 2 Interval:60 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
+            {"Greyling",			new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:300 RadiusMin:0 RadiusMax:0 SpawnDistance: 30
+            {"Hare",			    new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:100 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
+            {"Hatchling",			new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:120 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
+            {"LavaRock",			new SpawnModifierData() {  } },// Default:  100% Max: 0 Interval:4 RadiusMin:0.1 RadiusMax:0 SpawnDistance: 0
+            {"Leech",			    new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:200 RadiusMin:0 RadiusMax:0 SpawnDistance: 5
+            {"Lox",			        new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:1000 RadiusMin:0 RadiusMax:0 SpawnDistance: 100
+            {"Morgen_NonSleeping",	new SpawnModifierData() {  } },// Default:  100% Max: 1 Interval:4000 RadiusMin:50 RadiusMax:0 SpawnDistance: 15
+            {"Neck",			    new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:30 RadiusMin:0 RadiusMax:0 SpawnDistance: 32 
+                                                                            //  100% Max: 2 Interval:100 RadiusMin:0 RadiusMax:0 SpawnDistance: 5
+            {"Seagal",			    new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:120 RadiusMin:0 RadiusMax:0 SpawnDistance: 51
+            {"Seeker",			    new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:200 RadiusMin:0 RadiusMax:0 SpawnDistance: 30
+                                                                             // 100% Max: 2 Interval:300 RadiusMin:0 RadiusMax:0 SpawnDistance: 40
+                                                                             // 100% Max: 2 Interval:3000 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
+            {"SeekerBrood",			new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:3000 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
+            {"SeekerBrute",			new SpawnModifierData() {  } },// Default:  100% Max: 1 Interval:4000 RadiusMin:0 RadiusMax:0 SpawnDistance: 40
+            {"Serpent",			    new SpawnModifierData() {  } },// Default:  100% Max: 1 Interval:1000 RadiusMin:0 RadiusMax:0 SpawnDistance: 50
+            {"Skeleton",			new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:300 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
+                                                                            //  100% Max: 2 Interval:400 RadiusMin:0 RadiusMax:0 SpawnDistance: 15
+            {"StoneGolem",			new SpawnModifierData() {  } },// Default:  100% Max: 1 Interval:120 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
+            {"Surtling",			new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:40 RadiusMin:0 RadiusMax:0 SpawnDistance: 30
+                                                                            //  100% Max: 2 Interval:16 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
+            {"Tick",			    new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:3000 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
+            {"Troll",			    new SpawnModifierData() {  } },// Default:  100% Max: 1 Interval:4000 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
+            {"Unbjorn",			    new SpawnModifierData() {  } },// Default:  100% Max: 1 Interval:4000 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
+            {"Volture",			    new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:120 RadiusMin:50 RadiusMax:0 SpawnDistance: 10
+            {"Wolf",			    new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:120 RadiusMin:0 RadiusMax:0 SpawnDistance: 30
+                                                                             // 100% Max: 2 Interval:400 RadiusMin:0 RadiusMax:0 SpawnDistance: 30
+            {"Wraith",			    new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:200 RadiusMin:0 RadiusMax:0 SpawnDistance: 20
+            {"odin",			    new SpawnModifierData() {  } },// Default:  100% Max: 1 Interval:3000 RadiusMin:35 RadiusMax:35 SpawnDistance: 10
+            {"projectile_ashlandmeteor",			 new SpawnModifierData() {  } } // Default:  100% Max: 0 Interval:5 RadiusMin:3 RadiusMax:20 SpawnDistance: 0
+
+        }; 
+
+        public static Dictionary<string, List<SpawnSystem.SpawnData>> __m_byListDatas = new Dictionary<string, List<SpawnSystem.SpawnData>>();
+        public static Dictionary<string, List<SpawnSystem.SpawnData>> __m_byPrefabDatas = new Dictionary<string, List<SpawnSystem.SpawnData>>();
+        public static void PrintSpawnSystem(SpawnSystem ss)
+        {
+
+            Debug.Log($"Spawn System: {ss.name}");
+            Debug.Log($" Systems:   {SpawnSystem.m_instances.Count}");
+            Debug.Log($" Lists:     {ss.m_spawnLists.Count}");
+
+            foreach (SpawnSystemList ssl in ss.m_spawnLists)
+            {
+                //                    Debug.Log($"SpawnList: {ssl.name}");
+                foreach (SpawnSystem.SpawnData sp in ssl.m_spawners)
+                {
+                    string byPrefabName = sp.m_prefab?.name;
+                    string byListName = sp.m_name;
+
+                    //                    Debug.Log($"  Spawner: {sp.m_name}");
+                    //                    Debug.Log($"    {sp.m_prefab?.name} {sp.m_spawnChance}% Max: {sp.m_maxSpawned} Interval:{sp.m_spawnInterval} RadiusMin:{sp.m_spawnRadiusMin} RadiusMax:{sp.m_spawnRadiusMax} SpawnDistance: {sp.m_spawnDistance}");
+                    if (!__m_byListDatas.ContainsKey(byListName))
+                    {
+                        __m_byListDatas.Add(byListName, new List<SpawnSystem.SpawnData>());
+                    }
+                    __m_byListDatas[byListName].Add(sp);
+
+                    if (!__m_byPrefabDatas.ContainsKey(byPrefabName))
+                    {
+                        __m_byPrefabDatas.Add(byPrefabName, new List<SpawnSystem.SpawnData>());
+                    }
+                    __m_byPrefabDatas[byPrefabName].Add(sp);
+                }
+            }
+
+            using (StreamWriter writer = new StreamWriter("SpawnDataDump1.txt"))
+            {
+                foreach (var kv in __m_byListDatas)
+                {
+                    writer.WriteLine($"Spawn List: {kv.Key}");
+                    foreach (var sp in kv.Value)
+                    {
+                        writer.WriteLine($" {sp.m_biome} {sp.m_name} {sp.m_spawnChance}% Max: {sp.m_maxSpawned} Interval:{sp.m_spawnInterval} RadiusMin:{sp.m_spawnRadiusMin} RadiusMax:{sp.m_spawnRadiusMax} SpawnDistance: {sp.m_spawnDistance}");
+                    }
+                }
+            }
+            using (StreamWriter writer = new StreamWriter("SpawnDataDump2.txt"))
+            {
+                foreach (var kv in __m_byPrefabDatas)
+                {
+                    writer.WriteLine($"Spawn List: {kv.Key}");
+                    foreach (var sp in kv.Value)
+                    {
+                        writer.WriteLine($" {sp.m_spawnChance}% Max: {sp.m_maxSpawned} Interval:{sp.m_spawnInterval} RadiusMin:{sp.m_spawnRadiusMin} RadiusMax:{sp.m_spawnRadiusMax} SpawnDistance: {sp.m_spawnDistance}");
+                    }
+                }
+            }
+        }
+
+        [HarmonyPatch(typeof(SpawnSystem), nameof(SpawnSystem.Awake))]
+        public static class SpawnSystem_Awake_Patch
+        {
+            public static void Postfix(SpawnSystem __instance)
+            {
+                if (!IsPacifist()) 
+                    return;
+                if (__instance == null)
+                    return;
+
+//                                PrintSpawnSystem(__instance);
+
+                // Adjust spawn parameters for pacifist mode to increase density and frequency
+                foreach (SpawnSystemList ssl in __instance.m_spawnLists)
+                {
+                    foreach (SpawnSystem.SpawnData sp in ssl.m_spawners)
+                    {
+                        if (sp == null)
+                            continue;
+
+                        if (__m_spawnMultipliers.TryGetValue(sp.m_prefab.name, out SpawnModifierData smd))
+                        {
+                            sp.m_spawnChance = Math.Min(sp.m_spawnChance * smd.m_spawnChanceModifier, 100f);                        // Percentage chance to spawn at each timer interval
+                            sp.m_maxSpawned = (int)Math.Min((float)sp.m_maxSpawned * smd.m_maxSpawnedModifier, 1.0f);               // Maximum number spawned at a time
+                            sp.m_spawnInterval = Math.Max(4.0f, sp.m_spawnInterval * smd.m_spawnIntervalModifier);                  // Spawn interval timer (default is 120 to 1000)
+                            sp.m_spawnRadiusMin = Math.Max(0f, Math.Min(50, sp.m_spawnRadiusMin * smd.m_spawnRadiusMinModifier));   // Minimum radius from player (0 is SpawnSystem default)
+                            sp.m_spawnRadiusMax = Math.Max(0f, Math.Min(50, sp.m_spawnRadiusMax * smd.m_spawnRadiusMaxModifier));   // Maximum radius from player (0 is SpawnSystem default)
+                            sp.m_spawnDistance = Math.Max(5.0f, sp.m_spawnDistance * smd.m_spawnDistanceModifier);                  // Minimum distance to another one (10 to 64)
+                        }
+                    }
+                }
+            }
+        }
+
+        [HarmonyPatch(typeof(SpawnSystem), nameof(SpawnSystem.UpdateSpawning))]
+        public static class SpawnSystem_UpdateSpawning_Patch
+        {
+            public static bool Prefix(SpawnSystem __instance)
+            {
+                if (!IsPacifist()) 
+                    return true;
+                
+
+                if (__instance == null) 
+                    return true;
+                
+                if (Player.m_localPlayer == null)
+                    return true;
+
+                foreach (SpawnSystemList ssl in __instance.m_spawnLists)
+                {
+                    if (ssl == null) 
+                        continue;
+
+                    foreach (SpawnSystem.SpawnData sp in ssl.m_spawners)
+                    {
+                        if (sp == null) 
+                            continue;
+
+                        Heightmap.Biome playerBiome = Player.m_localPlayer.GetCurrentBiome();
+                        if (playerBiome == sp.m_biome)
+                        {
+                            sp.m_maxSpawned = (__m_allCharmedCharacters.Count + 1);
+                        }
+                    }
+                }
+                return true;
+            }
+        }
+
         /*
 
         public static void DumpSprites()
