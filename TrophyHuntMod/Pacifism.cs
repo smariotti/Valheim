@@ -517,6 +517,8 @@ namespace TrophyHuntMod
             __m_allCharmedCharacters.Add(cc);
 
             SetCharmedState(cc);
+
+            UpdateModUI(Player.m_localPlayer);
         }
 
         public static void RemoveFromCharmedList(CharmedCharacter cc)
@@ -524,6 +526,7 @@ namespace TrophyHuntMod
             if (cc == null) return;
 
             RemoveGUIDFromCharmedList(cc.m_charmGUID);
+
         }
         public static void RemoveFromCharmedList(Character enemy)
         {
@@ -556,6 +559,7 @@ namespace TrophyHuntMod
                     Player.m_localPlayer.m_adrenaline = 0;
                 }
             }
+            UpdateModUI(Player.m_localPlayer);
         }
 
         public static bool SetCharmedState(CharmedCharacter cc, bool playParticleEffect = true)
@@ -1852,24 +1856,25 @@ namespace TrophyHuntMod
             public float m_spawnDistance;
         }
 
-        //public class SpawnModifierData
-        //{
-        //    public float m_chance = 2.0f;
-        //    public float m_max = 2.0f;
-        //    public float m_interval = 0.5f;
-        //    public float m_minRadius = 0.0f;
-        //    public float m_maxRadius = 0.0f;
-        //    public float m_distance = 0.5f;
-        //}
         public class SpawnModifierData
         {
-            public float m_chance = 10.0f;
-            public float m_max = 10.0f;
-            public float m_interval = 0.1f;
-            public float m_minRadius = 1.0f;
-            public float m_maxRadius = 50.0f;
-            public float m_distance = 0.1f;
+            public float m_chance = 2.0f;
+            public float m_max = 2.0f;
+            public float m_interval = 0.5f;
+            public float m_minRadius = 0.0f;
+            public float m_maxRadius = 0.0f;
+            public float m_distance = 0.5f;
         }
+
+        //public class SpawnModifierData
+        //{
+        //    public float m_chance = 10.0f;
+        //    public float m_max = 10.0f;
+        //    public float m_interval = 0.1f;
+        //    public float m_minRadius = 1.0f;
+        //    public float m_maxRadius = 50.0f;
+        //    public float m_distance = 0.1f;
+        //}
 
         public static Dictionary<string, SpawnModifierData> __m_spawnMultipliers = new Dictionary<string, SpawnModifierData>()
         {
@@ -1888,10 +1893,10 @@ namespace TrophyHuntMod
                                                                    
             {"Charred_Twitcher",    new SpawnModifierData() {  } },
                                                                    
-            {"CinderSky",           new SpawnModifierData() {  } },
-            {"CinderStorm",         new SpawnModifierData() {  } },
+            {"CinderSky",           new SpawnModifierData() { m_chance = 1.0f, m_max = 1.0f, m_interval = 1.0f, m_distance = 1.0f } },
+            {"CinderStorm",         new SpawnModifierData() { m_chance = 1.0f, m_max = 1.0f, m_interval = 1.0f, m_distance = 1.0f } },
             {"Deathsquito",         new SpawnModifierData() {  } },
-            {"Deer",                new SpawnModifierData() { m_chance = 2.0f, m_max = 4.0f, m_interval = 0.5f, m_distance = 0.25f } }, // m_chance = 2.0f, m_max = 4.0f, m_interval = 0.5f, m_distance = 0.5f
+            {"Deer",                new SpawnModifierData() { m_chance = 1.5f, m_max = 4.0f, m_interval = 1f, m_distance = 0.5f } }, // m_chance = 2.0f, m_max = 4.0f, m_interval = 0.5f, m_distance = 0.5f
             {"Draugr",              new SpawnModifierData() {  } },
                                                                    
             {"Draugr_Elite",        new SpawnModifierData() {  } },
@@ -1900,17 +1905,17 @@ namespace TrophyHuntMod
             {"FallenValkyrie",      new SpawnModifierData() {  } },
             {"Fenring",             new SpawnModifierData() {  } },
             {"FireFlies",           new SpawnModifierData() {  } },
-            {"Fish1",               new SpawnModifierData() {  } },
-            {"Fish10",              new SpawnModifierData() {  } },
-            {"Fish11",              new SpawnModifierData() {  } },
-            {"Fish12",              new SpawnModifierData() {  } },
-            {"Fish2",               new SpawnModifierData() {  } },
-            {"Fish3",               new SpawnModifierData() {  } },
-            {"Fish5",               new SpawnModifierData() {  } },
-            {"Fish6",               new SpawnModifierData() {  } },
-            {"Fish7",               new SpawnModifierData() {  } },
-            {"Fish8",               new SpawnModifierData() {  } },
-            {"Fish9",               new SpawnModifierData() {  } },
+            {"Fish1",               new SpawnModifierData() { m_chance = 1.0f, m_max = 1.0f, m_interval = 1.0f, m_distance = 1.0f } },
+            {"Fish10",              new SpawnModifierData() { m_chance = 1.0f, m_max = 1.0f, m_interval = 1.0f, m_distance = 1.0f } },
+            {"Fish11",              new SpawnModifierData() { m_chance = 1.0f, m_max = 1.0f, m_interval = 1.0f, m_distance = 1.0f } },
+            {"Fish12",              new SpawnModifierData() { m_chance = 1.0f, m_max = 1.0f, m_interval = 1.0f, m_distance = 1.0f } },
+            {"Fish2",               new SpawnModifierData() { m_chance = 1.0f, m_max = 1.0f, m_interval = 1.0f, m_distance = 1.0f } },
+            {"Fish3",               new SpawnModifierData() { m_chance = 1.0f, m_max = 1.0f, m_interval = 1.0f, m_distance = 1.0f } },
+            {"Fish5",               new SpawnModifierData() { m_chance = 1.0f, m_max = 1.0f, m_interval = 1.0f, m_distance = 1.0f } },
+            {"Fish6",               new SpawnModifierData() { m_chance = 1.0f, m_max = 1.0f, m_interval = 1.0f, m_distance = 1.0f } },
+            {"Fish7",               new SpawnModifierData() { m_chance = 1.0f, m_max = 1.0f, m_interval = 1.0f, m_distance = 1.0f } },
+            {"Fish8",               new SpawnModifierData() { m_chance = 1.0f, m_max = 1.0f, m_interval = 1.0f, m_distance = 1.0f } },
+            {"Fish9",               new SpawnModifierData() { m_chance = 1.0f, m_max = 1.0f, m_interval = 1.0f, m_distance = 1.0f } },
             {"Gjall",               new SpawnModifierData() {  } },
             {"Goblin",              new SpawnModifierData() {  } },
                                                                    
@@ -1926,13 +1931,13 @@ namespace TrophyHuntMod
             {"Greyling",			new SpawnModifierData() { m_chance = 2.0f, m_max = 4.0f, m_interval = 0.5f, m_distance = 0.5f } },
             {"Hare",			    new SpawnModifierData() {  } },
             {"Hatchling",			new SpawnModifierData() {  } },
-            {"LavaRock",			new SpawnModifierData() {  } },
+            {"LavaRock",			new SpawnModifierData() { m_chance = 1.0f, m_max = 1.0f, m_interval = 1.0f, m_distance = 1.0f } },
             {"Leech",			    new SpawnModifierData() {  } },
             {"Lox",			        new SpawnModifierData() {  } },
             {"Morgen_NonSleeping",	new SpawnModifierData() {  } },
             {"Neck",			    new SpawnModifierData() { m_chance = 2.0f, m_max = 4.0f, m_interval = 0.5f, m_distance = 0.5f } },
                                                                    
-            {"Seagal",			    new SpawnModifierData() {  } },
+            {"Seagal",			    new SpawnModifierData() { m_chance = 1.0f, m_max = 1.0f, m_interval = 1.0f, m_distance = 1.0f } },
             {"Seeker",			    new SpawnModifierData() {  } },
                                                                    
                                                                    
@@ -1951,8 +1956,8 @@ namespace TrophyHuntMod
             {"Wolf",			    new SpawnModifierData() {  } },
                                                                    
             {"Wraith",			    new SpawnModifierData() {  } },
-            {"odin",			    new SpawnModifierData() {  } },
-            {"projectile_ashlandmeteor",new SpawnModifierData() {  } }
+            {"odin",			    new SpawnModifierData() { m_chance = 1.0f, m_max = 1.0f, m_interval = 1.0f, m_distance = 1.0f } },
+            {"projectile_ashlandmeteor",new SpawnModifierData() { m_chance = 1.0f, m_max = 1.0f, m_interval = 1.0f, m_distance = 1.0f } }
 
         }; 
 

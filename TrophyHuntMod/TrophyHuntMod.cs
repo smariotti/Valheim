@@ -2734,6 +2734,11 @@ namespace TrophyHuntMod
                 __m_thrallsElement.SetActive(true);
                 __m_thrallsTextElement.GetComponent<TMPro.TextMeshProUGUI>().text = __m_allCharmedCharacters.Count.ToString();
             }
+            else
+            {
+                __m_thrallsElement.SetActive(false);
+                __m_thrallsTextElement.SetActive(false);
+            }
 
             __m_playerCurrentScore = score;
 
