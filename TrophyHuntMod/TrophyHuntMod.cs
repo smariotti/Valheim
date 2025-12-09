@@ -4119,7 +4119,7 @@ namespace TrophyHuntMod
             string text =
                 $"<size=18><b><color=#FFB75B>Thralls</color><b></size>\n";
 
-            text += $"\n<size=14><pos=0%><color=white><u>Thrall</u></color><pos=31%><u><color=yellow>(Level)</color></u><pos=50%><color=red><u>Health</u></color><pos=70%><color=orange><u>Remaining</u></color>\n";
+            text += $"\n<size=14><pos=0%><color=white><u>Friend</u></color><pos=31%><u><color=yellow>(Level)</color></u><pos=50%><color=red><u>Health</u></color><pos=70%><color=orange><u>Remaining</u></color>\n";
 
             foreach (var cc in __m_allCharmedCharacters)
             {

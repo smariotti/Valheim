@@ -1866,8 +1866,8 @@ namespace TrophyHuntMod
             public float m_chance = 10.0f;
             public float m_max = 10.0f;
             public float m_interval = 0.1f;
-            public float m_minRadius = 0.0f;
-            public float m_maxRadius = 0.0f;
+            public float m_minRadius = 1.0f;
+            public float m_maxRadius = 50.0f;
             public float m_distance = 0.1f;
         }
 
