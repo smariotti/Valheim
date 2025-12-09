@@ -1,22 +1,14 @@
 ﻿using BepInEx;
-using static Terminal;
-using UnityEngine;
-using System.Collections.Generic;
 using HarmonyLib;
-using static Skills;
-using System.Collections;
-using static TrophyHuntMod.TrophyHuntMod;
 using System;
-using System.Linq;
-using Newtonsoft.Json.Linq;
-using TMPro;
-using static EnemyHud;
-using UnityEngine.U2D;
-using System.Text;
+using System.Collections;
+using System.Collections.Generic;
 using System.IO;
-using static Player;
-using System.Security.Cryptography;
-using static HitData;
+using System.Linq;
+using TMPro;
+using UnityEngine;
+using UnityEngine.U2D;
+using static Skills;
 
 namespace TrophyHuntMod
 {
@@ -58,18 +50,18 @@ namespace TrophyHuntMod
 
         public static GandrArrowData[] __m_gandrArrowData = new GandrArrowData[]
         {
-            new GandrArrowData("ArrowWood", "Wood", "Wooden Gandr", "Enemy comes under your thrall.", null, GandrTypeIndex.Wood),        // Null SE means no Status Effect!
-            new GandrArrowData("ArrowFlint", "Flint", "Flint Gandr", "Thrall becomes piercing.", typeof(SE_GandrFlint), GandrTypeIndex.Flint),
-            new GandrArrowData("ArrowFire", "Resin", "Fire Gandr", "Thrall burns its enemies.", typeof(SE_GandrFire), GandrTypeIndex.Fire),
-            new GandrArrowData("ArrowBronze", "Bronze", "Bronze Gandr", "Thrall becomes blunt.", typeof(SE_GandrBronze), GandrTypeIndex.Bronze),
-            new GandrArrowData("ArrowPoison", "Ooze", "Poison Gandr", "Thrall becomes poisonous.", typeof(SE_GandrPoison), GandrTypeIndex.Poison),
-            new GandrArrowData("ArrowIron", "Iron", "Iron Gandr", "Thrall becomes sharp.", typeof(SE_GandrIron), GandrTypeIndex.Iron),
-            new GandrArrowData("ArrowFrost", "FreezeGland", "Frost Gandr", "Thrall becomes frosty.", typeof(SE_GandrFrost), GandrTypeIndex.Frost),
-            new GandrArrowData("ArrowObsidian", "Obsidian", "Glass Gandr", "Thrall becomes very sharp.", typeof(SE_GandrObsidian), GandrTypeIndex.Obsidian),
-            new GandrArrowData("ArrowSilver", "Silver", "Silver Gandr", "Thrall becomes spiritual.", typeof(SE_GandrSilver), GandrTypeIndex.Silver),
-            new GandrArrowData("ArrowNeedle", "Needle", "Needle Gandr", "Thrall becomes very piercing.", typeof(SE_GandrNeedle), GandrTypeIndex.Needle),
-            new GandrArrowData("ArrowCarapace", "Carapace", "Bug Gandr", "Thrall becomes very blunt.", typeof(SE_GandrCarapace), GandrTypeIndex.Carapace),
-            new GandrArrowData("ArrowCharred", "Blackwood", "Charred Gandr", "Thrall charges with lightning.", typeof(SE_GandrCharred), GandrTypeIndex.Charred),
+            new GandrArrowData("ArrowWood", "Wood", "Wooden Gandr", " is under your thrall.", null, GandrTypeIndex.Wood),        // Null SE means no Status Effect!
+            new GandrArrowData("ArrowFlint", "Flint", "Flint Gandr", " thrall is piercing.", typeof(SE_GandrFlint), GandrTypeIndex.Flint),
+            new GandrArrowData("ArrowFire", "Resin", "Fire Gandr", " thrall channels fire.", typeof(SE_GandrFire), GandrTypeIndex.Fire),
+            new GandrArrowData("ArrowBronze", "Bronze", "Bronze Gandr", " thrall is blunt.", typeof(SE_GandrBronze), GandrTypeIndex.Bronze),
+            new GandrArrowData("ArrowPoison", "Ooze", "Poison Gandr", " thrall channels poison.", typeof(SE_GandrPoison), GandrTypeIndex.Poison),
+            new GandrArrowData("ArrowIron", "Iron", "Iron Gandr", " thrall is sharp.", typeof(SE_GandrIron), GandrTypeIndex.Iron),
+            new GandrArrowData("ArrowFrost", "FreezeGland", "Frost Gandr", " thrall channels frost.", typeof(SE_GandrFrost), GandrTypeIndex.Frost),
+            new GandrArrowData("ArrowObsidian", "Obsidian", "Glass Gandr", " thrall is very sharp.", typeof(SE_GandrObsidian), GandrTypeIndex.Obsidian),
+            new GandrArrowData("ArrowSilver", "Silver", "Silver Gandr", " thrall channels spirit.", typeof(SE_GandrSilver), GandrTypeIndex.Silver),
+            new GandrArrowData("ArrowNeedle", "Needle", "Needle Gandr", " thrall is very piercing.", typeof(SE_GandrNeedle), GandrTypeIndex.Needle),
+            new GandrArrowData("ArrowCarapace", "Carapace", "Bug Gandr", " thrall is very blunt.", typeof(SE_GandrCarapace), GandrTypeIndex.Carapace),
+            new GandrArrowData("ArrowCharred", "Blackwood", "Charred Gandr", " thrall channels lightning.", typeof(SE_GandrCharred), GandrTypeIndex.Charred),
         };
 
         
@@ -247,6 +239,20 @@ namespace TrophyHuntMod
                     }
                     __result = null;
                     return false;
+                }
+                
+                if (closestEnemy == null)
+                {
+                    MonsterAI monster = __instance as MonsterAI;
+
+                    if (monster)
+                    {
+                        monster.m_targetStatic = monster.FindClosestStaticPriorityTarget();
+                        if (monster.m_targetStatic == null)
+                        {
+                            monster.m_targetStatic = monster.FindRandomStaticTarget(PACIFIST_THRALL_PLAYER_TARGET_DISTANCE);
+                        }
+                    }
                 }
 
                 __result = closestEnemy;
@@ -922,24 +928,28 @@ namespace TrophyHuntMod
                     }
                     //                    Debug.LogWarning($"Hit char {hitChar.name} of faction {hitChar.GetFaction()} and group {hitChar.m_group} nview {hitChar.m_nview}");
 
+                    if (__instance.m_owner != null && hitChar)
+                    {
+                        __instance.m_owner.RaiseSkill(__instance.m_skill, __instance.m_raiseSkillAmount);
+                        __instance.m_owner.AddAdrenaline(__instance.m_adrenaline);
+                    }
+
+                    bool wasCharmed = false;
                     if (IsCharmed(hitChar))
                     {
                         CharmedCharacter cc = GetCharmedCharacter(hitChar);
                         if (cc != null)
                         {
                             cc.m_charmExpireTime = __m_charmTimerSeconds + (long)GetCharmDuration();
-//                            Player.m_localPlayer.Message(MessageHud.MessageType.Center, $"{hitChar.GetHoverName()} continues to serve.");
+                            wasCharmed = true;
                         }
-                        
-                        //hitChar.m_seman.RemoveAllStatusEffects();
-                        //RemoveFromCharmedList(hitChar);
                     }
                     else
                     {
                         AddToCharmedList(hitChar, (long)GetCharmDuration());
                     }
 
-                    ApplyGandrEffect(arrowName, hitChar);
+                    ApplyGandrEffect(arrowName, hitChar, wasCharmed);
 
 
                     ZNetScene.instance.Destroy(__instance.gameObject);
@@ -1026,7 +1036,7 @@ namespace TrophyHuntMod
             }
         }
 
-        public static void ApplyGandrEffect(string arrowName, Character hitChar)
+        public static void ApplyGandrEffect(string arrowName, Character hitChar, bool wasCharmed = false)
         {
             if (hitChar == null)
                 return;
@@ -1056,7 +1066,7 @@ namespace TrophyHuntMod
                 se = hitChar.m_seman.AddStatusEffect(se, true);
                 if (se != null)
                 {
-                    Player.m_localPlayer.Message(MessageHud.MessageType.Center, $"{arrowData.m_description}");
+                    Player.m_localPlayer.Message(MessageHud.MessageType.Center, $"{hitChar.GetHoverName()}{arrowData.m_description}");
                 }
                 else
                 {
@@ -1065,7 +1075,14 @@ namespace TrophyHuntMod
             }
             else
             {
-                Player.m_localPlayer.Message(MessageHud.MessageType.Center, $"{hitChar.GetHoverName()} is under your thrall!");
+                if (wasCharmed)
+                {
+                    Player.m_localPlayer.Message(MessageHud.MessageType.Center, $"{hitChar.GetHoverName()} continues to serve you!");
+                }
+                else
+                {
+                    Player.m_localPlayer.Message(MessageHud.MessageType.Center, $"{hitChar.GetHoverName()} is under your thrall!");
+                }
             }
         }
 
@@ -1163,8 +1180,12 @@ namespace TrophyHuntMod
 
                                 cc.m_charmLevel++;
                                 Hud.instance.AdrenalineBarFlash();
+
+                                Player.m_localPlayer.Message(MessageHud.MessageType.TopLeft, $"Thrall {c.GetHoverName()} reached Charm Level {cc.m_charmLevel}!");
                             }
                         }
+
+                        Player.m_localPlayer.Message(MessageHud.MessageType.Center, $"Your thralls grow stronger!");
                     }
                 }
 
@@ -1821,153 +1842,196 @@ namespace TrophyHuntMod
         }
         */
 
+        public class BackupSpawnData
+        {
+            public float m_spawnChance;
+            public int m_maxSpawned;
+            public float m_spawnInterval;
+            public float m_spawnRadiusMin;
+            public float m_spawnRadiusMax;
+            public float m_spawnDistance;
+        }
+
+        //public class SpawnModifierData
+        //{
+        //    public float m_chance = 2.0f;
+        //    public float m_max = 2.0f;
+        //    public float m_interval = 0.5f;
+        //    public float m_minRadius = 0.0f;
+        //    public float m_maxRadius = 0.0f;
+        //    public float m_distance = 0.5f;
+        //}
         public class SpawnModifierData
         {
-            public float m_spawnChanceModifier = 1.0f;
-            public float m_maxSpawnedModifier = 1.0f;
-            public float m_spawnIntervalModifier = 1.0f;
-            public float m_spawnRadiusMinModifier = 1.0f;
-            public float m_spawnRadiusMaxModifier = 1.0f;
-            public float m_spawnDistanceModifier = 1.0f;
+            public float m_chance = 10.0f;
+            public float m_max = 10.0f;
+            public float m_interval = 0.1f;
+            public float m_minRadius = 0.0f;
+            public float m_maxRadius = 0.0f;
+            public float m_distance = 0.1f;
         }
 
         public static Dictionary<string, SpawnModifierData> __m_spawnMultipliers = new Dictionary<string, SpawnModifierData>()
         {
             // Creature Name, Spawn Chance Multiplier, Max Spawned Multiplier, Spawn Interval Multiplier
-            {"Abomination",         new SpawnModifierData() {  } },// Default:  100% Max: 1 Interval:4000 RadiusMin:0 RadiusMax:0 SpawnDistance: 30
-            {"Asksvin",             new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:220 RadiusMin:50 RadiusMax:0 SpawnDistance: 25
-            {"Bjorn",               new SpawnModifierData() {  } },// Default:  100% Max: 1 Interval:700 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
-            {"Blob",                new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:500 RadiusMin:0 RadiusMax:0 SpawnDistance: 20
-            {"BlobElite",           new SpawnModifierData() {  } },// Default:  100% Max: 1 Interval:120 RadiusMin:0 RadiusMax:0 SpawnDistance: 20
-            {"BlobLava",            new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:260 RadiusMin:50 RadiusMax:0 SpawnDistance: 10
-            {"Boar",                new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:150 RadiusMin:0 RadiusMax:0 SpawnDistance: 64
-            {"BonemawSerpent",      new SpawnModifierData() {  } },// Default:  100% Max: 1 Interval:1000 RadiusMin:0 RadiusMax:0 SpawnDistance: 50
-            {"Charred_Archer",      new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:320 RadiusMin:50 RadiusMax:0 SpawnDistance: 10
-                                                                             // 100% Max: 2 Interval:3000 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
-            {"Charred_Melee",       new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:320 RadiusMin:50 RadiusMax:0 SpawnDistance: 10
-                                                                             // 100% Max: 2 Interval:3000 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
-            {"Charred_Twitcher",    new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:200 RadiusMin:50 RadiusMax:0 SpawnDistance: 10
-                                                                             // 100% Max: 2 Interval:160 RadiusMin:50 RadiusMax:0 SpawnDistance: 10
-            {"CinderSky",           new SpawnModifierData() {  } },// Default:  100% Max: 0 Interval:6 RadiusMin:1 RadiusMax:60 SpawnDistance: 0
-            {"CinderStorm",         new SpawnModifierData() {  } },// Default:  100% Max: 0 Interval:1 RadiusMin:1 RadiusMax:40 SpawnDistance: 0
-            {"Deathsquito",         new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:500 RadiusMin:0 RadiusMax:0 SpawnDistance: 30
-            {"Deer",                new SpawnModifierData() { m_maxSpawnedModifier = 4.0f, m_spawnDistanceModifier = 0.2f } }, // Default:  100% Max: 2 Interval:100 RadiusMin:0 RadiusMax:0 SpawnDistance: 64
-            {"Draugr",              new SpawnModifierData() {  } },// Default:  100% Max: 1 Interval:300 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
-                                                                             // 100% Max: 2 Interval:120 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
-            {"Draugr_Elite",        new SpawnModifierData() {  } },// Default:  100% Max: 1 Interval:300 RadiusMin:0 RadiusMax:0 SpawnDistance: 15
-            {"Dverger",             new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:1000 RadiusMin:0 RadiusMax:0 SpawnDistance: 30
-            {"DvergerAshlands",     new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:1000 RadiusMin:50 RadiusMax:0 SpawnDistance: 30
-            {"FallenValkyrie",      new SpawnModifierData() {  } },// Default:  100% Max: 1 Interval:4000 RadiusMin:50 RadiusMax:0 SpawnDistance: 15
-            {"Fenring",             new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:400 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
-            {"FireFlies",           new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:20 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
-            {"Fish1",               new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:120 RadiusMin:0 RadiusMax:0 SpawnDistance: 20
-            {"Fish10",              new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:70 RadiusMin:0 RadiusMax:0 SpawnDistance: 12
-            {"Fish11",              new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:80 RadiusMin:0 RadiusMax:0 SpawnDistance: 8
-            {"Fish12",              new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:80 RadiusMin:0 RadiusMax:0 SpawnDistance: 12
-            {"Fish2",               new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:120 RadiusMin:0 RadiusMax:0 SpawnDistance: 20
-            {"Fish3",               new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:120 RadiusMin:0 RadiusMax:0 SpawnDistance: 20
-            {"Fish5",               new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:80 RadiusMin:0 RadiusMax:0 SpawnDistance: 12
-            {"Fish6",               new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:80 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
-            {"Fish7",               new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:80 RadiusMin:0 RadiusMax:0 SpawnDistance: 20
-            {"Fish8",               new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:80 RadiusMin:0 RadiusMax:0 SpawnDistance: 12
-            {"Fish9",               new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:60 RadiusMin:0 RadiusMax:0 SpawnDistance: 12
-            {"Gjall",               new SpawnModifierData() {  } },// Default:  100% Max: 1 Interval:4000 RadiusMin:0 RadiusMax:0 SpawnDistance: 50
-            {"Goblin",              new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:3000 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
-                                                                              //100% Max: 2 Interval:60 RadiusMin:0 RadiusMax:0 SpawnDistance: 30
-                                                                              //100% Max: 2 Interval:1000 RadiusMin:0 RadiusMax:0 SpawnDistance: 30
-            {"GoblinBrute",         new SpawnModifierData() {  } },// Default:  100% Max: 1 Interval:1000 RadiusMin:0 RadiusMax:0 SpawnDistance: 100
-            {"Greydwarf",           new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:120 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
-                                                                             // 100% Max: 1 Interval:120 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
-                                                                             // 100% Max: 2 Interval:60 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
-                                                                             // 100% Max: 2 Interval:200 RadiusMin:0 RadiusMax:0 SpawnDistance: 20
-            {"Greydwarf_Elite",		new SpawnModifierData() {  } },// Default:  100% Max: 1 Interval:120 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
-            {"Greydwarf_Shaman",	new SpawnModifierData() {  } },// Default:  100% Max: 1 Interval:120 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
-                                                                             // 100% Max: 2 Interval:60 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
-            {"Greyling",			new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:300 RadiusMin:0 RadiusMax:0 SpawnDistance: 30
-            {"Hare",			    new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:100 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
-            {"Hatchling",			new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:120 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
-            {"LavaRock",			new SpawnModifierData() {  } },// Default:  100% Max: 0 Interval:4 RadiusMin:0.1 RadiusMax:0 SpawnDistance: 0
-            {"Leech",			    new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:200 RadiusMin:0 RadiusMax:0 SpawnDistance: 5
-            {"Lox",			        new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:1000 RadiusMin:0 RadiusMax:0 SpawnDistance: 100
-            {"Morgen_NonSleeping",	new SpawnModifierData() {  } },// Default:  100% Max: 1 Interval:4000 RadiusMin:50 RadiusMax:0 SpawnDistance: 15
-            {"Neck",			    new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:30 RadiusMin:0 RadiusMax:0 SpawnDistance: 32 
-                                                                            //  100% Max: 2 Interval:100 RadiusMin:0 RadiusMax:0 SpawnDistance: 5
-            {"Seagal",			    new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:120 RadiusMin:0 RadiusMax:0 SpawnDistance: 51
-            {"Seeker",			    new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:200 RadiusMin:0 RadiusMax:0 SpawnDistance: 30
-                                                                             // 100% Max: 2 Interval:300 RadiusMin:0 RadiusMax:0 SpawnDistance: 40
-                                                                             // 100% Max: 2 Interval:3000 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
-            {"SeekerBrood",			new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:3000 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
-            {"SeekerBrute",			new SpawnModifierData() {  } },// Default:  100% Max: 1 Interval:4000 RadiusMin:0 RadiusMax:0 SpawnDistance: 40
-            {"Serpent",			    new SpawnModifierData() {  } },// Default:  100% Max: 1 Interval:1000 RadiusMin:0 RadiusMax:0 SpawnDistance: 50
-            {"Skeleton",			new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:300 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
-                                                                            //  100% Max: 2 Interval:400 RadiusMin:0 RadiusMax:0 SpawnDistance: 15
-            {"StoneGolem",			new SpawnModifierData() {  } },// Default:  100% Max: 1 Interval:120 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
-            {"Surtling",			new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:40 RadiusMin:0 RadiusMax:0 SpawnDistance: 30
-                                                                            //  100% Max: 2 Interval:16 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
-            {"Tick",			    new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:3000 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
-            {"Troll",			    new SpawnModifierData() {  } },// Default:  100% Max: 1 Interval:4000 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
-            {"Unbjorn",			    new SpawnModifierData() {  } },// Default:  100% Max: 1 Interval:4000 RadiusMin:0 RadiusMax:0 SpawnDistance: 10
-            {"Volture",			    new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:120 RadiusMin:50 RadiusMax:0 SpawnDistance: 10
-            {"Wolf",			    new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:120 RadiusMin:0 RadiusMax:0 SpawnDistance: 30
-                                                                             // 100% Max: 2 Interval:400 RadiusMin:0 RadiusMax:0 SpawnDistance: 30
-            {"Wraith",			    new SpawnModifierData() {  } },// Default:  100% Max: 2 Interval:200 RadiusMin:0 RadiusMax:0 SpawnDistance: 20
-            {"odin",			    new SpawnModifierData() {  } },// Default:  100% Max: 1 Interval:3000 RadiusMin:35 RadiusMax:35 SpawnDistance: 10
-            {"projectile_ashlandmeteor",			 new SpawnModifierData() {  } } // Default:  100% Max: 0 Interval:5 RadiusMin:3 RadiusMax:20 SpawnDistance: 0
+            {"Abomination",         new SpawnModifierData() {  } },
+            {"Asksvin",             new SpawnModifierData() {  } },
+            {"Bjorn",               new SpawnModifierData() {  } },
+            {"Blob",                new SpawnModifierData() {  } },
+            {"BlobElite",           new SpawnModifierData() {  } },
+            {"BlobLava",            new SpawnModifierData() {  } },
+            {"Boar",                new SpawnModifierData() { m_chance = 2.0f, m_max = 4.0f, m_interval = 0.5f, m_distance = 0.25f } },
+            {"BonemawSerpent",      new SpawnModifierData() {  } },
+            {"Charred_Archer",      new SpawnModifierData() {  } },
+                                                                   
+            {"Charred_Melee",       new SpawnModifierData() {  } },
+                                                                   
+            {"Charred_Twitcher",    new SpawnModifierData() {  } },
+                                                                   
+            {"CinderSky",           new SpawnModifierData() {  } },
+            {"CinderStorm",         new SpawnModifierData() {  } },
+            {"Deathsquito",         new SpawnModifierData() {  } },
+            {"Deer",                new SpawnModifierData() { m_chance = 2.0f, m_max = 4.0f, m_interval = 0.5f, m_distance = 0.25f } }, // m_chance = 2.0f, m_max = 4.0f, m_interval = 0.5f, m_distance = 0.5f
+            {"Draugr",              new SpawnModifierData() {  } },
+                                                                   
+            {"Draugr_Elite",        new SpawnModifierData() {  } },
+            {"Dverger",             new SpawnModifierData() {  } },
+            {"DvergerAshlands",     new SpawnModifierData() {  } },
+            {"FallenValkyrie",      new SpawnModifierData() {  } },
+            {"Fenring",             new SpawnModifierData() {  } },
+            {"FireFlies",           new SpawnModifierData() {  } },
+            {"Fish1",               new SpawnModifierData() {  } },
+            {"Fish10",              new SpawnModifierData() {  } },
+            {"Fish11",              new SpawnModifierData() {  } },
+            {"Fish12",              new SpawnModifierData() {  } },
+            {"Fish2",               new SpawnModifierData() {  } },
+            {"Fish3",               new SpawnModifierData() {  } },
+            {"Fish5",               new SpawnModifierData() {  } },
+            {"Fish6",               new SpawnModifierData() {  } },
+            {"Fish7",               new SpawnModifierData() {  } },
+            {"Fish8",               new SpawnModifierData() {  } },
+            {"Fish9",               new SpawnModifierData() {  } },
+            {"Gjall",               new SpawnModifierData() {  } },
+            {"Goblin",              new SpawnModifierData() {  } },
+                                                                   
+                                                                   
+            {"GoblinBrute",         new SpawnModifierData() {  } },
+            {"Greydwarf",           new SpawnModifierData() {  } },
+                                                                   
+                                                                   
+                                                                   
+            {"Greydwarf_Elite",		new SpawnModifierData() {  } },
+            {"Greydwarf_Shaman",	new SpawnModifierData() {  } },
+                                                                   
+            {"Greyling",			new SpawnModifierData() { m_chance = 2.0f, m_max = 4.0f, m_interval = 0.5f, m_distance = 0.5f } },
+            {"Hare",			    new SpawnModifierData() {  } },
+            {"Hatchling",			new SpawnModifierData() {  } },
+            {"LavaRock",			new SpawnModifierData() {  } },
+            {"Leech",			    new SpawnModifierData() {  } },
+            {"Lox",			        new SpawnModifierData() {  } },
+            {"Morgen_NonSleeping",	new SpawnModifierData() {  } },
+            {"Neck",			    new SpawnModifierData() { m_chance = 2.0f, m_max = 4.0f, m_interval = 0.5f, m_distance = 0.5f } },
+                                                                   
+            {"Seagal",			    new SpawnModifierData() {  } },
+            {"Seeker",			    new SpawnModifierData() {  } },
+                                                                   
+                                                                   
+            {"SeekerBrood",			new SpawnModifierData() {  } },
+            {"SeekerBrute",			new SpawnModifierData() {  } },
+            {"Serpent",			    new SpawnModifierData() {  } },
+            {"Skeleton",			new SpawnModifierData() {  } },
+                                                                   
+            {"StoneGolem",			new SpawnModifierData() {  } },
+            {"Surtling",			new SpawnModifierData() {  } },
+                                                                   
+            {"Tick",			    new SpawnModifierData() {  } },
+            {"Troll",			    new SpawnModifierData() {  } },
+            {"Unbjorn",			    new SpawnModifierData() {  } },
+            {"Volture",			    new SpawnModifierData() {  } },
+            {"Wolf",			    new SpawnModifierData() {  } },
+                                                                   
+            {"Wraith",			    new SpawnModifierData() {  } },
+            {"odin",			    new SpawnModifierData() {  } },
+            {"projectile_ashlandmeteor",new SpawnModifierData() {  } }
 
         }; 
 
-        public static Dictionary<string, List<SpawnSystem.SpawnData>> __m_byListDatas = new Dictionary<string, List<SpawnSystem.SpawnData>>();
-        public static Dictionary<string, List<SpawnSystem.SpawnData>> __m_byPrefabDatas = new Dictionary<string, List<SpawnSystem.SpawnData>>();
-        public static void PrintSpawnSystem(SpawnSystem ss)
+        public static void PrintSpawnSystem(List<SpawnSystemList> ssls, string name)
         {
 
-            Debug.Log($"Spawn System: {ss.name}");
-            Debug.Log($" Systems:   {SpawnSystem.m_instances.Count}");
-            Debug.Log($" Lists:     {ss.m_spawnLists.Count}");
+            Debug.Log($" SpawnLists '{name}' Count: {ssls.Count} {ssls.GetHashCode()}");
 
-            foreach (SpawnSystemList ssl in ss.m_spawnLists)
+            using (StreamWriter writer = new StreamWriter($"SpawnDataDump2{name}.txt", false))
             {
-                //                    Debug.Log($"SpawnList: {ssl.name}");
-                foreach (SpawnSystem.SpawnData sp in ssl.m_spawners)
+                foreach (SpawnSystemList ssl in ssls)
                 {
-                    string byPrefabName = sp.m_prefab?.name;
-                    string byListName = sp.m_name;
-
-                    //                    Debug.Log($"  Spawner: {sp.m_name}");
-                    //                    Debug.Log($"    {sp.m_prefab?.name} {sp.m_spawnChance}% Max: {sp.m_maxSpawned} Interval:{sp.m_spawnInterval} RadiusMin:{sp.m_spawnRadiusMin} RadiusMax:{sp.m_spawnRadiusMax} SpawnDistance: {sp.m_spawnDistance}");
-                    if (!__m_byListDatas.ContainsKey(byListName))
+                    writer.WriteLine($"SpawnList: {ssl?.name} {ssl?.GetHashCode().ToString()} {ssl.m_spawners?.Count}");
+                    foreach (SpawnSystem.SpawnData sp in ssl?.m_spawners)
                     {
-                        __m_byListDatas.Add(byListName, new List<SpawnSystem.SpawnData>());
-                    }
-                    __m_byListDatas[byListName].Add(sp);
-
-                    if (!__m_byPrefabDatas.ContainsKey(byPrefabName))
-                    {
-                        __m_byPrefabDatas.Add(byPrefabName, new List<SpawnSystem.SpawnData>());
-                    }
-                    __m_byPrefabDatas[byPrefabName].Add(sp);
-                }
-            }
-
-            using (StreamWriter writer = new StreamWriter("SpawnDataDump1.txt"))
-            {
-                foreach (var kv in __m_byListDatas)
-                {
-                    writer.WriteLine($"Spawn List: {kv.Key}");
-                    foreach (var sp in kv.Value)
-                    {
-                        writer.WriteLine($" {sp.m_biome} {sp.m_name} {sp.m_spawnChance}% Max: {sp.m_maxSpawned} Interval:{sp.m_spawnInterval} RadiusMin:{sp.m_spawnRadiusMin} RadiusMax:{sp.m_spawnRadiusMax} SpawnDistance: {sp.m_spawnDistance}");
+                        writer.WriteLine($" {sp.m_name} {sp.m_spawnChance}% Max: {sp.m_maxSpawned} Interval:{sp.m_spawnInterval} RadiusMin:{sp.m_spawnRadiusMin} RadiusMax:{sp.m_spawnRadiusMax} SpawnDistance: {sp.m_spawnDistance}");
                     }
                 }
             }
-            using (StreamWriter writer = new StreamWriter("SpawnDataDump2.txt"))
+        }
+
+        public static int __m_spawnListsPatched = 0;
+        
+        public static Dictionary<int, Dictionary<int, BackupSpawnData>> __m_originalSpawnData = new Dictionary<int, Dictionary<int, BackupSpawnData>>();
+        public static void DoBackupSpawnData(List<SpawnSystemList> spawnLists, ref Dictionary<int, Dictionary<int, BackupSpawnData>> outDict)
+        {
+            outDict = new Dictionary<int, Dictionary<int, BackupSpawnData>>();
+            foreach (SpawnSystemList ssl in spawnLists)
             {
-                foreach (var kv in __m_byPrefabDatas)
+                int listHashCode = ssl.GetHashCode();
+                Dictionary<int, BackupSpawnData> newDict = new Dictionary<int, BackupSpawnData>();
+                outDict.Add(listHashCode, newDict);
+                foreach (SpawnSystem.SpawnData data in ssl.m_spawners)
                 {
-                    writer.WriteLine($"Spawn List: {kv.Key}");
-                    foreach (var sp in kv.Value)
+                    int dataHash = data.GetHashCode();
+                    BackupSpawnData newData = new BackupSpawnData();
+                    newData.m_spawnInterval = data.m_spawnInterval;
+                    newData.m_spawnChance = data.m_spawnChance;
+                    newData.m_maxSpawned = data.m_maxSpawned;
+                    newData.m_spawnRadiusMin = data.m_spawnRadiusMin;
+                    newData.m_spawnRadiusMax = data.m_spawnRadiusMax;
+                    newData.m_spawnDistance = data.m_spawnDistance;
+                    newDict.Add(dataHash, newData);
+                }
+            }
+        }
+
+        public static void DoRestoreSpawnData(Dictionary<int, Dictionary<int, BackupSpawnData>> backupData, ref List<SpawnSystemList> spawnLists)
+        {
+            foreach (SpawnSystemList ssl in spawnLists)
+            {
+                Dictionary<int, BackupSpawnData> listDict = backupData[ssl.GetHashCode()];
+                foreach (SpawnSystem.SpawnData data in ssl.m_spawners)
+                {
+                    BackupSpawnData bd = listDict[data.GetHashCode()];
+                    data.m_spawnInterval = bd.m_spawnInterval;
+                    data.m_spawnChance = bd.m_spawnChance;
+                    data.m_maxSpawned = bd.m_maxSpawned;
+                    data.m_spawnRadiusMin = bd.m_spawnRadiusMin;
+                    data.m_spawnRadiusMax = bd.m_spawnRadiusMax;
+                    data.m_spawnDistance = bd.m_spawnDistance;
+                }
+            }
+        }
+
+        [HarmonyPatch(typeof(SpawnSystem), nameof(SpawnSystem.OnDestroy))]
+        public static class SpawnSystem_OnDestroy_Patch
+        {
+            public static void Postfix(SpawnSystem __instance)
+            {
+                if (IsPacifist())
+                {
+                    if (--__m_spawnListsPatched < 1)
                     {
-                        writer.WriteLine($" {sp.m_spawnChance}% Max: {sp.m_maxSpawned} Interval:{sp.m_spawnInterval} RadiusMin:{sp.m_spawnRadiusMin} RadiusMax:{sp.m_spawnRadiusMax} SpawnDistance: {sp.m_spawnDistance}");
+//                        Debug.Log($"SpawnSystem.OnDestroy: Num Spawn Lists: {__m_spawnListsPatched}");
+                        // restore original spawn lists
+                        DoRestoreSpawnData(__m_originalSpawnData, ref __instance.m_spawnLists);
+
+//                        PrintSpawnSystem(__instance.m_spawnLists, "Restored");
                     }
                 }
             }
@@ -1978,30 +2042,45 @@ namespace TrophyHuntMod
         {
             public static void Postfix(SpawnSystem __instance)
             {
-                if (!IsPacifist()) 
-                    return;
-                if (__instance == null)
-                    return;
-
-//                                PrintSpawnSystem(__instance);
-
-                // Adjust spawn parameters for pacifist mode to increase density and frequency
-                foreach (SpawnSystemList ssl in __instance.m_spawnLists)
+                if (IsPacifist())
                 {
-                    foreach (SpawnSystem.SpawnData sp in ssl.m_spawners)
-                    {
-                        if (sp == null)
-                            continue;
+                    if (__instance == null)
+                        return;
 
-                        if (__m_spawnMultipliers.TryGetValue(sp.m_prefab.name, out SpawnModifierData smd))
+//                    Debug.Log($"SpawnSystem.Awake: Num Spawn Lists: {__m_spawnListsPatched}");
+                    if (__m_spawnListsPatched++ == 0)
+                    {
+                        // Save original spawn lists
+//                        PrintSpawnSystem(__instance.m_spawnLists, "Original");
+
+                        DoBackupSpawnData(__instance.m_spawnLists, ref __m_originalSpawnData);
+
+                        // Adjust spawn parameters for pacifist mode to increase density and frequency
+                        foreach (SpawnSystemList ssl in __instance.m_spawnLists)
                         {
-                            sp.m_spawnChance = Math.Min(sp.m_spawnChance * smd.m_spawnChanceModifier, 100f);                        // Percentage chance to spawn at each timer interval
-                            sp.m_maxSpawned = (int)Math.Min((float)sp.m_maxSpawned * smd.m_maxSpawnedModifier, 1.0f);               // Maximum number spawned at a time
-                            sp.m_spawnInterval = Math.Max(4.0f, sp.m_spawnInterval * smd.m_spawnIntervalModifier);                  // Spawn interval timer (default is 120 to 1000)
-                            sp.m_spawnRadiusMin = Math.Max(0f, Math.Min(50, sp.m_spawnRadiusMin * smd.m_spawnRadiusMinModifier));   // Minimum radius from player (0 is SpawnSystem default)
-                            sp.m_spawnRadiusMax = Math.Max(0f, Math.Min(50, sp.m_spawnRadiusMax * smd.m_spawnRadiusMaxModifier));   // Maximum radius from player (0 is SpawnSystem default)
-                            sp.m_spawnDistance = Math.Max(5.0f, sp.m_spawnDistance * smd.m_spawnDistanceModifier);                  // Minimum distance to another one (10 to 64)
+                            // Only process a given SpawnSystemList ONCE
+
+                            foreach (SpawnSystem.SpawnData sp in ssl.m_spawners)
+                            {
+                                if (sp == null)
+                                    continue;
+
+                                if (__m_spawnMultipliers.TryGetValue(sp.m_prefab.name, out SpawnModifierData smd))
+                                {
+                                    //                            sp.m_groupSizeMin = (int)((float)sp.m_groupSizeMin * smd.m_maxSpawnedModifier);
+                                    //                            sp.m_groupSizeMax = (int)((float)sp.m_groupSizeMax * smd.m_maxSpawnedModifier);
+                                    sp.m_spawnChance = Math.Min(sp.m_spawnChance * smd.m_chance, 100f);                        // Percentage chance to spawn at each timer interval
+                                    sp.m_maxSpawned = (int)Math.Max((float)sp.m_maxSpawned * smd.m_max, 1.0f);               // Maximum number spawned at a time
+                                    sp.m_spawnInterval = Math.Max(1.0f, sp.m_spawnInterval * smd.m_interval);                  // Spawn interval timer (default is 120 to 1000)
+                                    sp.m_spawnRadiusMin = smd.m_minRadius;   // Minimum radius from player (0 is SpawnSystem default)
+                                    sp.m_spawnRadiusMax = smd.m_maxRadius;   // Maximum radius from player (0 is SpawnSystem default)
+                                    sp.m_spawnDistance = Math.Max(1.0f, sp.m_spawnDistance * smd.m_distance);                  // Minimum distance to another one (10 to 64)
+                                }
+                            }
                         }
+//                        Debug.Log($"SpawnSystem.Awake: Spawn List Patched");
+
+//                        PrintSpawnSystem(__instance.m_spawnLists, "Modified");
                     }
                 }
             }
