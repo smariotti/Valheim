@@ -274,6 +274,12 @@ You can find the github at: https://github.com/smariotti/Valheim/tree/master/Tro
 
 
 ## Change Log
+v0.10.16
+- Trophy Pacifist
+  - Increased enemy density
+  - Increased spawner/world placement density
+  - Added Thrall Status window
+
 v0.10.15
 - Fix for score display update when calculating end of game all-biome bonus and time-remaining bonuses
 
@@ -281,7 +287,7 @@ v0.10.14
 - Minor fix for presenting trophy, biome and all-biome bonus data to the backend in proper order
 
 v0.10.13
-- Fixed `/showpath` command, which I somehow completely removed from the command list
+- Fixed `/showpath` command, which I somehow completely removed from the command list^^
 - Added score update after biome bonus calculation and data-send to tracker
 - Fixed numerous bugs in Trophy Pacifist
   - Only Wood Arrows are craftable in-inventory, all other arrows require their Vanilla workbench and level

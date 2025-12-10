@@ -123,13 +123,13 @@ namespace TrophyHuntMod
 
                 if (__instance.m_character == null)
                 {
-                    Debug.LogError("MonsterAI_UpdateAI_Patch: __instance.m_character is null!");
+//                    Debug.LogError("MonsterAI_UpdateAI_Patch: __instance.m_character is null!");
                     return;
                 }
 
                 if (Player.m_localPlayer == null)
                 {
-                    Debug.LogError("MonsterAI_UpdateAI_Patch: Player.m_localPlayer is null!");
+//                    Debug.LogError("MonsterAI_UpdateAI_Patch: Player.m_localPlayer is null!");
                     return;
                 }
 
@@ -451,7 +451,8 @@ namespace TrophyHuntMod
             }
             else
             {
-                if (__m_allCharmedCharacters.Count > 0 && Player.m_localPlayer.m_maxAdrenaline == 0)
+
+                if (__m_allCharmedCharacters != null && __m_allCharmedCharacters.Count > 0 && Player.m_localPlayer.m_maxAdrenaline == 0)
                 {
                     Player.m_localPlayer.m_maxAdrenaline = 30;
                     Player.m_localPlayer.m_adrenaline = 0;
@@ -735,6 +736,15 @@ namespace TrophyHuntMod
                             }
                         }
                     }
+                }
+
+                if (__m_allCharmedCharacters.Count > 0)
+                {
+                    ShowThrallsWindow(__m_thrallsWindowObject);
+                }
+                else
+                {
+                    HideThrallsWindow();
                 }
 
                 // For all charmed characters
@@ -1769,7 +1779,7 @@ namespace TrophyHuntMod
         // Spawn Density
         //
 
-        [HarmonyPatch(typeof(ZoneSystem), "SetupLocations")]
+        [HarmonyPatch(typeof(ZoneSystem), nameof(ZoneSystem.SetupLocations))]
         public static class ZoneSystem_SetupLocations_Patch
         {
             public static void Postfix(ZoneSystem __instance)
@@ -1784,32 +1794,66 @@ namespace TrophyHuntMod
                     return;
                 }
 
-                var locations = __instance.m_locations;
+                List<ZoneSystem.ZoneLocation> locations = __instance.m_locations;
                 if (locations == null) return;
 
                 foreach (var loc in locations)
                 {
+//                    Debug.LogWarning($"location {loc.m_name} {loc.m_prefabName} Bio={loc.m_biome} Qty={loc.m_quantity} minDistSim={loc.m_minDistanceFromSimilar} maxDistSim={loc.m_maxDistanceFromSimilar} minDist={loc.m_minDistance} maxDist={loc.m_maxDistance} enable={loc.m_enable}");
+
                     if (loc == null) continue;
-                    if (!loc.m_prefab.IsValid) continue; // no prefab -> nothing to spawn
+                    float locMultiplier = 1.5f;
 
-                    // check whether prefab actually spawns or contains enemy Characters
-//                    bool hasSpawner = loc.m_prefab.Asset.GetComponentInChildren<CharacterSpawn>() != null;
-//                    bool containsCharacter = loc.m_prefab.Asset.GetComponentsInChildren<Character>(true).Any();
-
-//                    if (hasSpawner || containsCharacter)
+                    if (loc.m_biome.HasFlag(Heightmap.Biome.Meadows))
                     {
-                        // Double the requested quantity
-                        int oldQty = loc.m_quantity;
-                        loc.m_quantity = Mathf.Max(1, Mathf.RoundToInt(oldQty * 10f));
-
-                        // Optional: relax minimum spacing slightly so more placements succeed.
-                        // Be conservative: reduce by 15% but not lower than some sensible floor.
-                        if (loc.m_minDistance > 10f)
+                        if (loc.m_prefabName.Contains("Runestone_Boars"))
                         {
-                            loc.m_minDistance = Mathf.Max(10f, loc.m_minDistance * 0.10f);
+                            locMultiplier = 10.0f;
                         }
+                    }
+                    if (loc.m_biome.HasFlag(Heightmap.Biome.BlackForest))
+                    {
 
-                        Debug.Log($"[MyMod] Increased enemy location '{loc.m_prefab.Asset.name}' quantity {oldQty} -> {loc.m_quantity}. minDist={loc.m_minDistance}");
+                    }
+                    if (loc.m_biome.HasFlag(Heightmap.Biome.Swamp))
+                    {
+
+                    }
+                    if (loc.m_biome.HasFlag(Heightmap.Biome.Mountain))
+                    {
+
+                    }
+                    if (loc.m_biome.HasFlag(Heightmap.Biome.Plains))
+                    {
+
+                    }
+                    if (loc.m_biome.HasFlag(Heightmap.Biome.Mistlands))
+                    {
+
+                    }
+                    if (loc.m_biome.HasFlag(Heightmap.Biome.AshLands))
+                    {
+
+                    }
+                    if (loc.m_biome.HasFlag(Heightmap.Biome.DeepNorth))
+                    {
+
+                    }
+                    // Double the requested quantity
+                    if (loc.m_quantity > 1)
+                    {
+                        loc.m_quantity = Mathf.RoundToInt(loc.m_quantity * locMultiplier);
+                    }
+
+                    if (loc.m_minDistance > 0 && loc.m_maxDistance > 0)
+                    {
+                        loc.m_minDistance = Mathf.Max(10f, loc.m_minDistance * 0.50f);
+                        loc.m_maxDistance = Mathf.Max(10f, loc.m_maxDistance * 0.50f);
+                    }
+
+                    if (loc.m_minDistanceFromSimilar > 0)
+                    {
+                        loc.m_minDistanceFromSimilar /= locMultiplier;
                     }
                 }
             }
@@ -1858,12 +1902,12 @@ namespace TrophyHuntMod
 
         public class SpawnModifierData
         {
-            public float m_chance = 2.0f;
+            public float m_chance = 1.2f;
             public float m_max = 2.0f;
-            public float m_interval = 0.5f;
+            public float m_interval = 0.9f;
             public float m_minRadius = 0.0f;
             public float m_maxRadius = 0.0f;
-            public float m_distance = 0.5f;
+            public float m_distance = 0.75f;
         }
 
         //public class SpawnModifierData
@@ -1885,7 +1929,7 @@ namespace TrophyHuntMod
             {"Blob",                new SpawnModifierData() {  } },
             {"BlobElite",           new SpawnModifierData() {  } },
             {"BlobLava",            new SpawnModifierData() {  } },
-            {"Boar",                new SpawnModifierData() { m_chance = 2.0f, m_max = 4.0f, m_interval = 0.5f, m_distance = 0.25f } },
+            {"Boar",                new SpawnModifierData() { m_chance = 4.0f, m_max = 8.0f, m_interval = 0.25f, m_distance = 0.1f } },
             {"BonemawSerpent",      new SpawnModifierData() {  } },
             {"Charred_Archer",      new SpawnModifierData() {  } },
                                                                    
@@ -1896,7 +1940,7 @@ namespace TrophyHuntMod
             {"CinderSky",           new SpawnModifierData() { m_chance = 1.0f, m_max = 1.0f, m_interval = 1.0f, m_distance = 1.0f } },
             {"CinderStorm",         new SpawnModifierData() { m_chance = 1.0f, m_max = 1.0f, m_interval = 1.0f, m_distance = 1.0f } },
             {"Deathsquito",         new SpawnModifierData() {  } },
-            {"Deer",                new SpawnModifierData() { m_chance = 1.5f, m_max = 4.0f, m_interval = 1f, m_distance = 0.5f } }, // m_chance = 2.0f, m_max = 4.0f, m_interval = 0.5f, m_distance = 0.5f
+            {"Deer",                new SpawnModifierData() { m_chance = 1.2f, m_max = 3.0f, m_interval = 1f, m_distance = 0.75f } }, // m_chance = 2.0f, m_max = 4.0f, m_interval = 0.5f, m_distance = 0.5f
             {"Draugr",              new SpawnModifierData() {  } },
                                                                    
             {"Draugr_Elite",        new SpawnModifierData() {  } },
@@ -1928,7 +1972,7 @@ namespace TrophyHuntMod
             {"Greydwarf_Elite",		new SpawnModifierData() {  } },
             {"Greydwarf_Shaman",	new SpawnModifierData() {  } },
                                                                    
-            {"Greyling",			new SpawnModifierData() { m_chance = 2.0f, m_max = 4.0f, m_interval = 0.5f, m_distance = 0.5f } },
+            {"Greyling",			new SpawnModifierData() { m_chance = 3.0f, m_max = 4.0f, m_interval = 0.5f, m_distance = 0.3f } },
             {"Hare",			    new SpawnModifierData() {  } },
             {"Hatchling",			new SpawnModifierData() {  } },
             {"LavaRock",			new SpawnModifierData() { m_chance = 1.0f, m_max = 1.0f, m_interval = 1.0f, m_distance = 1.0f } },
@@ -2072,6 +2116,8 @@ namespace TrophyHuntMod
 
                                 if (__m_spawnMultipliers.TryGetValue(sp.m_prefab.name, out SpawnModifierData smd))
                                 {
+                                    //                                    Debug.Log($"SpawnSystem.Awake buffed {sp.m_prefab.name}");
+
                                     //                            sp.m_groupSizeMin = (int)((float)sp.m_groupSizeMin * smd.m_maxSpawnedModifier);
                                     //                            sp.m_groupSizeMax = (int)((float)sp.m_groupSizeMax * smd.m_maxSpawnedModifier);
                                     sp.m_spawnChance = Math.Min(sp.m_spawnChance * smd.m_chance, 100f);                        // Percentage chance to spawn at each timer interval
@@ -2080,6 +2126,11 @@ namespace TrophyHuntMod
                                     sp.m_spawnRadiusMin = smd.m_minRadius;   // Minimum radius from player (0 is SpawnSystem default)
                                     sp.m_spawnRadiusMax = smd.m_maxRadius;   // Maximum radius from player (0 is SpawnSystem default)
                                     sp.m_spawnDistance = Math.Max(1.0f, sp.m_spawnDistance * smd.m_distance);                  // Minimum distance to another one (10 to 64)
+
+                                }
+                                else
+                                {
+                                    Debug.LogWarning($"Did not find spawn modifier for {sp.m_prefab.name}");
                                 }
                             }
                         }
@@ -2119,7 +2170,7 @@ namespace TrophyHuntMod
                         Heightmap.Biome playerBiome = Player.m_localPlayer.GetCurrentBiome();
                         if (playerBiome == sp.m_biome)
                         {
-                            sp.m_maxSpawned = (__m_allCharmedCharacters.Count + 1);
+                            sp.m_maxSpawned = Math.Max(2, (__m_allCharmedCharacters.Count + 1));
                         }
                     }
                 }

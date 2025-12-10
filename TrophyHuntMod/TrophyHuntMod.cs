@@ -327,8 +327,6 @@ namespace TrophyHuntMod
         static GameObject __m_gameTimerTextElement = null;
         static GameObject __m_luckOMeterElement = null;
         static GameObject __m_standingsElement = null;
-        static GameObject __m_thrallsElement = null;
-        static GameObject __m_thrallsTextElement = null;
 
         static TMP_FontAsset __m_globalFontObject = null;
 
@@ -984,16 +982,6 @@ namespace TrophyHuntMod
             if (__m_standingsElement != null)
             {
                 __m_standingsElement.SetActive(!show);
-            }
-
-            if (__m_thrallsElement != null)
-            {
-                __m_thrallsElement.SetActive(!show);
-            }
-
-            if (__m_thrallsTextElement != null)
-            {
-                __m_thrallsTextElement.SetActive(!show);
             }
 
             if (__m_relogsTextElement != null)
@@ -1836,15 +1824,12 @@ namespace TrophyHuntMod
 
                         CreateStandingsTooltip();
 
-                        CreateThrallsTooltip();
+                        CreateThrallsWindow(healthPanelTransform);
 
                         __m_luckOMeterElement = CreateLuckOMeterElements(healthPanelTransform);
 
                         __m_standingsElement = CreateStandingsElements(healthPanelTransform);
                         __m_standingsElement.SetActive(false);
-
-                        __m_thrallsElement = CreateThrallsElements(healthPanelTransform);
-                        __m_thrallsElement.SetActive(false);
                     }
                 }
 
@@ -2121,50 +2106,6 @@ namespace TrophyHuntMod
             AddTooltipTriggersToStandingsObject(standingsElement);
 
             return standingsElement;
-        }
-
-        static GameObject CreateThrallsElements(Transform parentTransform)
-        {
-            Sprite thrallsSprite = GetTrophySprite("CookedVoltureMeat");
-
-            GameObject thrallsElement = new GameObject("ThrallsImage");
-            thrallsElement.transform.SetParent(parentTransform);
-
-            RectTransform rectTransform = thrallsElement.AddComponent<RectTransform>();
-            rectTransform.sizeDelta = new Vector2(40, 40);
-            rectTransform.anchoredPosition = new Vector2(-70, 20);
-            rectTransform.localScale = new Vector3(__m_userIconScale, __m_userIconScale, __m_userIconScale);
-
-            UnityEngine.UI.Image image = thrallsElement.AddComponent<UnityEngine.UI.Image>();
-            image.sprite = thrallsSprite;
-            image.color = Color.yellow;
-            image.raycastTarget = true;
-
-            // Text Element
-            __m_thrallsTextElement = new GameObject("RelogsElement");
-            __m_thrallsTextElement.transform.SetParent(parentTransform);
-
-            // Add RectTransform component for positioning
-            rectTransform = __m_thrallsTextElement.AddComponent<RectTransform>();
-            rectTransform.sizeDelta = new Vector2(60, 20); // Set size
-            rectTransform.anchoredPosition = new Vector2(-70, 20); // Set position
-            rectTransform.localScale = new Vector3(__m_userTextScale, __m_userTextScale, __m_userTextScale);
-
-            TMPro.TextMeshProUGUI tmText = AddTextMeshProComponent(__m_thrallsTextElement);
-
-            tmText.text = $"{__m_allCharmedCharacters.Count}";
-            tmText.fontSize = 24;
-            tmText.color = Color.yellow;
-            tmText.alignment = TextAlignmentOptions.Center;
-            tmText.raycastTarget = false;
-            tmText.fontMaterial.EnableKeyword("OUTLINE_ON");
-            tmText.outlineColor = Color.black;
-            tmText.outlineWidth = 0.1f; // Adjust the thickness
-
-
-            AddTooltipTriggersToThrallsObject(thrallsElement);
-
-            return thrallsElement;
         }
 
         static GameObject CreateDeathsElement(Transform parentTransform)
@@ -2731,13 +2672,14 @@ namespace TrophyHuntMod
 
             if (IsPacifist())
             {
-                __m_thrallsElement.SetActive(true);
-                __m_thrallsTextElement.GetComponent<TMPro.TextMeshProUGUI>().text = __m_allCharmedCharacters.Count.ToString();
-            }
-            else
-            {
-                __m_thrallsElement.SetActive(false);
-                __m_thrallsTextElement.SetActive(false);
+                if (__m_allCharmedCharacters != null && __m_allCharmedCharacters.Count > 0)
+                {
+                    ShowThrallsWindow(__m_thrallsWindowObject);
+                }
+                else
+                {
+                    HideThrallsWindow();
+                }
             }
 
             __m_playerCurrentScore = score;
@@ -4054,138 +3996,99 @@ namespace TrophyHuntMod
 
         // thralls Tooltips
 
-        static GameObject __m_thrallsTooltipObject = null;
-        static GameObject __m_thrallsTooltipBackground = null;
-        static TextMeshProUGUI __m_thrallsTooltip;
-        static Vector2 __m_thrallsTooltipWindowSize = new Vector2(250, 300);
+        static GameObject __m_thrallsWindowObject = null;
+        static GameObject __m_thrallsWindowBackground = null;
+        static TextMeshProUGUI __m_thrallsWindowText = null;
+        static Vector2 __m_thrallsTooltipWindowSize = new Vector2(380, 180);
         static Vector2 __m_thrallsTooltipTextOffset = new Vector2(5, 2);
 
-        public static void CreateThrallsTooltip()
+        public static void CreateThrallsWindow(Transform parentTransform)
         {
             // Tooltip Background
-            __m_thrallsTooltipBackground = new GameObject("thralls Tooltip Background");
+            __m_thrallsWindowBackground = new GameObject("Thrall Window Background");
 
             // Set %the parent to the HUD
-            Transform hudrootTransform = Hud.instance.transform;
-            __m_thrallsTooltipBackground.transform.SetParent(hudrootTransform, false);
+            __m_thrallsWindowBackground.transform.SetParent(parentTransform, false);
 
-            RectTransform bgTransform = __m_thrallsTooltipBackground.AddComponent<RectTransform>();
+            Vector2 windowPos = new Vector2(-90, 360);
+
+            RectTransform bgTransform = __m_thrallsWindowBackground.AddComponent<RectTransform>();
             bgTransform.sizeDelta = __m_thrallsTooltipWindowSize;
-
+            bgTransform.anchoredPosition = windowPos;
+            bgTransform.pivot = new Vector2(0, 0);
+           
             // Add an Image component for the background
-            UnityEngine.UI.Image backgroundImage = __m_thrallsTooltipBackground.AddComponent<UnityEngine.UI.Image>();
+            UnityEngine.UI.Image backgroundImage = __m_thrallsWindowBackground.AddComponent<UnityEngine.UI.Image>();
             backgroundImage.color = new Color(0, 0, 0, 0.90f); // Semi-transparent black background
-
-            __m_thrallsTooltipBackground.SetActive(false);
+            __m_thrallsWindowBackground.SetActive(false);
 
             // Create a new GameObject for the tooltip
-            __m_thrallsTooltipObject = new GameObject("thralls Tooltip Text");
-            __m_thrallsTooltipObject.transform.SetParent(__m_thrallsTooltipBackground.transform, false);
+            __m_thrallsWindowObject = new GameObject("Thrall Window Text");
+            __m_thrallsWindowObject.transform.SetParent(parentTransform, false);
 
             // Add a RectTransform component for positioning
-            RectTransform rectTransform = __m_thrallsTooltipObject.AddComponent<RectTransform>();
+            RectTransform rectTransform = __m_thrallsWindowObject.AddComponent<RectTransform>();
             rectTransform.sizeDelta = new Vector2(__m_thrallsTooltipWindowSize.x - __m_thrallsTooltipTextOffset.x, __m_thrallsTooltipWindowSize.y - __m_thrallsTooltipTextOffset.y);
+            rectTransform.anchoredPosition = windowPos + new Vector2(5, 0);
+            rectTransform.pivot = new Vector2(0, 0);
 
             // Add a TextMeshProUGUI component for displaying the tooltip text
-            __m_thrallsTooltip = AddTextMeshProComponent(__m_thrallsTooltipObject);
-            __m_thrallsTooltip.fontSize = 14;
-            __m_thrallsTooltip.alignment = TextAlignmentOptions.TopLeft;
-            __m_thrallsTooltip.color = Color.yellow;
+            __m_thrallsWindowText = AddTextMeshProComponent(__m_thrallsWindowObject);
+            __m_thrallsWindowText.fontSize = 14;
+            __m_thrallsWindowText.alignment = TextAlignmentOptions.TopLeft;
+            __m_thrallsWindowText.color = Color.yellow;
 
             // Initially hide the tooltip
-            __m_thrallsTooltipObject.SetActive(false);
-        }
-        public static void AddTooltipTriggersToThrallsObject(GameObject uiObject)
-        {
-            // Add EventTrigger component if not already present
-            EventTrigger trigger = uiObject.GetComponent<EventTrigger>();
-            if (trigger != null)
-            {
-                return;
-            }
-
-            trigger = uiObject.AddComponent<EventTrigger>();
-
-            // Mouse Enter event (pointer enters the icon area)
-            EventTrigger.Entry entryEnter = new EventTrigger.Entry();
-            entryEnter.eventID = EventTriggerType.PointerEnter;
-            entryEnter.callback.AddListener((eventData) => ShowThrallsTooltip(uiObject));
-            trigger.triggers.Add(entryEnter);
-
-            // Mouse Exit event (pointer exits the icon area)
-            EventTrigger.Entry entryExit = new EventTrigger.Entry();
-            entryExit.eventID = EventTriggerType.PointerExit;
-            entryExit.callback.AddListener((eventData) => HideThrallsTooltip());
-            trigger.triggers.Add(entryExit);
+            __m_thrallsWindowObject.SetActive(true);
         }
 
-        public static string BuildThrallsTooltipText(GameObject uiObject)
+        public static string BuildThrallsWindowText(ref int lines)
         {
             string text =
                 $"<size=18><b><color=#FFB75B>Thralls</color><b></size>\n";
 
-            text += $"\n<size=14><pos=0%><color=white><u>Friend</u></color><pos=31%><u><color=yellow>(Level)</color></u><pos=50%><color=red><u>Health</u></color><pos=70%><color=orange><u>Remaining</u></color>\n";
+            text += $"\n<size=14><pos=0%><color=white><u>Friend</u></color><pos=35%><u><color=yellow>(Level)</color></u><pos=50%><color=red><u>Health</u></color><pos=70%><color=orange><u>Remaining</u></color>\n";
 
+            int lineCount = 0;
             foreach (var cc in __m_allCharmedCharacters)
             {
                 Character c = GetCharacterFromGUID(cc.m_charmGUID);
+                if (c == null)
+                    continue;
                 float remainingTime = cc.m_charmExpireTime - __m_charmTimerSeconds;
                 DateTime remainTime = DateTime.MinValue.AddSeconds(remainingTime);
                 string timeStr = remainTime.ToString("m'm 's's'");
 
                 text += $"<pos=5%><color=white>{c.GetHoverName()}<pos=40%><color=yellow>({cc.m_charmLevel})</color><pos=50%><color=red>{(int)(c.GetHealthPercentage()*100)}%</color><pos=70%></color><color=orange>{timeStr}</color></size>\n";
+                lineCount++;
             }
 
+            lines = lineCount;
             return text;
         }
 
-        public static void ShowThrallsTooltip(GameObject uiObject)
+        public static void ShowThrallsWindow(GameObject uiObject)
         {
             if (uiObject == null)
                 return;
 
-            string text = BuildThrallsTooltipText(uiObject);
+            int lineCount = 0;
 
-            __m_thrallsTooltip.text = text;
+            string text = BuildThrallsWindowText(ref lineCount);
 
-            __m_thrallsTooltipBackground.SetActive(true);
-            __m_thrallsTooltipObject.SetActive(true);
+            __m_thrallsWindowText.text = text;
+            __m_thrallsWindowText.ForceMeshUpdate(true, true);
 
-            __m_thrallsTooltip.ForceMeshUpdate(true, true);
+            __m_thrallsWindowBackground.SetActive(true);
+            __m_thrallsWindowObject.SetActive(true);
 
-            Bounds bounds = __m_thrallsTooltip.textBounds;
+            __m_thrallsWindowText.ForceMeshUpdate(true, true);
+         }
 
-            RectTransform objRectTransform = __m_thrallsTooltipObject.GetComponent<RectTransform>();
-            RectTransform bgRectTransform = __m_thrallsTooltipBackground.GetComponent<RectTransform>();
-
-            Vector2 size = new Vector2(bounds.size.x + 20, bounds.size.y + 10);
-            __m_thrallsTooltipWindowSize = size;
-
-            objRectTransform.sizeDelta = size;
-            bgRectTransform.sizeDelta = size;
-
-            __m_thrallsTooltip.ForceMeshUpdate(true, true);
-
-            Vector3 tooltipOffset = new Vector3(__m_thrallsTooltipWindowSize.x / 2, __m_thrallsTooltipWindowSize.y, 0);
-            Vector3 mousePosition = Input.mousePosition;
-            Vector3 desiredPosition = mousePosition + tooltipOffset;
-
-            // Clamp the tooltip window onscreen
-            if (desiredPosition.x < 150) desiredPosition.x = 150;
-            if (desiredPosition.y < 150) desiredPosition.y = 150;
-            if (desiredPosition.x > Screen.width - __m_thrallsTooltipWindowSize.x)
-                desiredPosition.x = Screen.width - __m_thrallsTooltipWindowSize.x;
-            if (desiredPosition.y > Screen.height - __m_thrallsTooltipWindowSize.y)
-                desiredPosition.y = Screen.height - __m_thrallsTooltipWindowSize.y;
-
-            __m_thrallsTooltipBackground.transform.position = desiredPosition;
-            __m_thrallsTooltipObject.transform.position = new Vector3(desiredPosition.x + __m_thrallsTooltipTextOffset.x, desiredPosition.y - __m_thrallsTooltipTextOffset.y, 0f);
-        }
-
-        public static void HideThrallsTooltip()
+        public static void HideThrallsWindow()
         {
-            __m_thrallsTooltipBackground.SetActive(false);
-            __m_thrallsTooltipObject.SetActive(false);
+            __m_thrallsWindowBackground.SetActive(false);
+            __m_thrallsWindowObject.SetActive(false);
         }
 
 
