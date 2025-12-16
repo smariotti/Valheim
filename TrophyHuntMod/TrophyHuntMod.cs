@@ -31,7 +31,7 @@ namespace TrophyHuntMod
 
         private const Boolean UPDATE_LEADERBOARD = false; // SET TO TRUE WHEN PTB IS LIVE
 
-        public const string PluginVersion = "0.10.15";
+        public const string PluginVersion = "0.10.19";
         private readonly Harmony harmony = new Harmony(PluginGUID);
 
         // Configuration variables
@@ -1471,6 +1471,15 @@ namespace TrophyHuntMod
                     }
 
                     DoPacifistPostPlayerSpawnTasks();
+                }
+
+                // In case we've been playing around with Pacifist and have changed
+                // recipes, do a recipe refresh on load in just in case things haven't
+                // updated
+                Player player = Player.m_localPlayer;
+                if (player != null)
+                {
+                    player.UpdateKnownRecipesList();
                 }
             }
         }
@@ -3332,6 +3341,7 @@ namespace TrophyHuntMod
                 if (IsPacifist())
                 {
                     StopCharmTimer();
+                    RestoreArrowsAndRecipes(ObjectDB.instance);
                 }
             }
         }
@@ -4059,9 +4069,14 @@ namespace TrophyHuntMod
                 DateTime remainTime = DateTime.MinValue.AddSeconds(remainingTime);
                 string timeStr = remainTime.ToString("m'm 's's'");
 
-                text += $"<pos=5%><color=white>{c.GetHoverName()}<pos=40%><color=yellow>({cc.m_charmLevel})</color><pos=50%><color=red>{(int)(c.GetHealthPercentage()*100)}%</color><pos=70%></color><color=orange>{timeStr}</color></size>\n";
+                text += $"<color=yellow>{lineCount + 1}:</color> <pos=5%><color=white>{c.GetHoverName()}<pos=40%><color=yellow>({cc.m_charmLevel})</color><pos=50%><color=red>{(int)(c.GetHealthPercentage()*100)}%</color><pos=70%></color><color=orange>{timeStr}</color></size>\n";
                 lineCount++;
             }
+            for (int i=MAX_NUM_THRALLS - lineCount; i>0; i--)
+            {
+                text += $"<color=yellow>{lineCount + 1}:</color> <pos=5%><color=#505050> -- Unused -- <pos=40%><color=#505050>--<pos=50%><color=#505050>---<pos=70%><color=#505050>---</color></size>\n";
+                lineCount++;
+            }   
 
             lines = lineCount;
             return text;

@@ -28,6 +28,9 @@ namespace TrophyHuntMod
         public static bool __m_showCharmList = false;
 
         public static Color __m_pinkColor = new Color(0.95f, 0.53f, 0.77f);
+
+        public const int MAX_NUM_THRALLS = 5;
+
         public class GandrArrowData
         {
             public GandrArrowData(string arrowName, string ingredient, string name, string description, Type statusEffectType, GandrTypeIndex spriteIndex)
@@ -195,6 +198,14 @@ namespace TrophyHuntMod
                 List<Character> allCharacters = Character.GetAllCharacters();
                 Character closestEnemy = null;
                 float closestDist = 99999f;
+                
+                // Temporary bump up sense ranges for this enemy
+                float oldHearRange = me.m_hearRange;
+                float oldSightRange = me.m_viewRange;
+
+                me.m_hearRange *= 1.25f;
+                me.m_viewRange *= 1.25f;
+
                 foreach (Character enemy in allCharacters)
                 {
                     if (!BaseAI.IsEnemy(me.m_character, enemy) || enemy.IsDead() || enemy.m_aiSkipTarget)
@@ -213,6 +224,10 @@ namespace TrophyHuntMod
                         }
                     }
                 }
+
+                me.m_hearRange = oldHearRange;
+                me.m_viewRange = oldSightRange;
+
                 if (closestEnemy == null && me.HuntPlayer())
                 {
                     Player closestPlayer = Player.GetClosestPlayer(me.transform.position, 200f);
@@ -605,7 +620,7 @@ namespace TrophyHuntMod
                     monsterAI.m_afraidOfFire = false;
                     monsterAI.m_avoidFire = false;
                     monsterAI.m_avoidLand = false;
-                    monsterAI.m_avoidWater = false;
+                    monsterAI.m_avoidWater = true;
                     
                     monsterAI.m_circulateWhileCharging = false;
                     monsterAI.m_circleTargetInterval = 0;
@@ -942,6 +957,13 @@ namespace TrophyHuntMod
                     }
                     //                    Debug.LogWarning($"Hit char {hitChar.name} of faction {hitChar.GetFaction()} and group {hitChar.m_group} nview {hitChar.m_nview}");
 
+                    if (!IsCharmed(hitChar) && __m_allCharmedCharacters.Count >= MAX_NUM_THRALLS)
+                    {
+                        Player.m_localPlayer.Message(MessageHud.MessageType.Center, $"You already have {MAX_NUM_THRALLS} thralls.");
+
+                        return;
+                    }
+
                     if (__instance.m_owner != null && hitChar)
                     {
                         __instance.m_owner.RaiseSkill(__instance.m_skill, __instance.m_raiseSkillAmount);
@@ -954,8 +976,20 @@ namespace TrophyHuntMod
                         CharmedCharacter cc = GetCharmedCharacter(hitChar);
                         if (cc != null)
                         {
-                            cc.m_charmExpireTime = __m_charmTimerSeconds + (long)GetCharmDuration();
-                            wasCharmed = true;
+                            if (arrowName.Contains("Wood"))
+                            {
+                                Player.m_localPlayer.Message(MessageHud.MessageType.Center, $"Thrall {hitChar.GetHoverName()} released from bondage.");
+
+                                SetUncharmedState(cc);
+                                RemoveGUIDFromCharmedList(cc.m_charmGUID);
+                                ZNetScene.instance.Destroy(__instance.gameObject);
+                                return;
+                            }
+                            else
+                            {
+                                cc.m_charmExpireTime = __m_charmTimerSeconds + (long)GetCharmDuration();
+                                wasCharmed = true;
+                            }
                         }
                     }
                     else
@@ -976,51 +1010,76 @@ namespace TrophyHuntMod
             }
         }
 
-        [HarmonyPatch(typeof(ObjectDB), nameof(ObjectDB.Awake))]
-        public static class ObjectDB_Awake_Patch
+        public class SavedItemData
         {
-            static public void ChangeArrow(ObjectDB db, string prefabName, string ingredient, string newName, string newDescription)
+            public string m_name;
+            public string m_description;
+        }
+
+        static public Dictionary<string, SavedItemData> __m_originalArrows = new Dictionary<string, SavedItemData>();
+        static public Dictionary<string, Recipe> __m_originalArrowRecipes = new Dictionary<string, Recipe>();
+
+        public static void ChangeArrow(ObjectDB db, string prefabName, string ingredient, string newName, string newDescription)
+        {
+            GameObject arrowPrefab = db.GetItemPrefab(prefabName);
+            if (!arrowPrefab)
             {
-                GameObject arrowPrefab = db.GetItemPrefab(prefabName);
-                if (!arrowPrefab)
-                {
-                    Debug.LogError($"Could not find {prefabName}");
-                    return;
-                }
+                Debug.LogError($"Could not find {prefabName}");
+                return;
+            }
 
-                ItemDrop itemDrop = arrowPrefab.GetComponent<ItemDrop>();
-                if (!itemDrop)
-                {
-                    Debug.LogError($"Could not find ItemDrop on {prefabName}");
-                    return;
-                }
+            // ItemDrop
+            //
 
-                itemDrop.m_itemData.m_shared.m_description = newDescription;
-                itemDrop.m_itemData.m_shared.m_name = newName;
+            ItemDrop itemDrop = arrowPrefab.GetComponent<ItemDrop>();
+            if (!itemDrop)
+            {
+                Debug.LogError($"Could not find ItemDrop on {prefabName}");
+                return;
+            }
 
-                Recipe vanillaRecipe = db.m_recipes.Find(r => r.name == $"Recipe_{prefabName}");
-                if (vanillaRecipe)
-                {
-//                    Debug.LogWarning($"name: {vanillaRecipe.name} item: {vanillaRecipe?.m_item?.name} amount: {vanillaRecipe.m_amount} enabled: {vanillaRecipe.m_enabled} craftingStation = {vanillaRecipe.m_craftingStation?.m_name} repairStation = {vanillaRecipe.m_repairStation?.m_name}");
-                }
-                else
-                {
-                    Debug.LogError($"Could not find Recipe_{prefabName}");
-                    return;
-                }
+            SavedItemData savedItemData = new SavedItemData();
+            savedItemData.m_name = itemDrop.m_itemData.m_shared.m_name;
+            savedItemData.m_description = itemDrop.m_itemData.m_shared.m_description;
 
-                // TODO: Keep recipes the same, but create bigger stacks
-                // make station type and level requirements stay the same as vanilla
-                //
-                vanillaRecipe.m_item = itemDrop;
-                vanillaRecipe.m_amount = 20;
-                vanillaRecipe.m_enabled = true;
-                if (prefabName == "ArrowWood")
-                {
-                    vanillaRecipe.m_craftingStation = null;
-                    vanillaRecipe.m_minStationLevel = 0;
-                }
-                vanillaRecipe.m_resources = new Piece.Requirement[] {
+            if (!__m_originalArrows.ContainsKey(prefabName))
+            {
+                __m_originalArrows[prefabName] = savedItemData;
+            }
+
+            itemDrop.m_itemData.m_shared.m_description = newDescription;
+            itemDrop.m_itemData.m_shared.m_name = newName;
+
+            // Recipe
+            //
+
+            Recipe vanillaRecipe = db.m_recipes.Find(r => r.name == $"Recipe_{prefabName}");
+            if (vanillaRecipe)
+            {
+                __m_originalArrowRecipes[prefabName] = vanillaRecipe;
+            }
+            else
+            {
+                Debug.LogError($"Could not find Recipe_{prefabName}");
+                return;
+            }
+
+            db.m_recipes.Remove(vanillaRecipe);
+
+            Recipe vanillaRecipeCopy = Instantiate(vanillaRecipe);
+
+            // TODO: Keep recipes the same, but create bigger stacks
+            // make station type and level requirements stay the same as vanilla
+            //
+            vanillaRecipeCopy.m_item = itemDrop;
+            vanillaRecipeCopy.m_amount = 20;
+            vanillaRecipeCopy.m_enabled = true;
+            if (prefabName == "ArrowWood")
+            {
+                vanillaRecipeCopy.m_craftingStation = null;
+                vanillaRecipeCopy.m_minStationLevel = 0;
+            }
+            vanillaRecipeCopy.m_resources = new Piece.Requirement[] {
                         new Piece.Requirement()
                         {
                             m_resItem = db.GetItemPrefab(ingredient).GetComponent<ItemDrop>(),
@@ -1028,24 +1087,82 @@ namespace TrophyHuntMod
                             m_amountPerLevel = 0
                         }
                     };
+
+            db.m_recipes.Add(vanillaRecipeCopy);
+        }
+
+        static public void RestoreArrow(ObjectDB db, string prefabName)
+        {
+            if (__m_originalArrows.ContainsKey(prefabName))
+            {
+                GameObject obj = db.GetItemPrefab(prefabName);
+                if (obj)
+                {
+                    ItemDrop itemDrop = obj.GetComponent<ItemDrop>();
+                    itemDrop.m_itemData.m_shared.m_name = __m_originalArrows[prefabName].m_name;
+                    itemDrop.m_itemData.m_shared.m_description = __m_originalArrows[prefabName].m_description;
+                }
             }
+
+            if (__m_originalArrowRecipes.ContainsKey(prefabName))
+            {
+                Recipe originalRecipe = __m_originalArrowRecipes[prefabName];
+
+                if (originalRecipe)
+                {
+                    Recipe recipe = db.m_recipes.Find(r => r.name == $"Recipe_{prefabName}");
+                    if (recipe)
+                    {
+                        db.m_recipes.Remove(recipe);
+                    }
+                    db.m_recipes.Add(originalRecipe);
+                }
+            }
+        }
+
+        public static void ChangeArrowsAndRecipes(ObjectDB db)
+        {
+            __m_originalArrows.Clear();
+            __m_originalArrowRecipes.Clear();
+
+            foreach (var arrowData in __m_gandrArrowData)
+            {
+                ChangeArrow(db, arrowData.m_arrowName, arrowData.m_ingredient, arrowData.m_name, arrowData.m_description);
+            }
+
+            db.UpdateRegisters();
+        }
+
+        public static void RestoreArrowsAndRecipes(ObjectDB db)
+        {
+            foreach (var arrowData in __m_gandrArrowData)
+            {
+                RestoreArrow(db, arrowData.m_arrowName);
+            }
+            __m_originalArrows.Clear();
+            __m_originalArrowRecipes.Clear();
+
+            db.UpdateRegisters();
+        }
+
+        [HarmonyPatch(typeof(ObjectDB), nameof(ObjectDB.Awake))]
+        public static class ObjectDB_Awake_Patch
+        {
             static void Postfix(ObjectDB __instance)
             {
-//                Debug.LogWarning($"ObjectDB.Awake() called");
+                //                Debug.LogWarning($"ObjectDB.Awake() called");
                 if (!IsPacifist())
+                {
                     return;
+                }
 
                 // See if the Database is initialized
                 if (ObjectDB.instance != null &&
                     ObjectDB.instance.m_items.Count != 0
                     && ObjectDB.instance.GetItemPrefab("Amber") != null)
                 {
-//                    Debug.LogWarning($"ObjectDB available");
-
-                    foreach (var arrowData in __m_gandrArrowData)
-                    {
-                        ChangeArrow(__instance, arrowData.m_arrowName, arrowData.m_ingredient, arrowData.m_name, arrowData.m_description);
-                    }
+                    //                    Debug.LogWarning($"ObjectDB available");
+                    ChangeArrowsAndRecipes(__instance);
                 }
             }
         }
@@ -1847,8 +1964,8 @@ namespace TrophyHuntMod
 
                     if (loc.m_minDistance > 0 && loc.m_maxDistance > 0)
                     {
-                        loc.m_minDistance = Mathf.Max(10f, loc.m_minDistance * 0.50f);
-                        loc.m_maxDistance = Mathf.Max(10f, loc.m_maxDistance * 0.50f);
+                        loc.m_minDistance = Mathf.Max(10f, loc.m_minDistance * (1/locMultiplier));
+                        loc.m_maxDistance = Mathf.Max(10f, loc.m_maxDistance * (1/locMultiplier));
                     }
 
                     if (loc.m_minDistanceFromSimilar > 0)
@@ -1902,12 +2019,12 @@ namespace TrophyHuntMod
 
         public class SpawnModifierData
         {
-            public float m_chance = 1.2f;
+            public float m_chance = 1.1f;
             public float m_max = 2.0f;
             public float m_interval = 0.9f;
             public float m_minRadius = 0.0f;
             public float m_maxRadius = 0.0f;
-            public float m_distance = 0.75f;
+            public float m_distance = 0.85f;
         }
 
         //public class SpawnModifierData

@@ -274,6 +274,21 @@ You can find the github at: https://github.com/smariotti/Valheim/tree/master/Tro
 
 
 ## Change Log
+v0.10.18
+- Trophy Pacifist
+  - Adjusted world generation location placement to be slightly less dense
+  - Fixed thralls getting stuck in water (especially the dang Bjorn)
+  - Fixed bug where Pacifist recipes would persist in other game modes (thanks Rattle!)
+
+v0.10.17
+- Trophy Pacifist
+  - Wood Arrows now toggle between charmed and uncharmed
+	- Only more advanced arrows (flint, fire, etc.) will extend charm time on Thralls
+  - You may only have 5 thralls at one time
+  - Changed thrall status window to indicate all 5 slots
+- Culinary Saga
+  - Fixed exception making this mode unplayable due to UI problem (sorry Ana!)
+
 v0.10.16
 - Trophy Pacifist
   - Increased enemy density
