@@ -93,109 +93,7 @@ namespace TrophyHuntMod
         {
 
         }
-        static GameObject __m_thrallsWindowObject = null;
-        static GameObject __m_thrallsWindowBackground = null;
-        static TextMeshProUGUI __m_thrallsWindowText = null;
-        static Vector2 __m_thrallsTooltipWindowSize = new Vector2(410, 170);
-        static Vector2 __m_thrallsTooltipTextOffset = new Vector2(5, 2);
 
-        public static void CreateThrallsWindow(Transform parentTransform)
-        {
-            // Tooltip Background
-            __m_thrallsWindowBackground = new GameObject("Thrall Window Background");
-
-            // Set %the parent to the HUD
-            __m_thrallsWindowBackground.transform.SetParent(parentTransform, false);
-
-            Vector2 windowPos = new Vector2(-90, 360);
-
-            RectTransform bgTransform = __m_thrallsWindowBackground.AddComponent<RectTransform>();
-            bgTransform.sizeDelta = __m_thrallsTooltipWindowSize;
-            bgTransform.anchoredPosition = windowPos;
-            bgTransform.pivot = new Vector2(0, 0);
-
-            // Add an Image component for the background
-            UnityEngine.UI.Image backgroundImage = __m_thrallsWindowBackground.AddComponent<UnityEngine.UI.Image>();
-            backgroundImage.color = new Color(0, 0, 0, 0.90f); // Semi-transparent black background
-            __m_thrallsWindowBackground.SetActive(false);
-
-            // Create a new GameObject for the tooltip
-            __m_thrallsWindowObject = new GameObject("Thrall Window Text");
-            __m_thrallsWindowObject.transform.SetParent(parentTransform, false);
-
-            // Add a RectTransform component for positioning
-            RectTransform rectTransform = __m_thrallsWindowObject.AddComponent<RectTransform>();
-            rectTransform.sizeDelta = new Vector2(__m_thrallsTooltipWindowSize.x - __m_thrallsTooltipTextOffset.x, __m_thrallsTooltipWindowSize.y - __m_thrallsTooltipTextOffset.y);
-            rectTransform.anchoredPosition = windowPos + new Vector2(5, 0);
-            rectTransform.pivot = new Vector2(0, 0);
-
-            // Add a TextMeshProUGUI component for displaying the tooltip text
-            __m_thrallsWindowText = AddTextMeshProComponent(__m_thrallsWindowObject);
-            __m_thrallsWindowText.fontSize = 14;
-            __m_thrallsWindowText.alignment = TextAlignmentOptions.TopLeft;
-            __m_thrallsWindowText.color = Color.yellow;
-
-            // Initially hide the tooltip
-            __m_thrallsWindowObject.SetActive(true);
-        }
-
-        public static string BuildThrallsWindowText(ref int lines)
-        {
-            string text =
-                $"<size=20><b><color=#FFB75B>Thralls</color><b></size>\n";
-
-            text += $"\n<size=16><pos=0%><color=white><u>Friend</u></color><pos=35%><u><color=yellow>(Level)</color></u><pos=50%><color=red><u>Health</u></color><pos=78%><color=orange><u>Remain</u></color>\n";
-
-            int lineCount = 0;
-            foreach (var cc in __m_allCharmedCharacters)
-            {
-                Character c = GetCharacterFromGUID(cc.m_charmGUID);
-                if (c == null)
-                    continue;
-                float remainingTime = cc.m_charmExpireTime - __m_charmTimerSeconds;
-                DateTime remainTime = DateTime.MinValue.AddSeconds(remainingTime);
-                string timeStr = remainTime.ToString("m'm 's's'");
-
-                text += $"<color=yellow>{lineCount + 1}:</color> <pos=5%><color=white>{c.GetHoverName()}<pos=40%><color=yellow>({cc.m_charmLevel})</color><pos=50%><color=red>{(int)(c.GetHealthPercentage() * 100)}%</color><pos=78%></color><color=orange>{timeStr}</color></size>\n";
-                lineCount++;
-            }
-            for (int i = MAX_NUM_THRALLS - lineCount; i > 0; i--)
-            {
-                text += $"<color=yellow>{lineCount + 1}:</color> <pos=5%><color=#505050> -- Unused -- <pos=40%><color=#505050>--<pos=50%><color=#505050>---<pos=78%><color=#505050>---</color></size>\n";
-                lineCount++;
-            }
-
-            lines = lineCount;
-            return text;
-        }
-
-        public static void ShowThrallsWindow(GameObject uiObject)
-        {
-            if (uiObject == null)
-            {
-                Debug.LogError("ShowThrallsWindow: uiObject is null!");
-
-                return;
-            }
-
-            int lineCount = 0;
-
-            string text = BuildThrallsWindowText(ref lineCount);
-
-            __m_thrallsWindowText.text = text;
-            __m_thrallsWindowText.ForceMeshUpdate(true, true);
-
-            __m_thrallsWindowBackground.SetActive(true);
-            __m_thrallsWindowObject.SetActive(true);
-
-            __m_thrallsWindowText.ForceMeshUpdate(true, true);
-        }
-
-        public static void HideThrallsWindow()
-        {
-            __m_thrallsWindowBackground.SetActive(false);
-            __m_thrallsWindowObject.SetActive(false);
-        }
 
         public static TextMeshProUGUI __m_pacifistMainMenuText = null;
 
@@ -225,7 +123,7 @@ namespace TrophyHuntMod
                         rectTransform.anchorMin = new Vector2(0.0f, 0.0f);
                         rectTransform.anchorMax = new Vector2(1.0f, 1.0f);
                         rectTransform.pivot = new Vector2(1.0f, 1.0f);
-                        rectTransform.anchoredPosition = new Vector2(0,300);
+                        rectTransform.anchoredPosition = new Vector2(0, 300);
                         rectTransform.sizeDelta = new Vector2(0, 0);
                         rectTransform.offsetMax = new Vector2(0, 0);
                         rectTransform.offsetMin = new Vector2(0, 0);
@@ -238,7 +136,7 @@ namespace TrophyHuntMod
                         __m_pacifistMainMenuText.raycastTarget = false;
 
                         __m_pacifistMainMenuText.text = "<color=#F387C5><size=64>Pacifist</size></color>" +
-                            "<size=20>\nVersion " + PluginVersion + "</size>"+
+                            "<size=20>\nVersion " + PluginVersion + "</size>" +
                             "<size=32>\n🕊️ <color=yellow>You may not directly cause harm.</color> 🕊️\n</size>" +
                             "<size=28>→ <color=#FFFF0050>Use arrows to charm enemies.</color> ←" +
                             "\n→ <color=#FFFF0050>Your Thralls fight for you.</color> ←" +
@@ -261,6 +159,5 @@ namespace TrophyHuntMod
                 }
             }
         }
-
     }
 }

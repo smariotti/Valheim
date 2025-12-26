@@ -31,6 +31,15 @@ namespace TrophyHuntMod
 
         public const int MAX_NUM_THRALLS = 5;
 
+        public const bool LOG_DAMAGE = false;
+        public static void LogDamage(string logEntry)
+        {
+            string logFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "DamageLog.csv");
+
+            // Append the message to the file
+            File.AppendAllText(logFilePath, logEntry+"\n");
+        }
+
         public class GandrArrowData
         {
             public GandrArrowData(string arrowName, string ingredient, string name, string description, Type statusEffectType, GandrTypeIndex spriteIndex)
@@ -67,7 +76,7 @@ namespace TrophyHuntMod
             new GandrArrowData("ArrowCharred", "Blackwood", "Charred Gandr", " thrall channels lightning.", typeof(SE_GandrCharred), GandrTypeIndex.Charred),
         };
 
-        
+
 
         [HarmonyPatch(typeof(Character), nameof(Character.GetJogSpeedFactor))]
         public static class Character_GetJogSpeedFactor_Patch
@@ -126,13 +135,13 @@ namespace TrophyHuntMod
 
                 if (__instance.m_character == null)
                 {
-//                    Debug.LogError("MonsterAI_UpdateAI_Patch: __instance.m_character is null!");
+                    //                    Debug.LogError("MonsterAI_UpdateAI_Patch: __instance.m_character is null!");
                     return;
                 }
 
                 if (Player.m_localPlayer == null)
                 {
-//                    Debug.LogError("MonsterAI_UpdateAI_Patch: Player.m_localPlayer is null!");
+                    //                    Debug.LogError("MonsterAI_UpdateAI_Patch: Player.m_localPlayer is null!");
                     return;
                 }
 
@@ -198,7 +207,7 @@ namespace TrophyHuntMod
                 List<Character> allCharacters = Character.GetAllCharacters();
                 Character closestEnemy = null;
                 float closestDist = 99999f;
-                
+
                 // Temporary bump up sense ranges for this enemy
                 float oldHearRange = me.m_hearRange;
                 float oldSightRange = me.m_viewRange;
@@ -255,7 +264,7 @@ namespace TrophyHuntMod
                     __result = null;
                     return false;
                 }
-                
+
                 if (closestEnemy == null)
                 {
                     MonsterAI monster = __instance as MonsterAI;
@@ -339,6 +348,18 @@ namespace TrophyHuntMod
                     return false;
                 }
 
+                Character attacker = hit.GetAttacker();
+                if (attacker == null)
+                    return true;
+                
+                CharmedCharacter cc = GetCharmedCharacter(attacker);
+                if (cc == null)
+                    return true;
+
+
+
+                LogDamage($"{hit.GetAttacker().GetHoverName()}, {cc.m_charmLevel}, {__instance.GetHoverName()}, {hit.GetTotalDamage()}, {hit.GetTotalBlockableDamage()}, {hit.GetTotalElementalDamage()}, {hit.GetTotalPhysicalDamage()}, {hit.m_damage.ToString()}");
+
                 return true;
             }
         }
@@ -376,7 +397,7 @@ namespace TrophyHuntMod
                             if (weapon.m_shared.m_skillType == SkillType.Axes ||
                                 weapon.m_shared.m_skillType == SkillType.Pickaxes ||
                                 weapon.m_shared.m_skillType == SkillType.WoodCutting)
-//                                weapon.m_shared.m_skillType == SkillType.Unarmed)
+                            //                                weapon.m_shared.m_skillType == SkillType.Unarmed)
                             {
                                 return true;
                             }
@@ -402,7 +423,7 @@ namespace TrophyHuntMod
         }
         public static bool HasThrall()
         {
-            if (!IsPacifist()) 
+            if (!IsPacifist())
                 return false;
 
             return (__m_allCharmedCharacters.Count > 0);
@@ -412,7 +433,7 @@ namespace TrophyHuntMod
         {
             System.Random randomizer = new System.Random();
             //            float duration = TROPHY_PACIFIST_CHARM_DURATION + (float)randomizer.NextDouble() * TROPHY_PACIFIST_CHARM_DURATION / 4 - TROPHY_PACIFIST_CHARM_DURATION / 8;
-            
+
             float duration = TROPHY_PACIFIST_CHARM_DURATION;
 
             //            Debug.LogWarning($"[GetCharmDuration] {duration} seconds.");
@@ -462,7 +483,7 @@ namespace TrophyHuntMod
         {
             if (Player.m_localPlayer?.m_trinketItem != null)
             {
-//                Debug.LogError($"Has Trinket {Player.m_localPlayer.m_trinketItem?.m_shared?.m_name}");
+                //                Debug.LogError($"Has Trinket {Player.m_localPlayer.m_trinketItem?.m_shared?.m_name}");
             }
             else
             {
@@ -474,6 +495,7 @@ namespace TrophyHuntMod
                 }
             }
         }
+
 
         public static void DoPacifistPostPlayerSpawnTasks()
         {
@@ -492,6 +514,7 @@ namespace TrophyHuntMod
             }
 
             SetNonTrinketAdrenaline();
+
         }
 
         public static bool IsCharmed(Character character)
@@ -520,7 +543,7 @@ namespace TrophyHuntMod
             ZDO zdo = enemy.GetComponent<ZNetView>().GetZDO();
             Guid cGUID = System.Guid.NewGuid();
             zdo.Set("CharmGUID", cGUID.ToString());
-            
+
             // Force ZDO to persist
             zdo.Persistent = true;
 
@@ -554,7 +577,7 @@ namespace TrophyHuntMod
             ZDO zdo = enemy.GetComponent<ZNetView>().GetZDO();
             string guidString = zdo.GetString("CharmGUID");
             Guid cGUID = Guid.Parse(guidString);
-            
+
             RemoveGUIDFromCharmedList(cGUID);
         }
 
@@ -621,7 +644,7 @@ namespace TrophyHuntMod
                     monsterAI.m_avoidFire = false;
                     monsterAI.m_avoidLand = false;
                     monsterAI.m_avoidWater = true;
-                    
+
                     monsterAI.m_circulateWhileCharging = false;
                     monsterAI.m_circleTargetInterval = 0;
                     monsterAI.m_passiveAggresive = true;
@@ -634,7 +657,7 @@ namespace TrophyHuntMod
 
                     monsterAI.SetDespawnInDay(false);
 
-//                    Debug.Log($"Swim ({enemy.m_canSwim}) Depth: {enemy.m_swimDepth} Water level: {enemy.m_waterLevel}");
+                    //                    Debug.Log($"Swim ({enemy.m_canSwim}) Depth: {enemy.m_swimDepth} Water level: {enemy.m_waterLevel}");
                 }
             }
 
@@ -686,7 +709,7 @@ namespace TrophyHuntMod
                 CharmedCharacter guy = __m_allCharmedCharacters.Find(c => c.m_charmGUID == cGUID);
                 if (guy != null)
                 {
-//                    Debug.LogWarning($"MonsterAI.Awake(): re-charming {__instance.m_character.name} {guy.m_charmGUID}");
+                    //                    Debug.LogWarning($"MonsterAI.Awake(): re-charming {__instance.m_character.name} {guy.m_charmGUID}");
                     SetCharmedState(guy);
                 }
             }
@@ -805,7 +828,7 @@ namespace TrophyHuntMod
                     }
 
                     RemoveFromCharmedList(toRemove);
-//                    __m_allCharmedCharacters.Remove(toRemove);
+                    //                    __m_allCharmedCharacters.Remove(toRemove);
                 }
 
                 yield return new WaitForSeconds(1f);
@@ -944,7 +967,7 @@ namespace TrophyHuntMod
                     Character hitChar = obj.GetComponent<Character>();
                     if (hitChar == null || hitChar.IsPlayer() || hitChar.IsDead())
                     {
-//                        Debug.LogWarning($"Invalid hit char.");
+                        //                        Debug.LogWarning($"Invalid hit char.");
 
                         return;
                     }
@@ -1227,7 +1250,7 @@ namespace TrophyHuntMod
                     return true;
                 }
 
-//                Debug.LogWarning($"AddAdrenaline: {__instance.GetAdrenaline()}/{__instance.GetMaxAdrenaline()} + {v}");
+                //                Debug.LogWarning($"AddAdrenaline: {__instance.GetAdrenaline()}/{__instance.GetMaxAdrenaline()} + {v}");
 
                 if (HasThrall())
                 {
@@ -1265,7 +1288,7 @@ namespace TrophyHuntMod
                     // Adrenaline increases much faster
                     use *= 2;
 
-//                    Debug.LogError($"ADRENALINE: {player.m_adrenaline}/{player.m_maxAdrenaline} + {use}");
+                    //                    Debug.LogError($"ADRENALINE: {player.m_adrenaline}/{player.m_maxAdrenaline} + {use}");
 
                     if (player.m_adrenaline + use > player.m_maxAdrenaline)
                     {
@@ -1287,10 +1310,10 @@ namespace TrophyHuntMod
                             if (c)
                             {
                                 c.Heal(c.GetMaxHealth() - c.GetHealth(), showText: true);
-//                                Debug.LogError($"ADRENALINE: Healed charmed enemy {c.name} to full health due to adrenaline overflow.");
+                                //                                Debug.LogError($"ADRENALINE: Healed charmed enemy {c.name} to full health due to adrenaline overflow.");
                                 if (trinketPopped)
                                 {
-//                                    Debug.LogError($"TRINKET POPPED: {trinketStatusEffect.m_name}");
+                                    //                                    Debug.LogError($"TRINKET POPPED: {trinketStatusEffect.m_name}");
 
                                     player.m_adrenalinePopEffects.Create(c.transform.position, Quaternion.identity);
 
@@ -1326,16 +1349,16 @@ namespace TrophyHuntMod
 
         public static void ScaleThrallIncomingDamage(Character me, ref HitData hit, float charmLevel = 1f, float adrenalineScalar = 0.5f, float damageReceivedModifier = 1.0f)
         {
-//                            Debug.Log($"{me.GetHoverName()} Incoming Pre Damage: {hit.m_damage}");
+            //                            Debug.Log($"{me.GetHoverName()} Incoming Pre Damage: {hit.m_damage}");
             hit.m_damage.Modify((1.0f / Math.Max(1, charmLevel / 2 + adrenalineScalar)) * damageReceivedModifier);
-//                            Debug.Log($"{me.GetHoverName()} Incoming Post Damage :{hit.m_damage} (CharmLevel: {charmLevel} Adrenaline Scalar: {adrenalineScalar} recievedModifier: {damageReceivedModifier}");
+            //                            Debug.Log($"{me.GetHoverName()} Incoming Post Damage :{hit.m_damage} (CharmLevel: {charmLevel} Adrenaline Scalar: {adrenalineScalar} recievedModifier: {damageReceivedModifier}");
         }
 
         public static void ScaleThrallOutgoingDamage(ref HitData hit, float charmLevel = 1f, float adrenalineScalar = 0.5f, float damageInflictedModifier = 1.0f)
         {
- //                           Debug.Log($"{hit.GetAttacker().GetHoverName()} Attack Pre Damage: {hit.m_damage}");
+            //                           Debug.Log($"{hit.GetAttacker().GetHoverName()} Attack Pre Damage: {hit.m_damage}");
             hit.m_damage.Modify((Math.Max(1, charmLevel / 2 + adrenalineScalar)) * damageInflictedModifier);
- //                           Debug.Log($"{hit.GetAttacker().GetHoverName()} Attack Post Damage: {hit.m_damage} (CharmLevel: {charmLevel} Adrenaline Scalar: {adrenalineScalar} inflictedModifier: {damageInflictedModifier}");
+            //                           Debug.Log($"{hit.GetAttacker().GetHoverName()} Attack Post Damage: {hit.m_damage} (CharmLevel: {charmLevel} Adrenaline Scalar: {adrenalineScalar} inflictedModifier: {damageInflictedModifier}");
 
         }
 
@@ -1352,7 +1375,7 @@ namespace TrophyHuntMod
                         CharmedCharacter cc = GetCharmedCharacter(me);
                         if (cc != null)
                         {
-//                            Debug.Log($"Unbuffed thrall {me.GetHoverName()}");
+                            //                            Debug.Log($"Unbuffed thrall {me.GetHoverName()}");
                             float adrenaline = Player.m_localPlayer.GetAdrenaline() / Player.m_localPlayer.GetMaxAdrenaline();
                             ScaleThrallOutgoingDamage(ref hitData, cc.m_charmLevel, adrenaline, DEFAULT_THRALL_OUTGOING_DAMAGE_SCALAR);
                         }
@@ -1374,7 +1397,7 @@ namespace TrophyHuntMod
                         CharmedCharacter cc = GetCharmedCharacter(__instance);
                         if (cc != null)
                         {
-//                            Debug.Log($"Unbuffed thrall {__instance.GetHoverName()}");
+                            //                            Debug.Log($"Unbuffed thrall {__instance.GetHoverName()}");
                             float adrenaline = Player.m_localPlayer.GetAdrenaline() / Player.m_localPlayer.GetMaxAdrenaline();
                             ScaleThrallIncomingDamage(__instance, ref hit, cc.m_charmLevel, adrenaline, DEFAULT_THRALL_INCOMING_DAMAGE_SCALAR);
                         }
@@ -1460,7 +1483,7 @@ namespace TrophyHuntMod
                 }
             }
             public override void UpdateStatusEffect(float dt)
-            { 
+            {
                 base.UpdateStatusEffect(dt);
 
                 CharmedCharacter cc = GetCharmedCharacter(m_character);
@@ -1473,7 +1496,7 @@ namespace TrophyHuntMod
                 {
                     m_adrenalineScalar = Player.m_localPlayer.GetAdrenaline() / Player.m_localPlayer.GetMaxAdrenaline();
                 }
-                else 
+                else
                 {
                     m_adrenalineScalar = 0.0f;
                 }
@@ -1490,7 +1513,7 @@ namespace TrophyHuntMod
                 hitData.m_damage.Add(dt);
 
                 ScaleThrallOutgoingDamage(ref hitData, m_charmLevel, m_adrenalineModifier, m_baseDamageInflictedModifier);
-                                
+
                 base.ModifyAttack(skill, ref hitData);
             }
 
@@ -1527,7 +1550,7 @@ namespace TrophyHuntMod
             {
                 base.Setup(character);
                 m_percentigeDamageModifiers.m_pierce = m_seData.m_typedDamage;
-                
+
             }
         }
         public class SE_GandrFire : SE_GandrEffect
@@ -1656,7 +1679,7 @@ namespace TrophyHuntMod
                         }
                         continue;
                     }
-                    
+
                     // Unless they're charmed, then show them
                     if (IsCharmed(c))
                     {
@@ -1691,7 +1714,7 @@ namespace TrophyHuntMod
                             float iconPadding = 1;
                             float leftJustify = ((iconSize + iconPadding) * (statusEffectList.Count - 1)) / 2;
                             float iconOffset = (iconSize + iconPadding) * iconElementIndex;
-                            rectTransform.anchoredPosition = new Vector2( -leftJustify + iconOffset, -iconSize/2 - 1);
+                            rectTransform.anchoredPosition = new Vector2(-leftJustify + iconOffset, -iconSize / 2 - 1);
 
                             iconElementIndex++;
                         }
@@ -1716,7 +1739,7 @@ namespace TrophyHuntMod
 
         public static void CreateCharmIconsInMasterHud(Transform parentTransform)
         {
-            for (int i=0; i< MAX_NUM_CHARM_ICONS; i++)
+            for (int i = 0; i < MAX_NUM_CHARM_ICONS; i++)
             {
 
                 GameObject charmIconElement = new GameObject($"CharmIcon{i}");
@@ -1796,7 +1819,7 @@ namespace TrophyHuntMod
                 m_name = name;
                 m_sprite = sprite;
             }
-            
+
             public GandrTypeIndex m_index;
             public string m_name;
             public Sprite m_sprite;
@@ -1855,7 +1878,7 @@ namespace TrophyHuntMod
 
             return sprite;
         }
-  
+
         public static Sprite GetSpriteFromAtlas(string spriteName, string atlasName)
         {
             var atlases = Resources.FindObjectsOfTypeAll<SpriteAtlas>();
@@ -1866,7 +1889,7 @@ namespace TrophyHuntMod
 
                 if (atlas.GetSprite(spriteName) is Sprite s)
                 {
-//                    Debug.LogWarning($"Found {spriteName} in atlas {atlasName}.");
+                    //                    Debug.LogWarning($"Found {spriteName} in atlas {atlasName}.");
                     return s;
                 }
             }
@@ -1875,9 +1898,9 @@ namespace TrophyHuntMod
 
         public static void ReleaseAllThralls()
         {
-            for (int i = __m_allCharmedCharacters.Count-1; i >= 0; i--)
+            for (int i = __m_allCharmedCharacters.Count - 1; i >= 0; i--)
             {
-                CharmedCharacter cc = __m_allCharmedCharacters[i]; 
+                CharmedCharacter cc = __m_allCharmedCharacters[i];
                 SetUncharmedState(cc);
                 RemoveGUIDFromCharmedList(cc.m_charmGUID);
             }
@@ -1916,7 +1939,7 @@ namespace TrophyHuntMod
 
                 foreach (var loc in locations)
                 {
-//                    Debug.LogWarning($"location {loc.m_name} {loc.m_prefabName} Bio={loc.m_biome} Qty={loc.m_quantity} minDistSim={loc.m_minDistanceFromSimilar} maxDistSim={loc.m_maxDistanceFromSimilar} minDist={loc.m_minDistance} maxDist={loc.m_maxDistance} enable={loc.m_enable}");
+                    //                    Debug.LogWarning($"location {loc.m_name} {loc.m_prefabName} Bio={loc.m_biome} Qty={loc.m_quantity} minDistSim={loc.m_minDistanceFromSimilar} maxDistSim={loc.m_maxDistanceFromSimilar} minDist={loc.m_minDistance} maxDist={loc.m_maxDistance} enable={loc.m_enable}");
 
                     if (loc == null) continue;
                     float locMultiplier = 1.5f;
@@ -1964,8 +1987,8 @@ namespace TrophyHuntMod
 
                     if (loc.m_minDistance > 0 && loc.m_maxDistance > 0)
                     {
-                        loc.m_minDistance = Mathf.Max(10f, loc.m_minDistance * (1/locMultiplier));
-                        loc.m_maxDistance = Mathf.Max(10f, loc.m_maxDistance * (1/locMultiplier));
+                        loc.m_minDistance = Mathf.Max(10f, loc.m_minDistance * (1 / locMultiplier));
+                        loc.m_maxDistance = Mathf.Max(10f, loc.m_maxDistance * (1 / locMultiplier));
                     }
 
                     if (loc.m_minDistanceFromSimilar > 0)
@@ -2049,17 +2072,17 @@ namespace TrophyHuntMod
             {"Boar",                new SpawnModifierData() { m_chance = 4.0f, m_max = 8.0f, m_interval = 0.25f, m_distance = 0.1f } },
             {"BonemawSerpent",      new SpawnModifierData() {  } },
             {"Charred_Archer",      new SpawnModifierData() {  } },
-                                                                   
+
             {"Charred_Melee",       new SpawnModifierData() {  } },
-                                                                   
+
             {"Charred_Twitcher",    new SpawnModifierData() {  } },
-                                                                   
+
             {"CinderSky",           new SpawnModifierData() { m_chance = 1.0f, m_max = 1.0f, m_interval = 1.0f, m_distance = 1.0f } },
             {"CinderStorm",         new SpawnModifierData() { m_chance = 1.0f, m_max = 1.0f, m_interval = 1.0f, m_distance = 1.0f } },
             {"Deathsquito",         new SpawnModifierData() {  } },
             {"Deer",                new SpawnModifierData() { m_chance = 1.2f, m_max = 3.0f, m_interval = 1f, m_distance = 0.75f } }, // m_chance = 2.0f, m_max = 4.0f, m_interval = 0.5f, m_distance = 0.5f
             {"Draugr",              new SpawnModifierData() {  } },
-                                                                   
+
             {"Draugr_Elite",        new SpawnModifierData() {  } },
             {"Dverger",             new SpawnModifierData() {  } },
             {"DvergerAshlands",     new SpawnModifierData() {  } },
@@ -2079,48 +2102,48 @@ namespace TrophyHuntMod
             {"Fish9",               new SpawnModifierData() { m_chance = 1.0f, m_max = 1.0f, m_interval = 1.0f, m_distance = 1.0f } },
             {"Gjall",               new SpawnModifierData() {  } },
             {"Goblin",              new SpawnModifierData() {  } },
-                                                                   
-                                                                   
+
+
             {"GoblinBrute",         new SpawnModifierData() {  } },
             {"Greydwarf",           new SpawnModifierData() {  } },
-                                                                   
-                                                                   
-                                                                   
-            {"Greydwarf_Elite",		new SpawnModifierData() {  } },
-            {"Greydwarf_Shaman",	new SpawnModifierData() {  } },
-                                                                   
-            {"Greyling",			new SpawnModifierData() { m_chance = 3.0f, m_max = 4.0f, m_interval = 0.5f, m_distance = 0.3f } },
-            {"Hare",			    new SpawnModifierData() {  } },
-            {"Hatchling",			new SpawnModifierData() {  } },
-            {"LavaRock",			new SpawnModifierData() { m_chance = 1.0f, m_max = 1.0f, m_interval = 1.0f, m_distance = 1.0f } },
-            {"Leech",			    new SpawnModifierData() {  } },
-            {"Lox",			        new SpawnModifierData() {  } },
-            {"Morgen_NonSleeping",	new SpawnModifierData() {  } },
-            {"Neck",			    new SpawnModifierData() { m_chance = 2.0f, m_max = 4.0f, m_interval = 0.5f, m_distance = 0.5f } },
-                                                                   
-            {"Seagal",			    new SpawnModifierData() { m_chance = 1.0f, m_max = 1.0f, m_interval = 1.0f, m_distance = 1.0f } },
-            {"Seeker",			    new SpawnModifierData() {  } },
-                                                                   
-                                                                   
-            {"SeekerBrood",			new SpawnModifierData() {  } },
-            {"SeekerBrute",			new SpawnModifierData() {  } },
-            {"Serpent",			    new SpawnModifierData() {  } },
-            {"Skeleton",			new SpawnModifierData() {  } },
-                                                                   
-            {"StoneGolem",			new SpawnModifierData() {  } },
-            {"Surtling",			new SpawnModifierData() {  } },
-                                                                   
-            {"Tick",			    new SpawnModifierData() {  } },
-            {"Troll",			    new SpawnModifierData() {  } },
-            {"Unbjorn",			    new SpawnModifierData() {  } },
-            {"Volture",			    new SpawnModifierData() {  } },
-            {"Wolf",			    new SpawnModifierData() {  } },
-                                                                   
-            {"Wraith",			    new SpawnModifierData() {  } },
-            {"odin",			    new SpawnModifierData() { m_chance = 1.0f, m_max = 1.0f, m_interval = 1.0f, m_distance = 1.0f } },
+
+
+
+            {"Greydwarf_Elite",      new SpawnModifierData() {  } },
+            {"Greydwarf_Shaman",    new SpawnModifierData() {  } },
+
+            {"Greyling",         new SpawnModifierData() { m_chance = 3.0f, m_max = 4.0f, m_interval = 0.5f, m_distance = 0.3f } },
+            {"Hare",                new SpawnModifierData() {  } },
+            {"Hatchling",           new SpawnModifierData() {  } },
+            {"LavaRock",            new SpawnModifierData() { m_chance = 1.0f, m_max = 1.0f, m_interval = 1.0f, m_distance = 1.0f } },
+            {"Leech",               new SpawnModifierData() {  } },
+            {"Lox",                 new SpawnModifierData() {  } },
+            {"Morgen_NonSleeping",  new SpawnModifierData() {  } },
+            {"Neck",                new SpawnModifierData() { m_chance = 2.0f, m_max = 4.0f, m_interval = 0.5f, m_distance = 0.5f } },
+
+            {"Seagal",               new SpawnModifierData() { m_chance = 1.0f, m_max = 1.0f, m_interval = 1.0f, m_distance = 1.0f } },
+            {"Seeker",              new SpawnModifierData() {  } },
+
+
+            {"SeekerBrood",          new SpawnModifierData() {  } },
+            {"SeekerBrute",         new SpawnModifierData() {  } },
+            {"Serpent",             new SpawnModifierData() {  } },
+            {"Skeleton",            new SpawnModifierData() {  } },
+
+            {"StoneGolem",           new SpawnModifierData() {  } },
+            {"Surtling",            new SpawnModifierData() {  } },
+
+            {"Tick",             new SpawnModifierData() {  } },
+            {"Troll",               new SpawnModifierData() {  } },
+            {"Unbjorn",             new SpawnModifierData() {  } },
+            {"Volture",             new SpawnModifierData() {  } },
+            {"Wolf",                new SpawnModifierData() {  } },
+
+            {"Wraith",               new SpawnModifierData() {  } },
+            {"odin",                new SpawnModifierData() { m_chance = 1.0f, m_max = 1.0f, m_interval = 1.0f, m_distance = 1.0f } },
             {"projectile_ashlandmeteor",new SpawnModifierData() { m_chance = 1.0f, m_max = 1.0f, m_interval = 1.0f, m_distance = 1.0f } }
 
-        }; 
+        };
 
         public static void PrintSpawnSystem(List<SpawnSystemList> ssls, string name)
         {
@@ -2141,7 +2164,7 @@ namespace TrophyHuntMod
         }
 
         public static int __m_spawnListsPatched = 0;
-        
+
         public static Dictionary<int, Dictionary<int, BackupSpawnData>> __m_originalSpawnData = new Dictionary<int, Dictionary<int, BackupSpawnData>>();
         public static void DoBackupSpawnData(List<SpawnSystemList> spawnLists, ref Dictionary<int, Dictionary<int, BackupSpawnData>> outDict)
         {
@@ -2193,11 +2216,11 @@ namespace TrophyHuntMod
                 {
                     if (--__m_spawnListsPatched < 1)
                     {
-//                        Debug.Log($"SpawnSystem.OnDestroy: Num Spawn Lists: {__m_spawnListsPatched}");
+                        //                        Debug.Log($"SpawnSystem.OnDestroy: Num Spawn Lists: {__m_spawnListsPatched}");
                         // restore original spawn lists
                         DoRestoreSpawnData(__m_originalSpawnData, ref __instance.m_spawnLists);
 
-//                        PrintSpawnSystem(__instance.m_spawnLists, "Restored");
+                        //                        PrintSpawnSystem(__instance.m_spawnLists, "Restored");
                     }
                 }
             }
@@ -2213,11 +2236,11 @@ namespace TrophyHuntMod
                     if (__instance == null)
                         return;
 
-//                    Debug.Log($"SpawnSystem.Awake: Num Spawn Lists: {__m_spawnListsPatched}");
+                    //                    Debug.Log($"SpawnSystem.Awake: Num Spawn Lists: {__m_spawnListsPatched}");
                     if (__m_spawnListsPatched++ == 0)
                     {
                         // Save original spawn lists
-//                        PrintSpawnSystem(__instance.m_spawnLists, "Original");
+                        //                        PrintSpawnSystem(__instance.m_spawnLists, "Original");
 
                         DoBackupSpawnData(__instance.m_spawnLists, ref __m_originalSpawnData);
 
@@ -2251,9 +2274,9 @@ namespace TrophyHuntMod
                                 }
                             }
                         }
-//                        Debug.Log($"SpawnSystem.Awake: Spawn List Patched");
+                        //                        Debug.Log($"SpawnSystem.Awake: Spawn List Patched");
 
-//                        PrintSpawnSystem(__instance.m_spawnLists, "Modified");
+                        //                        PrintSpawnSystem(__instance.m_spawnLists, "Modified");
                     }
                 }
             }
@@ -2264,24 +2287,24 @@ namespace TrophyHuntMod
         {
             public static bool Prefix(SpawnSystem __instance)
             {
-                if (!IsPacifist()) 
+                if (!IsPacifist())
                     return true;
-                
 
-                if (__instance == null) 
+
+                if (__instance == null)
                     return true;
-                
+
                 if (Player.m_localPlayer == null)
                     return true;
 
                 foreach (SpawnSystemList ssl in __instance.m_spawnLists)
                 {
-                    if (ssl == null) 
+                    if (ssl == null)
                         continue;
 
                     foreach (SpawnSystem.SpawnData sp in ssl.m_spawners)
                     {
-                        if (sp == null) 
+                        if (sp == null)
                             continue;
 
                         Heightmap.Biome playerBiome = Player.m_localPlayer.GetCurrentBiome();
@@ -2293,6 +2316,111 @@ namespace TrophyHuntMod
                 }
                 return true;
             }
+        }
+
+
+        static GameObject __m_thrallsWindowObject = null;
+        static GameObject __m_thrallsWindowBackground = null;
+        static TextMeshProUGUI __m_thrallsWindowText = null;
+        static Vector2 __m_thrallsTooltipWindowSize = new Vector2(410, 170);
+        static Vector2 __m_thrallsTooltipTextOffset = new Vector2(5, 2);
+
+        public static void CreateThrallsWindow(Transform parentTransform)
+        {
+            // Tooltip Background
+            __m_thrallsWindowBackground = new GameObject("Thrall Window Background");
+
+            // Set %the parent to the HUD
+            __m_thrallsWindowBackground.transform.SetParent(parentTransform, false);
+
+            Vector2 windowPos = new Vector2(-90, 360);
+
+            RectTransform bgTransform = __m_thrallsWindowBackground.AddComponent<RectTransform>();
+            bgTransform.sizeDelta = __m_thrallsTooltipWindowSize;
+            bgTransform.anchoredPosition = windowPos;
+            bgTransform.pivot = new Vector2(0, 0);
+
+            // Add an Image component for the background
+            UnityEngine.UI.Image backgroundImage = __m_thrallsWindowBackground.AddComponent<UnityEngine.UI.Image>();
+            backgroundImage.color = new Color(0, 0, 0, 0.90f); // Semi-transparent black background
+            __m_thrallsWindowBackground.SetActive(false);
+
+            // Create a new GameObject for the tooltip
+            __m_thrallsWindowObject = new GameObject("Thrall Window Text");
+            __m_thrallsWindowObject.transform.SetParent(parentTransform, false);
+
+            // Add a RectTransform component for positioning
+            RectTransform rectTransform = __m_thrallsWindowObject.AddComponent<RectTransform>();
+            rectTransform.sizeDelta = new Vector2(__m_thrallsTooltipWindowSize.x - __m_thrallsTooltipTextOffset.x, __m_thrallsTooltipWindowSize.y - __m_thrallsTooltipTextOffset.y);
+            rectTransform.anchoredPosition = windowPos + new Vector2(5, 0);
+            rectTransform.pivot = new Vector2(0, 0);
+
+            // Add a TextMeshProUGUI component for displaying the tooltip text
+            __m_thrallsWindowText = AddTextMeshProComponent(__m_thrallsWindowObject);
+            __m_thrallsWindowText.fontSize = 14;
+            __m_thrallsWindowText.alignment = TextAlignmentOptions.TopLeft;
+            __m_thrallsWindowText.color = Color.yellow;
+
+            // Initially hide the tooltip
+            __m_thrallsWindowObject.SetActive(true);
+        }
+
+        public static string BuildThrallsWindowText(ref int lines)
+        {
+            string text =
+                $"<size=20><b><color=#FFB75B>Thralls</color><b></size>\n";
+
+            text += $"\n<size=16><pos=0%><color=white><u>Friend</u></color><pos=35%><u><color=yellow>(Level)</color></u><pos=50%><color=red><u>Health</u></color><pos=78%><color=orange><u>Remain</u></color>\n";
+
+            int lineCount = 0;
+            foreach (var cc in __m_allCharmedCharacters)
+            {
+                Character c = GetCharacterFromGUID(cc.m_charmGUID);
+                if (c == null)
+                    continue;
+                float remainingTime = cc.m_charmExpireTime - __m_charmTimerSeconds;
+                DateTime remainTime = DateTime.MinValue.AddSeconds(remainingTime);
+                string timeStr = remainTime.ToString("m'm 's's'");
+
+                text += $"<color=yellow>{lineCount + 1}:</color> <pos=5%><color=white>{c.GetHoverName()}<pos=40%><color=yellow>({cc.m_charmLevel})</color><pos=50%><color=red>{(int)(c.GetHealthPercentage() * 100)}%</color><pos=78%></color><color=orange>{timeStr}</color></size>\n";
+                lineCount++;
+            }
+            for (int i = MAX_NUM_THRALLS - lineCount; i > 0; i--)
+            {
+                text += $"<color=yellow>{lineCount + 1}:</color> <pos=5%><color=#505050> -- Unused -- <pos=40%><color=#505050>--<pos=50%><color=#505050>---<pos=78%><color=#505050>---</color></size>\n";
+                lineCount++;
+            }
+
+            lines = lineCount;
+            return text;
+        }
+
+        public static void ShowThrallsWindow(GameObject uiObject)
+        {
+            if (uiObject == null)
+            {
+                Debug.LogError("ShowThrallsWindow: uiObject is null!");
+
+                return;
+            }
+
+            int lineCount = 0;
+
+            string text = BuildThrallsWindowText(ref lineCount);
+
+            __m_thrallsWindowText.text = text;
+            __m_thrallsWindowText.ForceMeshUpdate(true, true);
+
+            __m_thrallsWindowBackground.SetActive(true);
+            __m_thrallsWindowObject.SetActive(true);
+
+            __m_thrallsWindowText.ForceMeshUpdate(true, true);
+        }
+
+        public static void HideThrallsWindow()
+        {
+            __m_thrallsWindowBackground.SetActive(false);
+            __m_thrallsWindowObject.SetActive(false);
         }
 
         /*
