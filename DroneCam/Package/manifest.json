@@ -1,0 +1,9 @@
+﻿{
+    "name": "YakkityFast",
+    "description": "Fast movement now has a festive soundtrack.",
+    "version_number": "0.1.1",
+    "website_url": "https://github.com/smariotti/",
+    "dependencies": [
+        "denikson-BepInExPack_Valheim-5.4.2202"
+    ]
+}
