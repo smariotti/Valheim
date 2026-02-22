@@ -32,6 +32,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sandbox", "Sandbox\Sandbox.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DroneCam", "DroneCam\DroneCam.csproj", "{256D4813-A4F8-4D2B-9FB2-4C0A0662B80E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KillCam", "Killcam\KillCam.csproj", "{76BDB84B-D5EF-41E8-A982-EABC6BC78A89}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -78,6 +80,10 @@ Global
 		{256D4813-A4F8-4D2B-9FB2-4C0A0662B80E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{256D4813-A4F8-4D2B-9FB2-4C0A0662B80E}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{256D4813-A4F8-4D2B-9FB2-4C0A0662B80E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{76BDB84B-D5EF-41E8-A982-EABC6BC78A89}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{76BDB84B-D5EF-41E8-A982-EABC6BC78A89}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{76BDB84B-D5EF-41E8-A982-EABC6BC78A89}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{76BDB84B-D5EF-41E8-A982-EABC6BC78A89}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
