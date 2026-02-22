@@ -11,11 +11,10 @@ namespace KillCamMod
     {
         public const string PluginGUID = "com.oathorse.killcam";
         public const string PluginName = "KillCam";
-        public const string PluginVersion = "1.0.0";
+        public const string PluginVersion = "0.1.0";
 
         public static KillCamPlugin Instance { get; private set; }
 
-        // ── Config ──────────────────────────────────────────────────────────
         public static ConfigEntry<int> PipWidth;
         public static ConfigEntry<int> PipHeight;
         public static ConfigEntry<int> PipMarginRight;
@@ -35,8 +34,8 @@ namespace KillCamMod
             PipMarginRight = Config.Bind("UI", "PipMarginRight", 10, "Gap from the right edge of the screen.");
             PipMarginTop = Config.Bind("UI", "PipMarginTop", 240, "Gap from the top of the screen (positions it below minimap).");
             CameraFOV = Config.Bind("Camera", "FOV", 60f, "Field of view for the projectile camera.");
-            LingerDuration = Config.Bind("Camera", "LingerSeconds", 1.5f, "Seconds the PiP stays frozen at the impact location after the projectile lands.");
-            FadeDuration = Config.Bind("Camera", "FadeSeconds", 0.5f, "Seconds the PiP takes to fade out after the linger period.");
+            LingerDuration = Config.Bind("Camera", "LingerSeconds", 1.5f, "Seconds the PiP stays frozen at impact.");
+            FadeDuration = Config.Bind("Camera", "FadeSeconds", 0.5f, "Seconds the PiP takes to fade out after the linger.");
 
             _harmony.PatchAll();
             Logger.LogInfo($"{PluginName} loaded.");
@@ -46,167 +45,240 @@ namespace KillCamMod
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    //  Component that lives on the projectile GameObject while it is in flight,
-    //  then detaches from the projectile on impact and manages its own linger
-    //  + fade-out lifecycle independently.
+    //  KillCamSession
+    //
+    //  Lives entirely on its OWN persistent GameObject — completely independent
+    //  of the projectile's lifetime. Tracks the projectile transform by reference
+    //  while in flight, then freezes in place on impact, lingers, fades, and
+    //  self-destructs. No re-parenting, no OnDestroy side-effects from the
+    //  projectile GO.
+    //
+    //  Key design decisions that fix the reported bugs:
+    //
+    //  1. ARROW FADE BUG — Root cause: DestroySelf() was called on a component
+    //     whose gameObject was the anchor, triggering OnDestroy again (re-entrant
+    //     cleanup). Fix: _destroyed guard + Cleanup() is the single exit point.
+    //     Also: we disable the Canvas (SetActive false) before Destroy so it
+    //     immediately vanishes regardless of alpha interpolation timing.
+    //
+    //  2. SPEAR WINDOW-STAYS + NEXT CAMERA BROKEN — Root cause: spear GOs are
+    //     pooled / deactivated rather than destroyed, so the component survived
+    //     re-activation on the *next* throw. The pip-camera (depth -2) kept
+    //     rendering into its RT, shadowing the new session's camera. Fix: the
+    //     session lives on its own GO and has no relationship to the projectile
+    //     GO at all after Init(). On impact we immediately *disable* the pip-camera
+    //     (RT retains the last frame — the frozen image stays visible) so it
+    //     cannot conflict with any subsequent session's camera.
     // ════════════════════════════════════════════════════════════════════════
-    public class ProjectileKillCam : MonoBehaviour
+    public class KillCamSession : MonoBehaviour
     {
         // ── State machine ────────────────────────────────────────────────────
-        private enum State { Riding, Lingering, FadingOut }
-        private State _state = State.Riding;
-        private float _timer;   // counts up while Lingering / FadingOut
+        private enum Phase { Riding, Lingering, FadingOut, Dead }
+        private Phase _phase = Phase.Riding;
+        private float _timer;
+        private bool _cleaned; // re-entrancy guard
 
-        // ── Camera / render texture ──────────────────────────────────────────
-        private Camera _pipCamera;
+        // ── Projectile tracking ──────────────────────────────────────────────
+        // Stored as Transform only — no Projectile component ref — so it goes
+        // null naturally when the projectile GO is destroyed (or stays valid if
+        // the GO is merely deactivated, like a retrieved spear).
+        private Transform _projectile;
+
+        // ── Camera ───────────────────────────────────────────────────────────
+        private Camera _cam;
         private RenderTexture _rt;
 
-        // When we enter Lingering state we detach the camera from the projectile
-        // and freeze it at the impact position/rotation.
-        private bool _cameraStopped;
+        // Position / orientation offsets in projectile local space.
+        // Camera sits slightly behind the tip and above the shaft centreline,
+        // angled slightly downward so the shaft appears at the bottom of frame.
+        private static readonly Vector3 LocalOffset = new Vector3(0f, 0.06f, -0.35f);
+        private static readonly Vector3 LocalLookDelta = new Vector3(0f, -0.08f, 1f);
 
-        // ── UI references ────────────────────────────────────────────────────
-        private GameObject _uiRoot;
-        private Image _borderPanel;   // we fade this too
+        // ── UI ───────────────────────────────────────────────────────────────
+        private GameObject _uiRoot;   // Canvas root — SetActive(false) hides instantly
+        private Image _border;
         private RawImage _rawImage;
 
-        // Camera offset so the projectile model appears at the bottom of frame.
-        private static readonly Vector3 CamLocalOffset = new Vector3(0f, 0.06f, -0.35f);
-        private static readonly Vector3 CamLocalLookDelta = new Vector3(0f, -0.08f, 1f);
+        // ═══════════════════════════════════════════════════════════════════
+        //  Public API
+        // ═══════════════════════════════════════════════════════════════════
 
-        // ── Lifecycle ────────────────────────────────────────────────────────
-        void Awake()
+        /// <summary>Called once immediately after AddComponent.</summary>
+        public void Init(Transform projectileTf)
         {
-            CreateRenderTexture();
-            CreatePipCamera();
+            _projectile = projectileTf;
+            CreateRT();
+            CreateCamera();
             CreateUI();
         }
 
+        /// <summary>Called by the OnHit Harmony patch when the projectile lands.</summary>
+        public void FreezeAndLinger()
+        {
+            if (_phase != Phase.Riding) return;
+
+            // ── FIX #2: disable the pip-camera immediately. ─────────────────
+            // The RT keeps its last rendered frame so the UI continues to show
+            // the frozen impact view, but no further render passes occur —
+            // eliminating depth-order conflicts with any subsequent session.
+            if (_cam != null)
+                _cam.enabled = false;
+
+            _projectile = null;
+            _timer = 0f;
+            _phase = Phase.Lingering;
+        }
+
+        /// <summary>Used by the OnHit patch to find the session tracking a given transform.</summary>
+        public bool IsTracking(Transform t) => _phase == Phase.Riding && _projectile == t;
+
+        // ═══════════════════════════════════════════════════════════════════
+        //  Unity messages
+        // ═══════════════════════════════════════════════════════════════════
+
         void LateUpdate()
         {
-            switch (_state)
+            switch (_phase)
             {
-                case State.Riding:
-                    TrackProjectile();
+                // ── RIDING ───────────────────────────────────────────────────
+                case Phase.Riding:
+                    if (_projectile == null)
+                    {
+                        // Projectile was destroyed without an OnHit (fell into void,
+                        // timeout despawn, etc.) — treat like an impact.
+                        FreezeAndLinger();
+                        return;
+                    }
+                    FollowProjectile();
                     break;
 
-                case State.Lingering:
-                    // Camera is frozen; just count down the linger period.
+                // ── LINGERING ────────────────────────────────────────────────
+                case Phase.Lingering:
                     _timer += Time.deltaTime;
                     if (_timer >= KillCamPlugin.LingerDuration.Value)
                     {
                         _timer = 0f;
-                        _state = State.FadingOut;
+                        _phase = Phase.FadingOut;
                     }
                     break;
 
-                case State.FadingOut:
+                // ── FADING OUT ───────────────────────────────────────────────
+                case Phase.FadingOut:
                     _timer += Time.deltaTime;
                     float t = Mathf.Clamp01(_timer / Mathf.Max(0.001f, KillCamPlugin.FadeDuration.Value));
-                    SetUIAlpha(1f - t);
+                    ApplyAlpha(1f - t);
                     if (t >= 1f)
-                        DestroySelf();
+                        Cleanup();
+                    break;
+
+                case Phase.Dead:
                     break;
             }
-        }
-
-        // Called by the OnHit patch — freeze the camera and start the linger.
-        public void OnProjectileHit()
-        {
-            if (_state != State.Riding) return;   // already handled
-
-            // Detach the pip-camera from the (about-to-be-destroyed) projectile
-            // by recording world-space pose and never updating it again.
-            _cameraStopped = true;
-            _timer = 0f;
-            _state = State.Lingering;
-
-            // Detach this component from the projectile so we survive its destruction.
-            // We re-parent to a persistent stand-alone GO.
-            var anchor = new GameObject("KillCam_Anchor");
-            DontDestroyOnLoad(anchor);
-            transform.SetParent(anchor.transform, true);
-
-            // Stop the camera from updating — it already holds the last world pose.
         }
 
         void OnDestroy()
         {
-            // If the projectile is destroyed without OnHit (e.g. despawn timeout)
-            // and we haven't started lingering yet, kick off the linger sequence
-            // but we have no parent GO to reparent to — just freeze in place.
-            if (_state == State.Riding)
-            {
-                _state = State.Lingering;
-                _timer = 0f;
-                // Keep running via a persistent runner
-                var runner = new GameObject("KillCam_Runner");
-                DontDestroyOnLoad(runner);
-                runner.AddComponent<KillCamRunner>().Init(this);
-            }
+            // Safety net — covers scene unloads and any other external destruction.
+            Cleanup();
         }
 
-        // ── Private helpers ──────────────────────────────────────────────────
-        void TrackProjectile()
+        // ═══════════════════════════════════════════════════════════════════
+        //  Private helpers
+        // ═══════════════════════════════════════════════════════════════════
+
+        void FollowProjectile()
         {
-            if (_pipCamera == null || _cameraStopped) return;
-            _pipCamera.transform.position = transform.TransformPoint(CamLocalOffset);
-            _pipCamera.transform.rotation = Quaternion.LookRotation(
-                transform.TransformDirection(CamLocalLookDelta.normalized),
-                transform.up);
+            if (_cam == null) return;
+            _cam.transform.position = _projectile.TransformPoint(LocalOffset);
+            _cam.transform.rotation = Quaternion.LookRotation(
+                _projectile.TransformDirection(LocalLookDelta.normalized),
+                _projectile.up);
         }
 
-        void SetUIAlpha(float alpha)
+        void ApplyAlpha(float a)
         {
-            if (_borderPanel != null)
+            if (_border != null)
             {
-                var c = _borderPanel.color;
-                c.a = 0.75f * alpha;
-                _borderPanel.color = c;
+                var c = _border.color;
+                c.a = 0.75f * a;
+                _border.color = c;
             }
             if (_rawImage != null)
             {
                 var c = _rawImage.color;
-                c.a = alpha;
+                c.a = a;
                 _rawImage.color = c;
             }
         }
 
-        void DestroySelf()
+        /// <summary>
+        /// Single cleanup exit point. Guards against re-entry (OnDestroy being
+        /// called after we already called Destroy(gameObject) from here).
+        /// ── FIX #1 ──
+        /// </summary>
+        void Cleanup()
         {
-            if (_uiRoot != null) Destroy(_uiRoot);
-            if (_rt != null) { _rt.Release(); Destroy(_rt); }
-            if (_pipCamera != null) Destroy(_pipCamera.gameObject);
-            // Destroy our own anchor GO if we reparented to one
-            if (transform.parent != null &&
-                transform.parent.name == "KillCam_Anchor")
-                Destroy(transform.parent.gameObject);
+            if (_cleaned) return;
+            _cleaned = true;
+            _phase = Phase.Dead;
+
+            // 1. Hide the UI canvas immediately — this makes the PiP vanish on
+            //    screen regardless of where the alpha interpolation is right now.
+            if (_uiRoot != null)
+            {
+                _uiRoot.SetActive(false);
+                Destroy(_uiRoot);
+                _uiRoot = null;
+            }
+
+            // 2. Detach the RT from the camera before releasing it — prevents
+            //    Unity from attempting one final render into a released texture.
+            if (_cam != null)
+            {
+                _cam.targetTexture = null;
+                Destroy(_cam.gameObject);
+                _cam = null;
+            }
+
+            // 3. Release the render texture.
+            if (_rt != null)
+            {
+                _rt.Release();
+                Destroy(_rt);
+                _rt = null;
+            }
+
+            // 4. Destroy our own host GO.  Because _cleaned is already true,
+            //    the OnDestroy call that follows will be a no-op.
             Destroy(gameObject);
         }
 
-        void CreateRenderTexture()
+        void CreateRT()
         {
             _rt = new RenderTexture(
                 KillCamPlugin.PipWidth.Value,
                 KillCamPlugin.PipHeight.Value,
-                16, RenderTextureFormat.ARGB32);
-            _rt.name = "KillCam_RT";
+                16, RenderTextureFormat.ARGB32)
+            {
+                name = "KillCam_RT"
+            };
             _rt.Create();
         }
 
-        void CreatePipCamera()
+        void CreateCamera()
         {
             var camGO = new GameObject("KillCam_Camera");
-            camGO.transform.SetParent(null);
-            _pipCamera = camGO.AddComponent<Camera>();
-            _pipCamera.fieldOfView = KillCamPlugin.CameraFOV.Value;
-            _pipCamera.nearClipPlane = 0.05f;
-            _pipCamera.farClipPlane = 500f;
-            _pipCamera.targetTexture = _rt;
-            _pipCamera.depth = -2;
-            _pipCamera.cullingMask = ~0;
-            _pipCamera.clearFlags = CameraClearFlags.Skybox;
-            _pipCamera.enabled = true;
+            DontDestroyOnLoad(camGO);
+
+            _cam = camGO.AddComponent<Camera>();
+            _cam.fieldOfView = KillCamPlugin.CameraFOV.Value;
+            _cam.nearClipPlane = 0.05f;
+            _cam.farClipPlane = 500f;
+            _cam.targetTexture = _rt;
+            _cam.depth = -2;   // renders before the main camera
+            _cam.cullingMask = ~0;
+            _cam.clearFlags = CameraClearFlags.Skybox;
+            _cam.enabled = true;
         }
 
         void CreateUI()
@@ -221,37 +293,34 @@ namespace KillCamMod
             var scaler = _uiRoot.AddComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1920, 1080);
-
             _uiRoot.AddComponent<GraphicRaycaster>();
 
-            // Border panel
+            // Outer border / background panel
             var panel = new GameObject("KillCam_Panel");
             panel.transform.SetParent(canvas.transform, false);
 
-            var panelRect = panel.AddComponent<RectTransform>();
-            int w = KillCamPlugin.PipWidth.Value;
-            int h = KillCamPlugin.PipHeight.Value;
-            int mr = KillCamPlugin.PipMarginRight.Value;
-            int mt = KillCamPlugin.PipMarginTop.Value;
+            var pr = panel.AddComponent<RectTransform>();
+            pr.anchorMin = pr.anchorMax = new Vector2(1f, 1f);
+            pr.pivot = new Vector2(1f, 1f);
+            pr.sizeDelta = new Vector2(
+                KillCamPlugin.PipWidth.Value + 4,
+                KillCamPlugin.PipHeight.Value + 4);
+            pr.anchoredPosition = new Vector2(
+                -KillCamPlugin.PipMarginRight.Value,
+                -KillCamPlugin.PipMarginTop.Value);
 
-            panelRect.anchorMin = new Vector2(1f, 1f);
-            panelRect.anchorMax = new Vector2(1f, 1f);
-            panelRect.pivot = new Vector2(1f, 1f);
-            panelRect.sizeDelta = new Vector2(w + 4, h + 4);
-            panelRect.anchoredPosition = new Vector2(-mr, -mt);
+            _border = panel.AddComponent<Image>();
+            _border.color = new Color(0f, 0f, 0f, 0.75f);
 
-            _borderPanel = panel.AddComponent<Image>();
-            _borderPanel.color = new Color(0f, 0f, 0f, 0.75f);
-
-            // RawImage
+            // Inner RawImage
             var imgGO = new GameObject("KillCam_Image");
             imgGO.transform.SetParent(panel.transform, false);
 
-            var imgRect = imgGO.AddComponent<RectTransform>();
-            imgRect.anchorMin = Vector2.zero;
-            imgRect.anchorMax = Vector2.one;
-            imgRect.offsetMin = new Vector2(2, 2);
-            imgRect.offsetMax = new Vector2(-2, -2);
+            var ir = imgGO.AddComponent<RectTransform>();
+            ir.anchorMin = Vector2.zero;
+            ir.anchorMax = Vector2.one;
+            ir.offsetMin = new Vector2(2, 2);
+            ir.offsetMax = new Vector2(-2, -2);
 
             _rawImage = imgGO.AddComponent<RawImage>();
             _rawImage.texture = _rt;
@@ -259,38 +328,12 @@ namespace KillCamMod
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    //  Thin runner component — only used when the projectile GO is destroyed
-    //  before OnHit fires (e.g. timeout despawn). It keeps calling LateUpdate
-    //  on the orphaned ProjectileKillCam which has been reparented onto this GO.
-    // ════════════════════════════════════════════════════════════════════════
-    public class KillCamRunner : MonoBehaviour
-    {
-        private ProjectileKillCam _killCam;
-
-        public void Init(ProjectileKillCam kc)
-        {
-            _killCam = kc;
-            kc.transform.SetParent(transform, true);
-        }
-
-        // ProjectileKillCam.LateUpdate() will continue running because it is
-        // still an active MonoBehaviour on this persistent GO.
-        // When it calls DestroySelf() it destroys its own GO; we self-destruct
-        // here in the next frame once there are no more children.
-        void Update()
-        {
-            if (transform.childCount == 0)
-                Destroy(gameObject);
-        }
-    }
-
-    // ════════════════════════════════════════════════════════════════════════
-    //  Harmony patches — attach / detach kill-cam when projectile is fired
+    //  Harmony patches
     // ════════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Patch Projectile.Setup (called when a projectile is spawned/fired).
-    /// Valheim's Projectile class is in the base assembly.
+    /// Fired when any projectile is set up. We create a self-contained
+    /// KillCamSession on its own GO for the local player's projectiles.
     /// </summary>
     [HarmonyPatch(typeof(Projectile), nameof(Projectile.Setup))]
     static class Patch_Projectile_Setup
@@ -303,46 +346,38 @@ namespace KillCamMod
                             ItemDrop.ItemData item,
                             ItemDrop.ItemData ammo)
         {
-            // Only activate for the LOCAL player's projectiles
-            if (owner == null) return;
+            // Local player only
             if (!(owner is Player p) || p != Player.m_localPlayer) return;
 
-            // Only arrows & spears (check item type)
+            // Need at least one item ref to exclude creature projectiles
             if (item == null && ammo == null) return;
 
-            var itemToCheck = ammo ?? item;
-            if (itemToCheck?.m_shared == null) return;
-
-            var cat = itemToCheck.m_shared.m_itemType;
-            bool isProjectileItem =
-                cat == ItemDrop.ItemData.ItemType.Ammo ||      // arrows / bolts
-                cat == ItemDrop.ItemData.ItemType.Torch ||     // thrown torches (edge case)
-                                                               // Spears are OneHandedWeapon but the attack spawns projectile
-                item?.m_shared?.m_skillType == Skills.SkillType.Spears;
-
-            // Fallback: always attach if the projectile was spawned for the local player
-            // (keeps it broad so bows, crossbows, and spears all work)
-            __instance.gameObject.AddComponent<ProjectileKillCam>();
+            var sessionGO = new GameObject("KillCam_Session");
+            Object.DontDestroyOnLoad(sessionGO);
+            sessionGO.AddComponent<KillCamSession>().Init(__instance.transform);
         }
     }
 
     /// <summary>
-    /// Patch Projectile.OnHit — remove the kill-cam component (and its UI/camera)
-    /// when the projectile lands.
+    /// Fired when a projectile hits something. Finds the session tracking
+    /// this specific transform and tells it to freeze.
     /// </summary>
     [HarmonyPatch(typeof(Projectile), "OnHit")]
     static class Patch_Projectile_OnHit
     {
         static void Prefix(Projectile __instance)
         {
-            var kc = __instance.GetComponent<ProjectileKillCam>();
-            if (kc != null)
-                kc.OnProjectileHit();   // freeze camera; begin linger + fade sequence
+            // Sessions live on their own GOs so we can't GetComponent on the
+            // projectile. FindObjectsOfType is acceptable here because it fires
+            // at most once per projectile-land event (not every frame).
+            foreach (var session in Object.FindObjectsOfType<KillCamSession>())
+            {
+                if (session.IsTracking(__instance.transform))
+                {
+                    session.FreezeAndLinger();
+                    break;
+                }
+            }
         }
     }
-
-    /// Safety net: if the projectile GameObject is destroyed without an explicit
-    /// OnHit call (e.g. it flew off a cliff and despawned), ProjectileKillCam.OnDestroy
-    /// kicks off the linger sequence via KillCamRunner so resources are never leaked.
-    /// No additional patch is needed for this path.
 }

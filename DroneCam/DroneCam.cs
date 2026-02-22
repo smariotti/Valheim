@@ -16,7 +16,7 @@ namespace DroneCam
     {
         public const string PluginGUID = "com.oathorse.dronecam";
         public const string PluginName = "DroneCam";
-        public const string PluginVersion = "0.1.0";
+        public const string PluginVersion = "0.1.2";
 
         internal static ManualLogSource Log;
 
@@ -172,7 +172,6 @@ namespace DroneCam
             // loads correctly, and hide them so they don't appear in shot
             if (Mode != DroneCamMode.Disabled && Player.m_localPlayer != null)
             {
-                Player.m_localPlayer.m_nview.enabled = false;
                 Player.m_localPlayer.m_body.position = transform.position;
                 Player.m_localPlayer.SetVisible(false);
             }
@@ -207,7 +206,6 @@ namespace DroneCam
             {
                 Player.m_localPlayer.m_godMode = _wasGodMode;
                 Player.m_localPlayer.m_ghostMode = _wasGhostMode;
-                Player.m_localPlayer.m_nview.enabled = true;
                 Player.m_localPlayer.SetVisible(true);
             }
 
@@ -285,6 +283,7 @@ namespace DroneCam
         {
             RefreshTargetPlayer();
             if (_targetPlayer == null) return;
+            CheckForTargetTeleport();
 
             Vector3 targetPos = _targetPlayer.transform.position;
             Vector3 desiredPos = targetPos
@@ -300,6 +299,8 @@ namespace DroneCam
         // ── orbit ─────────────────────────────────────────────────────────────
         private void UpdateOrbit()
         {
+            CheckForTargetTeleport();
+
             Vector3 center = GetTargetCenter();
             _orbitAngle += _orbitSpeed * Time.deltaTime;
 
@@ -318,6 +319,8 @@ namespace DroneCam
         // ── security ──────────────────────────────────────────────────────────
         private void UpdateSecurity()
         {
+            CheckForTargetTeleport();
+
             transform.position = _securityPos;
             LookSmoothAt(GetTargetCenter() + Vector3.up * 1.5f, lerpSpeed: 3f);
         }
@@ -379,6 +382,7 @@ namespace DroneCam
             _followDistance = distance;
             _followHeightOffset = new Vector3(0, heightOffset, 0);
             _targetPlayer = FindPlayerByName(playerName);
+            _lastTargetPosition = Vector3.zero;
 
             if (_targetPlayer == null) { Notify($"Player '{playerName}' not found."); return; }
 
@@ -396,6 +400,7 @@ namespace DroneCam
             _orbitSpeed = speed;
             _orbitHeight = height;
             _orbitAngle = 0f;
+            _lastTargetPosition = Vector3.zero;
 
             if (_targetPlayer == null) { Notify($"Player '{playerName}' not found."); return; }
 
@@ -412,6 +417,7 @@ namespace DroneCam
             _orbitSpeed = speed;
             _orbitHeight = height;
             _orbitAngle = 0f;
+            _lastTargetPosition = Vector3.zero;
 
             Mode = DroneCamMode.Orbit;
             SetGameCameraEnabled(false);
@@ -451,7 +457,59 @@ namespace DroneCam
 
         public static IEnumerable<string> GetPlayerNames()
             => Player.GetAllPlayers().Select(p => p.GetPlayerName());
+
+        private Vector3 _lastTargetPosition;
+        private const float TeleportDetectionDistance = 50f;
+
+        private void CheckForTargetTeleport()
+        {
+            if (_targetPlayer == null) return;
+
+            Vector3 currentPos = _targetPlayer.transform.position;
+            float dist = Vector3.Distance(currentPos, _lastTargetPosition);
+
+            if (dist > TeleportDetectionDistance && _lastTargetPosition != Vector3.zero)
+            {
+                // Target player teleported - snap drone to their new position
+                SnapToTarget(currentPos);
+            }
+
+            _lastTargetPosition = currentPos;
+        }
+
+        private void SnapToTarget(Vector3 targetPos)
+        {
+            // Reset smooth velocity so we don't interpolate across the world
+            _smoothVelocity = Vector3.zero;
+            _smoothVelRef = Vector3.zero;
+
+            switch (Mode)
+            {
+                case DroneCamMode.Follow:
+                    // Snap to follow position behind player
+                    transform.position = targetPos
+                        + (-_targetPlayer.transform.forward * _followDistance)
+                        + _followHeightOffset;
+                    _dronePos = transform.position;
+                    break;
+
+                case DroneCamMode.Orbit:
+                    // Snap orbit center to new position, reset angle
+                    _orbitAngle = 0f;
+                    transform.position = targetPos + new Vector3(_orbitRadius, _orbitHeight, 0f);
+                    break;
+
+                case DroneCamMode.Security:
+                    // Snap security cam to near new position, keeping relative offset
+                    _securityPos = targetPos + (transform.position - _lastTargetPosition).normalized * 10f;
+                    transform.position = _securityPos;
+                    break;
+            }
+
+            DroneCamPlugin.Log.LogInfo("[DroneCam] Target teleported - snapping drone to new position.");
+        }
     }
+
 
     // ─────────────────────────────────────────────────────────────────────────
     // Harmony – attach DroneCamController to the GameCamera GameObject
@@ -506,6 +564,23 @@ namespace DroneCam
 
             DroneCamCommands.Handle(text);
             return false; // swallow so it doesn't appear in network chat
+        }
+    }
+
+    [HarmonyPatch(typeof(ZSyncTransform), "GetPosition")]
+    public static class ZSyncTransform_GetPosition_Patch
+    {
+        static bool Prefix(ZSyncTransform __instance, ref Vector3 __result)
+        {
+            if (DroneCamController.Instance == null) return true;
+            if (DroneCamController.Instance.Mode == DroneCamMode.Disabled) return true;
+            if (Player.m_localPlayer == null) return true;
+            if (__instance.gameObject != Player.m_localPlayer.gameObject) return true;
+
+            // Return underground position so other clients render us below terrain,
+            // while m_body.position remains at the camera for local chunk loading
+            __result = Player.m_localPlayer.m_body.position + Vector3.down * 1000f;
+            return false; // skip original
         }
     }
 
