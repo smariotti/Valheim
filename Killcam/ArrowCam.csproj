@@ -7,8 +7,8 @@
     <ProjectGuid>{76BDB84B-D5EF-41E8-A982-EABC6BC78A89}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>KillCam</RootNamespace>
-    <AssemblyName>KillCam</AssemblyName>
+    <RootNamespace>ArrowCam</RootNamespace>
+    <AssemblyName>ArrowCam</AssemblyName>
     <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
@@ -87,7 +87,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="KillCam.cs" />
+    <Compile Include="ArrowCam.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

@@ -32,7 +32,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sandbox", "Sandbox\Sandbox.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DroneCam", "DroneCam\DroneCam.csproj", "{256D4813-A4F8-4D2B-9FB2-4C0A0662B80E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KillCam", "Killcam\KillCam.csproj", "{76BDB84B-D5EF-41E8-A982-EABC6BC78A89}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ArrowCam", "Killcam\ArrowCam.csproj", "{76BDB84B-D5EF-41E8-A982-EABC6BC78A89}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

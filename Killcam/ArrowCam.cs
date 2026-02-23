@@ -4,16 +4,16 @@ using HarmonyLib;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace KillCamMod
+namespace ArrowCamMod
 {
     [BepInPlugin(PluginGUID, PluginName, PluginVersion)]
-    public class KillCamPlugin : BaseUnityPlugin
+    public class ArrowCamMod : BaseUnityPlugin
     {
         public const string PluginGUID = "com.oathorse.killcam";
         public const string PluginName = "KillCam";
         public const string PluginVersion = "0.1.0";
 
-        public static KillCamPlugin Instance { get; private set; }
+        public static ArrowCamMod Instance { get; private set; }
 
         public static ConfigEntry<int> PipWidth;
         public static ConfigEntry<int> PipHeight;
@@ -155,7 +155,7 @@ namespace KillCamMod
                 // ── LINGERING ────────────────────────────────────────────────
                 case Phase.Lingering:
                     _timer += Time.deltaTime;
-                    if (_timer >= KillCamPlugin.LingerDuration.Value)
+                    if (_timer >= ArrowCamMod.LingerDuration.Value)
                     {
                         _timer = 0f;
                         _phase = Phase.FadingOut;
@@ -165,7 +165,7 @@ namespace KillCamMod
                 // ── FADING OUT ───────────────────────────────────────────────
                 case Phase.FadingOut:
                     _timer += Time.deltaTime;
-                    float t = Mathf.Clamp01(_timer / Mathf.Max(0.001f, KillCamPlugin.FadeDuration.Value));
+                    float t = Mathf.Clamp01(_timer / Mathf.Max(0.001f, ArrowCamMod.FadeDuration.Value));
                     ApplyAlpha(1f - t);
                     if (t >= 1f)
                         Cleanup();
@@ -256,8 +256,8 @@ namespace KillCamMod
         void CreateRT()
         {
             _rt = new RenderTexture(
-                KillCamPlugin.PipWidth.Value,
-                KillCamPlugin.PipHeight.Value,
+                ArrowCamMod.PipWidth.Value,
+                ArrowCamMod.PipHeight.Value,
                 16, RenderTextureFormat.ARGB32)
             {
                 name = "KillCam_RT"
@@ -271,7 +271,7 @@ namespace KillCamMod
             DontDestroyOnLoad(camGO);
 
             _cam = camGO.AddComponent<Camera>();
-            _cam.fieldOfView = KillCamPlugin.CameraFOV.Value;
+            _cam.fieldOfView = ArrowCamMod.CameraFOV.Value;
             _cam.nearClipPlane = 0.05f;
             _cam.farClipPlane = 500f;
             _cam.targetTexture = _rt;
@@ -303,11 +303,11 @@ namespace KillCamMod
             pr.anchorMin = pr.anchorMax = new Vector2(1f, 1f);
             pr.pivot = new Vector2(1f, 1f);
             pr.sizeDelta = new Vector2(
-                KillCamPlugin.PipWidth.Value + 4,
-                KillCamPlugin.PipHeight.Value + 4);
+                ArrowCamMod.PipWidth.Value + 4,
+                ArrowCamMod.PipHeight.Value + 4);
             pr.anchoredPosition = new Vector2(
-                -KillCamPlugin.PipMarginRight.Value,
-                -KillCamPlugin.PipMarginTop.Value);
+                -ArrowCamMod.PipMarginRight.Value,
+                -ArrowCamMod.PipMarginTop.Value);
 
             _border = panel.AddComponent<Image>();
             _border.color = new Color(0f, 0f, 0f, 0.75f);
