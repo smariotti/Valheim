@@ -3,17 +3,18 @@ using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
 using UnityEngine.UI;
+using Splatform;
 
 namespace ArrowCamMod
 {
     [BepInPlugin(PluginGUID, PluginName, PluginVersion)]
-    public class ArrowCamMod : BaseUnityPlugin
+    public class ArrowCamPlugin : BaseUnityPlugin
     {
-        public const string PluginGUID = "com.oathorse.killcam";
-        public const string PluginName = "KillCam";
-        public const string PluginVersion = "0.1.0";
+        public const string PluginGUID = "com.oathorse.arrowcam";
+        public const string PluginName = "ArrowCam";
+        public const string PluginVersion = "0.1.2";
 
-        public static ArrowCamMod Instance { get; private set; }
+        public static ArrowCamPlugin Instance { get; private set; }
 
         public static ConfigEntry<int> PipWidth;
         public static ConfigEntry<int> PipHeight;
@@ -45,7 +46,7 @@ namespace ArrowCamMod
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    //  KillCamSession
+    //  ArrowCamSession
     //
     //  Lives entirely on its OWN persistent GameObject — completely independent
     //  of the projectile's lifetime. Tracks the projectile transform by reference
@@ -70,7 +71,7 @@ namespace ArrowCamMod
     //     (RT retains the last frame — the frozen image stays visible) so it
     //     cannot conflict with any subsequent session's camera.
     // ════════════════════════════════════════════════════════════════════════
-    public class KillCamSession : MonoBehaviour
+    public class ArrowCamSession : MonoBehaviour
     {
         // ── State machine ────────────────────────────────────────────────────
         private enum Phase { Riding, Lingering, FadingOut, Dead }
@@ -117,13 +118,11 @@ namespace ArrowCamMod
         {
             if (_phase != Phase.Riding) return;
 
-            // ── FIX #2: disable the pip-camera immediately. ─────────────────
-            // The RT keeps its last rendered frame so the UI continues to show
-            // the frozen impact view, but no further render passes occur —
-            // eliminating depth-order conflicts with any subsequent session.
-            if (_cam != null)
-                _cam.enabled = false;
-
+            // Leave the camera ENABLED so the scene continues to render and
+            // animate during the linger period — the camera just stops moving
+            // because FollowProjectile() is only called in the Riding phase.
+            // The camera is disabled when FadingOut begins (see LateUpdate)
+            // to prevent depth-order conflicts with any subsequent session.
             _projectile = null;
             _timer = 0f;
             _phase = Phase.Lingering;
@@ -155,8 +154,14 @@ namespace ArrowCamMod
                 // ── LINGERING ────────────────────────────────────────────────
                 case Phase.Lingering:
                     _timer += Time.deltaTime;
-                    if (_timer >= ArrowCamMod.LingerDuration.Value)
+                    if (_timer >= ArrowCamPlugin.LingerDuration.Value)
                     {
+                        // Now disable the camera — the RT holds the last rendered
+                        // frame for the fade-out, and no further rendering prevents
+                        // depth conflicts with any new session that fires meanwhile.
+                        if (_cam != null)
+                            _cam.enabled = false;
+
                         _timer = 0f;
                         _phase = Phase.FadingOut;
                     }
@@ -165,7 +170,7 @@ namespace ArrowCamMod
                 // ── FADING OUT ───────────────────────────────────────────────
                 case Phase.FadingOut:
                     _timer += Time.deltaTime;
-                    float t = Mathf.Clamp01(_timer / Mathf.Max(0.001f, ArrowCamMod.FadeDuration.Value));
+                    float t = Mathf.Clamp01(_timer / Mathf.Max(0.001f, ArrowCamPlugin.FadeDuration.Value));
                     ApplyAlpha(1f - t);
                     if (t >= 1f)
                         Cleanup();
@@ -256,22 +261,22 @@ namespace ArrowCamMod
         void CreateRT()
         {
             _rt = new RenderTexture(
-                ArrowCamMod.PipWidth.Value,
-                ArrowCamMod.PipHeight.Value,
+                ArrowCamPlugin.PipWidth.Value,
+                ArrowCamPlugin.PipHeight.Value,
                 16, RenderTextureFormat.ARGB32)
             {
-                name = "KillCam_RT"
+                name = "ArrowCam_RT"
             };
             _rt.Create();
         }
 
         void CreateCamera()
         {
-            var camGO = new GameObject("KillCam_Camera");
+            var camGO = new GameObject("ArrowCam_Camera");
             DontDestroyOnLoad(camGO);
 
             _cam = camGO.AddComponent<Camera>();
-            _cam.fieldOfView = ArrowCamMod.CameraFOV.Value;
+            _cam.fieldOfView = ArrowCamPlugin.CameraFOV.Value;
             _cam.nearClipPlane = 0.05f;
             _cam.farClipPlane = 500f;
             _cam.targetTexture = _rt;
@@ -283,7 +288,7 @@ namespace ArrowCamMod
 
         void CreateUI()
         {
-            _uiRoot = new GameObject("KillCam_UI");
+            _uiRoot = new GameObject("ArrowCam_UI");
             DontDestroyOnLoad(_uiRoot);
 
             var canvas = _uiRoot.AddComponent<Canvas>();
@@ -296,24 +301,24 @@ namespace ArrowCamMod
             _uiRoot.AddComponent<GraphicRaycaster>();
 
             // Outer border / background panel
-            var panel = new GameObject("KillCam_Panel");
+            var panel = new GameObject("ArrowCam_Panel");
             panel.transform.SetParent(canvas.transform, false);
 
             var pr = panel.AddComponent<RectTransform>();
             pr.anchorMin = pr.anchorMax = new Vector2(1f, 1f);
             pr.pivot = new Vector2(1f, 1f);
             pr.sizeDelta = new Vector2(
-                ArrowCamMod.PipWidth.Value + 4,
-                ArrowCamMod.PipHeight.Value + 4);
+                ArrowCamPlugin.PipWidth.Value + 4,
+                ArrowCamPlugin.PipHeight.Value + 4);
             pr.anchoredPosition = new Vector2(
-                -ArrowCamMod.PipMarginRight.Value,
-                -ArrowCamMod.PipMarginTop.Value);
+                -ArrowCamPlugin.PipMarginRight.Value,
+                -ArrowCamPlugin.PipMarginTop.Value);
 
             _border = panel.AddComponent<Image>();
             _border.color = new Color(0f, 0f, 0f, 0.75f);
 
             // Inner RawImage
-            var imgGO = new GameObject("KillCam_Image");
+            var imgGO = new GameObject("ArrowCam_Image");
             imgGO.transform.SetParent(panel.transform, false);
 
             var ir = imgGO.AddComponent<RectTransform>();
@@ -333,7 +338,7 @@ namespace ArrowCamMod
 
     /// <summary>
     /// Fired when any projectile is set up. We create a self-contained
-    /// KillCamSession on its own GO for the local player's projectiles.
+    /// ArrowCamSession on its own GO for the local player's projectiles.
     /// </summary>
     [HarmonyPatch(typeof(Projectile), nameof(Projectile.Setup))]
     static class Patch_Projectile_Setup
@@ -352,9 +357,9 @@ namespace ArrowCamMod
             // Need at least one item ref to exclude creature projectiles
             if (item == null && ammo == null) return;
 
-            var sessionGO = new GameObject("KillCam_Session");
+            var sessionGO = new GameObject("ArrowCam_Session");
             Object.DontDestroyOnLoad(sessionGO);
-            sessionGO.AddComponent<KillCamSession>().Init(__instance.transform);
+            sessionGO.AddComponent<ArrowCamSession>().Init(__instance.transform);
         }
     }
 
@@ -370,7 +375,7 @@ namespace ArrowCamMod
             // Sessions live on their own GOs so we can't GetComponent on the
             // projectile. FindObjectsOfType is acceptable here because it fires
             // at most once per projectile-land event (not every frame).
-            foreach (var session in Object.FindObjectsOfType<KillCamSession>())
+            foreach (var session in Object.FindObjectsOfType<ArrowCamSession>())
             {
                 if (session.IsTracking(__instance.transform))
                 {
@@ -378,6 +383,128 @@ namespace ArrowCamMod
                     break;
                 }
             }
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Chat commands
+    //
+    //  Type any of these into the in-game chat box (Enter key) and they will
+    //  be intercepted before being sent as chat messages. The response is
+    //  printed back into the chat window via Chat.instance.AddString so it
+    //  is visible immediately.
+    //
+    //  Usage:
+    //    /arrowcam                — print all current values
+    //    /arrowcam width 400
+    //    /arrowcam height 225
+    //    /arrowcam marginright 15
+    //    /arrowcam margintop 260
+    //    /arrowcam fov 75
+    //    /arrowcam linger 2.5
+    //    /arrowcam fade 0.3
+    // ════════════════════════════════════════════════════════════════════════
+    [HarmonyPatch(typeof(Chat), nameof(Chat.InputText))]
+    static class Patch_Chat_InputText
+    {
+        // Return false to swallow the input (prevent it from being sent as chat).
+        static bool Prefix(Chat __instance)
+        {
+            // Grab whatever is in the chat input field right now
+            string raw = __instance.m_terminalInstance.m_input.text.Trim();
+
+            if (!raw.StartsWith("/arrowcam", System.StringComparison.OrdinalIgnoreCase))
+                return true; // not our command — let Valheim handle it normally
+
+            // Tokenise: "/arrowcam width 400"  →  ["width", "400"]
+            string[] parts = raw.Split(new[] { ' ', '\t' },
+                System.StringSplitOptions.RemoveEmptyEntries);
+            // parts[0] == "/arrowcam"
+
+            string sub = parts.Length > 1 ? parts[1].ToLowerInvariant() : "";
+            string arg = parts.Length > 2 ? parts[2] : "";
+
+            string reply = HandleCommand(sub, arg);
+            PrintToChat(__instance, reply);
+
+            // Clear the input field so the text doesn't linger
+            __instance.m_terminalInstance.m_input.text = "";
+            return false; // swallow — don't send as chat
+        }
+
+        // ── Command dispatcher ───────────────────────────────────────────────
+        static string HandleCommand(string sub, string arg)
+        {
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            var floatStyle = System.Globalization.NumberStyles.Float;
+
+            switch (sub)
+            {
+                case "":
+                case "help":
+                    return "ArrowCam settings:\n" +
+                           $"  width        = {ArrowCamPlugin.PipWidth.Value}\n" +
+                           $"  height       = {ArrowCamPlugin.PipHeight.Value}\n" +
+                           $"  marginright  = {ArrowCamPlugin.PipMarginRight.Value}\n" +
+                           $"  margintop    = {ArrowCamPlugin.PipMarginTop.Value}\n" +
+                           $"  fov          = {ArrowCamPlugin.CameraFOV.Value}\n" +
+                           $"  linger       = {ArrowCamPlugin.LingerDuration.Value}\n" +
+                           $"  fade         = {ArrowCamPlugin.FadeDuration.Value}\n" +
+                           "Usage: /arrowcam <setting> <value>";
+
+                case "width":
+                    if (!int.TryParse(arg, out int w))
+                        return "Usage: /arrowcam width <int>";
+                    ArrowCamPlugin.PipWidth.Value = w;
+                    return $"ArrowCam: width = {w}";
+
+                case "height":
+                    if (!int.TryParse(arg, out int h))
+                        return "Usage: /arrowcam height <int>";
+                    ArrowCamPlugin.PipHeight.Value = h;
+                    return $"ArrowCam: height = {h}";
+
+                case "marginright":
+                    if (!int.TryParse(arg, out int mr))
+                        return "Usage: /arrowcam marginright <int>";
+                    ArrowCamPlugin.PipMarginRight.Value = mr;
+                    return $"ArrowCam: marginright = {mr}";
+
+                case "margintop":
+                    if (!int.TryParse(arg, out int mt))
+                        return "Usage: /arrowcam margintop <int>";
+                    ArrowCamPlugin.PipMarginTop.Value = mt;
+                    return $"ArrowCam: margintop = {mt}";
+
+                case "fov":
+                    if (!float.TryParse(arg, floatStyle, inv, out float fov))
+                        return "Usage: /arrowcam fov <float>";
+                    ArrowCamPlugin.CameraFOV.Value = fov;
+                    return $"ArrowCam: fov = {fov}";
+
+                case "linger":
+                    if (!float.TryParse(arg, floatStyle, inv, out float li))
+                        return "Usage: /arrowcam linger <float>";
+                    ArrowCamPlugin.LingerDuration.Value = li;
+                    return $"ArrowCam: linger = {li}";
+
+                case "fade":
+                    if (!float.TryParse(arg, floatStyle, inv, out float fa))
+                        return "Usage: /arrowcam fade <float>";
+                    ArrowCamPlugin.FadeDuration.Value = fa;
+                    return $"ArrowCam: fade = {fa}";
+
+                default:
+                    return $"ArrowCam: unknown setting '{sub}'. Type /arrowcam for help.";
+            }
+        }
+
+        // ── Print a line into the local chat window (never sent to server) ───
+        static void PrintToChat(Chat chat, string message)
+        {
+            // Talker.Type.Normal puts it in white; we use a local-only overload
+            // so it never goes to the network.
+            Chat.instance.AddString(message);
         }
     }
 }

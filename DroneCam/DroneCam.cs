@@ -16,7 +16,7 @@ namespace DroneCam
     {
         public const string PluginGUID = "com.oathorse.dronecam";
         public const string PluginName = "DroneCam";
-        public const string PluginVersion = "0.1.2";
+        public const string PluginVersion = "0.1.4";
 
         internal static ManualLogSource Log;
 
@@ -24,6 +24,7 @@ namespace DroneCam
         public static ConfigEntry<float> FlySpeedFast;
         public static ConfigEntry<float> RotationSpeed;
         public static ConfigEntry<float> SmoothTime;
+        public static ConfigEntry<float> ScrollSensitivity;
 
         private readonly Harmony _harmony = new Harmony(PluginGUID);
 
@@ -35,6 +36,7 @@ namespace DroneCam
             FlySpeedFast = Config.Bind("Camera", "FlySpeedFast", 40f, "Fast fly speed (units/sec).");
             RotationSpeed = Config.Bind("Camera", "RotationSpeed", 90f, "Keyboard rotation speed (degrees/sec).");
             SmoothTime = Config.Bind("Camera", "SmoothTime", 0.25f, "Movement smoothing time.");
+            ScrollSensitivity = Config.Bind("Camera", "ScrollSensitivity", 0.5f, "Mouse wheel scroll sensitivity for distance/radius adjustment.");
 
             _harmony.PatchAll();
             Log.LogInfo($"{PluginName} {PluginVersion} loaded. Type /dronecam help in chat.");
@@ -61,6 +63,8 @@ namespace DroneCam
         public const string PitchUp = "DroneCam_PitchUp";
         public const string PitchDown = "DroneCam_PitchDown";
         public const string MouseLook = "DroneCam_MouseLook";
+        public const string WheelUp = "DroneCam_WheelUp";
+        public const string WheelDown = "DroneCam_WheelDown";
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -84,6 +88,8 @@ namespace DroneCam
             __instance.AddButton(Btn.PitchUp, "<Keyboard>/upArrow");
             __instance.AddButton(Btn.PitchDown, "<Keyboard>/downArrow");
             __instance.AddButton(Btn.MouseLook, "<Mouse>/rightButton");
+            __instance.AddButton(Btn.WheelUp, "<Mouse>/scroll/up");
+            __instance.AddButton(Btn.WheelDown, "<Mouse>/scroll/down");
         }
     }
 
@@ -113,10 +119,13 @@ namespace DroneCam
         private Player _targetPlayer;
         private Vector3 _targetWorldPos;
         private bool _targetIsPlayer;
+        private Vector3 _lastRelativeOffset = Vector3.zero;
+        private bool _waitingForPlayerReturn = false;
 
         // ── follow params ─────────────────────────────────────────────────────
         private float _followDistance = 5f;
         private Vector3 _followHeightOffset = new Vector3(0, 2f, 0);
+        private float _followSmoothTime = 0.1f;
 
         // ── orbit params ──────────────────────────────────────────────────────
         private float _orbitRadius = 10f;
@@ -139,6 +148,8 @@ namespace DroneCam
 
         // ── refs ──────────────────────────────────────────────────────────────
         private GameCamera _gameCamera;
+
+        private DroneCamMode _modeBeforeSleep = DroneCamMode.Disabled;
 
         // ─────────────────────────────────────────────────────────────────────
         private void Awake()
@@ -168,12 +179,39 @@ namespace DroneCam
                 case DroneCamMode.Security: UpdateSecurity(); break;
             }
 
+            if (Mode != DroneCamMode.Disabled)
+                HandleScrollWheel();
+
             // Keep local player teleported to camera position so the world
             // loads correctly, and hide them so they don't appear in shot
             if (Mode != DroneCamMode.Disabled && Player.m_localPlayer != null)
             {
                 Player.m_localPlayer.m_body.position = transform.position;
                 Player.m_localPlayer.SetVisible(false);
+            }
+        }
+
+        private void HandleScrollWheel()
+        {
+            if (Chat.instance != null && Chat.instance.HasFocus()) return;
+
+            float delta = 0f;
+            if (ZInput.GetButton(Btn.WheelUp)) delta -= DroneCamPlugin.ScrollSensitivity.Value;
+            if (ZInput.GetButton(Btn.WheelDown)) delta += DroneCamPlugin.ScrollSensitivity.Value;
+            if (Mathf.Approximately(delta, 0f)) return;
+
+            switch (Mode)
+            {
+                case DroneCamMode.Follow:
+                    _followDistance = Mathf.Max(1f, _followDistance + delta);
+                    break;
+                case DroneCamMode.Orbit:
+                    _orbitRadius = Mathf.Max(1f, _orbitRadius + delta);
+                    break;
+                case DroneCamMode.FreeSetup:
+                    // Wheel adjusts the projected look-at distance used by orbit pos / security pos
+                    _followDistance = Mathf.Max(1f, _followDistance + delta);
+                    break;
             }
         }
 
@@ -291,7 +329,7 @@ namespace DroneCam
                                + _followHeightOffset;
 
             transform.position = Vector3.SmoothDamp(
-                transform.position, desiredPos, ref _smoothVelRef, DroneCamPlugin.SmoothTime.Value);
+                transform.position, desiredPos, ref _smoothVelRef, _followSmoothTime);
 
             LookSmoothAt(targetPos + Vector3.up * 1.5f);
         }
@@ -334,21 +372,72 @@ namespace DroneCam
                 transform.rotation, Quaternion.LookRotation(dir), Time.deltaTime * lerpSpeed);
         }
 
+        private Vector3 _lastKnownTargetPos = Vector3.zero;
+
         private Vector3 GetTargetCenter()
         {
             if (_targetIsPlayer)
             {
                 RefreshTargetPlayer();
                 if (_targetPlayer != null)
-                    return _targetPlayer.transform.position;
+                {
+                    _lastKnownTargetPos = _targetPlayer.transform.position;
+                    return _lastKnownTargetPos;
+                }
+                // Player ref lost - hold last known position until they reappear
+                return _lastKnownTargetPos;
             }
             return _targetWorldPos;
         }
 
         private void RefreshTargetPlayer()
         {
-            if (_targetPlayer != null && _targetPlayer.isActiveAndEnabled) return;
+            if (_targetPlayer != null && _targetPlayer.isActiveAndEnabled)
+            {
+                _waitingForPlayerReturn = false;
+                return;
+            }
+
+            // Player ref just became invalid - store relative offset before losing position
+            if (!_waitingForPlayerReturn && _lastKnownTargetPos != Vector3.zero)
+            {
+                _lastRelativeOffset = transform.position - _lastKnownTargetPos;
+                _waitingForPlayerReturn = true;
+                DroneCamPlugin.Log.LogInfo("[DroneCam] Target player lost - storing relative offset, waiting for return.");
+            }
+
             _targetPlayer = FindPlayerByName(_targetPlayerName);
+
+            // Player just reappeared - snap to relative offset at new position
+            if (_targetPlayer != null && _waitingForPlayerReturn)
+            {
+                _waitingForPlayerReturn = false;
+                _lastTargetPosition = Vector3.zero; // prevent CheckForTargetTeleport misfiring
+                SnapRelativeToTarget(_targetPlayer.transform.position);
+                DroneCamPlugin.Log.LogInfo("[DroneCam] Target player reacquired - snapping to relative position.");
+            }
+        }
+
+        private void SnapRelativeToTarget(Vector3 targetPos)
+        {
+            _smoothVelocity = Vector3.zero;
+            _smoothVelRef = Vector3.zero;
+            _lastKnownTargetPos = targetPos;
+
+            switch (Mode)
+            {
+                case DroneCamMode.Follow:
+                    // Reapply the exact relative offset from before the portal
+                    transform.position = targetPos + _lastRelativeOffset;
+                    _dronePos = transform.position;
+                    break;
+
+                case DroneCamMode.Orbit:
+                    // Reset orbit at same radius but snap position to relative offset
+                    _orbitAngle = 0f;
+                    transform.position = targetPos + _lastRelativeOffset.normalized * _orbitRadius;
+                    break;
+            }
         }
 
         private static Player FindPlayerByName(string name)
@@ -373,22 +462,43 @@ namespace DroneCam
         private static void Notify(string msg)
             => Chat.instance?.AddString($"[DroneCam] {msg}");
 
+        public void OnPlayerSleep()
+        {
+            if (Mode == DroneCamMode.Disabled) return;
+            _modeBeforeSleep = Mode;
+            SetGameCameraEnabled(true);
+            Notify("Player sleeping - drone suspended.");
+        }
+
+        public void OnPlayerWake()
+        {
+            if (_modeBeforeSleep == DroneCamMode.Disabled) return;
+            SetGameCameraEnabled(false);
+            Mode = _modeBeforeSleep;
+            _modeBeforeSleep = DroneCamMode.Disabled;
+            Notify("Player awake - drone resumed.");
+        }
+
         // ── public API ────────────────────────────────────────────────────────
 
-        public void SetFollow(string playerName, float distance, float heightOffset)
+        public void SetFollow(string playerName, float distance, float heightOffset, float smoothTime)
         {
             _targetPlayerName = playerName;
             _targetIsPlayer = true;
             _followDistance = distance;
             _followHeightOffset = new Vector3(0, heightOffset, 0);
+            _followSmoothTime = smoothTime;
             _targetPlayer = FindPlayerByName(playerName);
+            _waitingForPlayerReturn = false;
+            _lastRelativeOffset = Vector3.zero;
+            _lastKnownTargetPos = Vector3.zero;
             _lastTargetPosition = Vector3.zero;
 
             if (_targetPlayer == null) { Notify($"Player '{playerName}' not found."); return; }
 
             Mode = DroneCamMode.Follow;
             SetGameCameraEnabled(false);
-            Notify($"Following {playerName} - dist={distance} height={heightOffset}");
+            Notify($"Following {playerName} - dist={distance} height={heightOffset} smooth={smoothTime}");
         }
 
         public void SetOrbitPlayer(string playerName, float radius, float speed, float height)
@@ -400,7 +510,10 @@ namespace DroneCam
             _orbitSpeed = speed;
             _orbitHeight = height;
             _orbitAngle = 0f;
+            _waitingForPlayerReturn = false;
+            _lastRelativeOffset = Vector3.zero;
             _lastTargetPosition = Vector3.zero;
+            _lastKnownTargetPos = Vector3.zero;
 
             if (_targetPlayer == null) { Notify($"Player '{playerName}' not found."); return; }
 
@@ -418,6 +531,7 @@ namespace DroneCam
             _orbitHeight = height;
             _orbitAngle = 0f;
             _lastTargetPosition = Vector3.zero;
+            _lastKnownTargetPos = Vector3.zero;
 
             Mode = DroneCamMode.Orbit;
             SetGameCameraEnabled(false);
@@ -479,6 +593,8 @@ namespace DroneCam
 
         private void SnapToTarget(Vector3 targetPos)
         {
+            _lastKnownTargetPos = targetPos; // update so GetTargetCenter is correct immediately
+
             // Reset smooth velocity so we don't interpolate across the world
             _smoothVelocity = Vector3.zero;
             _smoothVelRef = Vector3.zero;
@@ -584,6 +700,21 @@ namespace DroneCam
         }
     }
 
+    [HarmonyPatch(typeof(Player), "SetSleeping")]
+    public static class Player_SetSleeping_Patch
+    {
+        static void Postfix(Player __instance, bool sleep)
+        {
+            if (__instance != Player.m_localPlayer) return;
+            if (DroneCamController.Instance == null) return;
+
+            if (sleep)
+                DroneCamController.Instance.OnPlayerSleep();
+            else
+                DroneCamController.Instance.OnPlayerWake();
+        }
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // Chat command parser + dispatcher
     // ─────────────────────────────────────────────────────────────────────────
@@ -592,119 +723,117 @@ namespace DroneCam
         private static DroneCamController Ctrl => DroneCamController.Instance;
 
         private const string Help =
-            "[DroneCam] Commands:\n" +
-            "  /dronecam help\n" +
-            "  /dronecam on                               enter free-fly setup\n" +
-            "  /dronecam off                              return to normal camera\n" +
-            "  /dronecam players                          list visible players\n" +
-            "  /dronecam follow <player> [dist] [height]  chase a player\n" +
-            "  /dronecam orbit player <n> [r] [spd] [h]  orbit a player\n" +
-            "  /dronecam orbit pos [r] [spd] [h]         orbit current look-at position\n" +
-            "  /dronecam orbit speed <deg/sec>            change orbit speed live\n" +
-            "  /dronecam security player <n>              security cam, track player\n" +
-            "  /dronecam security pos                     security cam, track look-at position\n" +
-            "Free-fly: WASD move  QE up/down  Shift fast  RMB/arrows rotate  F8 toggle";
+            "[DroneCam] Commands (/dronecam or /dc):\n" +
+            "  /dc help\n" +
+            "  /dc on                                  enter free-fly setup\n" +
+            "  /dc off                                 return to normal camera\n" +
+            "  /dc ff                                  enter free-fly mode\n" +
+            "  /dc players                             list visible players\n" +
+            "  /dc f <player> [dist] [height] [smooth] chase a player\n" +
+            "  /dc o p <n> [r] [spd] [h]               orbit a player\n" +
+            "  /dc o pos [r] [spd] [h]                 orbit current look-at position\n" +
+            "  /dc o s <deg/sec>                       change orbit speed live\n" +
+            "  /dc s p <n>                             security cam, track player\n" +
+            "  /dc s pos                               security cam, track look-at position\n" +
+            "Free-fly: WASD move  QE up/down  Shift fast  RMB/arrows rotate  F8 toggle\n" +
+            "NOTE: You can also use freefly for ff, player for p, follow for f, orbit for o, and security for s.\n"+
+            "NOTE: Player names with spaces must be quoted, e.g. /dc f \"Big Viking\" 8 3";
+
+        // Each handler receives the full token array so it can read its own args
+        private delegate void CmdHandler(string[] t);
+
+        private static readonly Dictionary<string, CmdHandler> Commands =
+            new Dictionary<string, CmdHandler>(StringComparer.OrdinalIgnoreCase)
+        {
+        { "help",     t => Msg(Help) },
+        { "on",       t => Ctrl.EnterFreeSetup() },
+        { "freefly",  t => Ctrl.EnterFreeSetup() },
+        { "ff",       t => Ctrl.EnterFreeSetup() },
+        { "off",      t => Ctrl.ExitDroneCam() },
+        { "players",  t => Msg($"[DroneCam] Players: {string.Join(", ", DroneCamController.GetPlayerNames())}") },
+        { "follow",   HandleFollow },   { "f", HandleFollow },
+        { "orbit",    HandleOrbit },    { "o", HandleOrbit },
+        { "security", HandleSecurity }, { "s", HandleSecurity },
+        };
 
         public static void Handle(string raw)
         {
             if (Ctrl == null) { Msg("[DroneCam] Controller not ready."); return; }
 
-            string[] t = raw.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-            string sub = t.Length > 1 ? t[1].ToLower() : "help";
-
-            switch (sub)
+            // Extract quoted player name if present, replace spaces with underscores
+            // for tokenisation, then restore when passing to commands
+            string quotedName = null;
+            var match = System.Text.RegularExpressions.Regex.Match(raw, "\"([^\"]+)\"");
+            if (match.Success)
             {
-                case "help":
-                    Msg(Help);
+                quotedName = match.Groups[1].Value;
+                raw = raw.Replace(match.Value, quotedName.Replace(' ', '\x01'));
+            }
+
+            string[] t = raw.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            // Restore placeholder back to spaces in any token
+            for (int i = 0; i < t.Length; i++)
+                t[i] = t[i].Replace('\x01', ' ');
+
+            string sub = t.Length > 1 ? t[1] : "help";
+            if (Commands.TryGetValue(sub, out CmdHandler handler))
+                handler(t);
+            else
+                Msg($"[DroneCam] Unknown command '{sub}'. Type /dc help.");
+        }
+
+        // ── sub-command handlers ──────────────────────────────────────────────────
+
+        private static void HandleFollow(string[] t)
+        {
+            if (t.Length < 3) { Msg("Usage: /dc f <player|\"player name\"> [dist] [height] [smooth]"); return; }
+            Ctrl.SetFollow(t[2], F(t, 3, 5f), F(t, 4, 2f), F(t, 5, 0.1f));
+        }
+
+        private static void HandleOrbit(string[] t)
+        {
+            if (t.Length < 3) { Msg("Usage: /dc o p <n> | pos | s <val>"); return; }
+            switch (t[2].ToLower())
+            {
+                case "p":
+                case "player":
+                    if (t.Length < 4) { Msg("Usage: /dc o p <player|\"player name\"> [r] [spd] [h]"); return; }
+                    Ctrl.SetOrbitPlayer(t[3], F(t, 4, 10f), F(t, 5, 30f), F(t, 6, 4f));
                     break;
-
-                case "on":
-                    Ctrl.EnterFreeSetup();
+                case "pos":
+                    Ctrl.SetOrbitPosition(Ctrl.GetLookAtPosition(), F(t, 3, 10f), F(t, 4, 30f), F(t, 5, 4f));
                     break;
-
-                case "off":
-                    Ctrl.ExitDroneCam();
+                case "s":
+                case "speed":
+                    if (t.Length < 4) { Msg("Usage: /dc o s <deg/sec>"); return; }
+                    Ctrl.SetOrbitSpeed(F(t, 3, 30f));
                     break;
-
-                case "players":
-                    {
-                        string list = string.Join(", ", DroneCamController.GetPlayerNames());
-                        Msg($"[DroneCam] Players: {(string.IsNullOrEmpty(list) ? "none" : list)}");
-                        break;
-                    }
-
-                case "follow":
-                    {
-                        // /dronecam follow <player> [dist] [height]
-                        if (t.Length < 3) { Msg("Usage: /dronecam follow <player> [dist] [height]"); break; }
-                        float dist = t.Length > 3 ? F(t[3], 5f) : 5f;
-                        float height = t.Length > 4 ? F(t[4], 2f) : 2f;
-                        Ctrl.SetFollow(t[2], dist, height);
-                        break;
-                    }
-
-                case "orbit":
-                    {
-                        if (t.Length < 3) { Msg("Usage: /dronecam orbit player <n> | pos | speed <val>"); break; }
-                        string osub = t[2].ToLower();
-
-                        if (osub == "player")
-                        {
-                            // /dronecam orbit player <n> [r] [spd] [h]
-                            if (t.Length < 4) { Msg("Usage: /dronecam orbit player <n> [r] [spd] [h]"); break; }
-                            float r = t.Length > 4 ? F(t[4], 10f) : 10f;
-                            float spd = t.Length > 5 ? F(t[5], 30f) : 30f;
-                            float h = t.Length > 6 ? F(t[6], 4f) : 4f;
-                            Ctrl.SetOrbitPlayer(t[3], r, spd, h);
-                        }
-                        else if (osub == "pos")
-                        {
-                            // /dronecam orbit pos [r] [spd] [h]
-                            Vector3 pos = Ctrl.GetLookAtPosition();
-                            float r = t.Length > 3 ? F(t[3], 10f) : 10f;
-                            float spd = t.Length > 4 ? F(t[4], 30f) : 30f;
-                            float h = t.Length > 5 ? F(t[5], 4f) : 4f;
-                            Ctrl.SetOrbitPosition(pos, r, spd, h);
-                        }
-                        else if (osub == "speed")
-                        {
-                            // /dronecam orbit speed <value>
-                            if (t.Length < 4) { Msg("Usage: /dronecam orbit speed <deg/sec>"); break; }
-                            Ctrl.SetOrbitSpeed(F(t[3], 30f));
-                        }
-                        else
-                            Msg($"Unknown orbit sub-command '{osub}'.");
-
-                        break;
-                    }
-
-                case "security":
-                    {
-                        if (t.Length < 3) { Msg("Usage: /dronecam security player <n> | pos"); break; }
-                        string ssub = t[2].ToLower();
-
-                        if (ssub == "player")
-                        {
-                            // /dronecam security player <n>
-                            if (t.Length < 4) { Msg("Usage: /dronecam security player <n>"); break; }
-                            Ctrl.SetSecurityPlayer(t[3]);
-                        }
-                        else if (ssub == "pos")
-                        {
-                            // /dronecam security pos
-                            Ctrl.SetSecurityPosition(Ctrl.GetLookAtPosition());
-                        }
-                        else
-                            Msg($"Unknown security sub-command '{ssub}'.");
-
-                        break;
-                    }
-
                 default:
-                    Msg($"[DroneCam] Unknown command '{sub}'. Type /dronecam help.");
+                    Msg($"Unknown orbit sub-command '{t[2]}'.");
                     break;
             }
         }
+
+        private static void HandleSecurity(string[] t)
+        {
+            if (t.Length < 3) { Msg("Usage: /dc s p <n> | pos"); return; }
+            switch (t[2].ToLower())
+            {
+                case "p":
+                case "player":
+                    if (t.Length < 4) { Msg("Usage: /dc s p <player|\"player name\">"); return; }
+                    Ctrl.SetSecurityPlayer(t[3]);
+                    break;
+                case "pos":
+                    Ctrl.SetSecurityPosition(Ctrl.GetLookAtPosition());
+                    break;
+                default:
+                    Msg($"Unknown security sub-command '{t[2]}'.");
+                    break;
+            }
+        }
+
+        // ── helpers ───────────────────────────────────────────────────────────────
 
         private static void Msg(string s)
         {
@@ -712,7 +841,9 @@ namespace DroneCam
             DroneCamPlugin.Log.LogInfo(s);
         }
 
-        private static float F(string s, float fallback)
-            => float.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out float v) ? v : fallback;
+        // Safe indexed float parse with fallback
+        private static float F(string[] t, int i, float fallback)
+            => t.Length > i && float.TryParse(t[i], NumberStyles.Float,
+               CultureInfo.InvariantCulture, out float v) ? v : fallback;
     }
 }
