@@ -1,0 +1,85 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <AssemblyName>ValheimSpoutCamera</AssemblyName>
+    <RootNamespace>ValheimSpoutCamera</RootNamespace>
+    <Nullable>disable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Adjust this path to your Valheim install -->
+    <ValheimDir>C:\Program Files (x86)\Steam\steamapps\common\Valheim_Dev</ValheimDir>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <IsPublishable>False</IsPublishable>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <IsPublishable>False</IsPublishable>
+  </PropertyGroup>
+
+  <!-- ── BepInEx ─────────────────────────────────────────────────────────── -->
+
+  <!-- ── Unity (shipped inside Valheim) ────────────────────────────────── -->
+  <ItemGroup>
+    <Reference Include="0Harmony">
+      <HintPath>..\Libs\0Harmony.dll</HintPath>
+    </Reference>
+    <Reference Include="BepInEx">
+      <HintPath>..\Libs\BepInEx.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine">
+      <HintPath>$(ValheimDir)\valheim_Data\Managed\UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(ValheimDir)\valheim_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- ── Valheim game assembly ──────────────────────────────────────────── -->
+  <ItemGroup>
+    <Reference Include="assembly_valheim">
+      <HintPath>$(ValheimDir)\valheim_Data\Managed\assembly_valheim.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!--
+    ── Spout library ──────────────────────────────────────────────────────────
+    Option A: KlakSpout  (https://github.com/keijiro/KlakSpout)
+    Option B: Spout4Unity (https://github.com/valyard/Spout4Unity)
+
+    Uncomment ONE of the blocks below once you have the DLL(s).
+    The mod works via reflection without this reference, but adding it gives
+    you IntelliSense and compile-time type safety.
+  -->
+
+  <!--
+  Option A – KlakSpout
+  <ItemGroup>
+    <Reference Include="jp.keijiro.klak.spout">
+      <HintPath>$(ValheimDir)\BepInEx\plugins\KlakSpout\jp.keijiro.klak.spout.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+  -->
+
+  <!--
+  Option B – Spout4Unity
+  <ItemGroup>
+    <Reference Include="Spout4Unity">
+      <HintPath>$(ValheimDir)\BepInEx\plugins\Spout4Unity\Spout4Unity.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+  -->
+
+  <!-- ── Post-build: copy to BepInEx plugins folder automatically ──────── -->
+  <Target Name="DeployToBepInEx" AfterTargets="Build">
+    <Copy SourceFiles="$(OutputPath)$(AssemblyName).dll" DestinationFolder="$(ValheimDir)\BepInEx\plugins\$(AssemblyName)" SkipUnchangedFiles="true" />
+    <Message Text="Deployed $(AssemblyName).dll → BepInEx/plugins" Importance="high" />
+  </Target>
+
+</Project>
