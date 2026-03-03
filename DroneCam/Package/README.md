@@ -22,6 +22,9 @@ NOTE: You can also use freefly for ff, player for p, follow for f, orbit for o, 
 NOTE: Player names with spaces must be quoted, e.g. /dc f \"Big Viking\" 8 3
 ```
 
+v0.1.7
+ - fixed a chat console entry bug
+
 v0.1.6
  - added `/dc targetenemy                         target nearest enemy for look-at`
  - added `/dc targetenemy <name>                  target named enemy for look-at`

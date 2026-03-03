@@ -16,7 +16,7 @@ namespace DroneCam
     {
         public const string PluginGUID = "com.oathorse.dronecam";
         public const string PluginName = "DroneCam";
-        public const string PluginVersion = "0.1.5";
+        public const string PluginVersion = "0.1.7";
 
         internal static ManualLogSource Log;
 
@@ -875,7 +875,7 @@ namespace DroneCam
         {
             string text = __instance.m_terminalInstance.m_input.text?.Trim();
             if (string.IsNullOrEmpty(text) ||
-                (!text.StartsWith("/dronecam", StringComparison.OrdinalIgnoreCase) ||
+                (!text.StartsWith("/dronecam", StringComparison.OrdinalIgnoreCase) &&
                 !text.StartsWith("/dc", StringComparison.OrdinalIgnoreCase)))
                 return true; // not our command – let Valheim handle normally
 
@@ -899,11 +899,11 @@ namespace DroneCam
             // Offset XZ far enough to be outside the 100m difficulty scaling radius,
             // and underground so other clients don't see us
             __result = new Vector3(
-                realPos.x + 200f,
-                realPos.y - 1000f,
-                realPos.z + 200f);
+                realPos.x + 100f,
+                realPos.y - 1000f, 
+                realPos.z + 100f);
             return false;
-        }
+        } 
     }
 
     [HarmonyPatch(typeof(Player), "SetSleeping")]
@@ -935,22 +935,22 @@ namespace DroneCam
         private const string Help =
             "[DroneCam] Commands (/dronecam or /dc):\n" +
             "  /dc help\n" +
-            "  /dc on                                  enter free-fly setup\n" +
-            "  /dc off                                 return to normal camera\n" +
-            "  /dc freefly                             enter free-fly mode\n" +
-            "  /dc players                             list visible players\n" +
+            "  /dc on  - enter free-fly setup\n" +
+            "  /dc off  - return to normal camera\n" +
+            "  /dc freefly  - enter free-fly mode\n" +
+            "  /dc players  - list visible players\n" +
             "  /dc follow <player> [dist] [height] [smooth]\n" +
             "      - chase a player\n" +
             "  /dc orbit player <name> [dist] [speed] [height]\n" +
             "      - orbit a player\n" +
             "  /dc orbit pos [dist] [speed] [height]\n" +
             "      - orbit current look-at position\n" +
-            "  /dc orbit speed <deg/sec>               change orbit speed live\n" +
-            "  /dc security player <n>                 security cam, track player\n" +
-            "  /dc security pos                        security cam, track look-at position\n" +
-            "  /dc targetenemy                         target nearest enemy for look-at\n" +
-            "  /dc targetenemy <name>                  target named enemy for look-at\n" +
-            "  /dc targetenemy clear                   clear enemy target\n" +
+            "  /dc orbit speed <deg/sec>  - change orbit speed live\n" +
+            "  /dc security player <n>  - security cam, track player\n" +
+            "  /dc security pos  - security cam, track look-at position\n" +
+            "  /dc targetenemy  -target nearest enemy for look-at\n" +
+            "  /dc targetenemy <name>  - target named enemy for look-at\n" +
+            "  /dc targetenemy clear  - clear enemy target\n" +
             "\n" +
             "  Other Controls:\n" +
             "    Free-fly: WASD move  QE up/down  Shift fast  RMB/arrows rotate  F8 toggle\n" +
