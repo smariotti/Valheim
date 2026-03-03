@@ -7,20 +7,30 @@ Mod to implement a drone for a Valehim world.
 ```
 [DroneCam] Commands (/dronecam or /dc):
   /dc help
-  /dc on                                  enter free-fly setup
-  /dc off                                 return to normal camera
-  /dc ff                                  enter free-fly mode
-  /dc players                             list visible players
-  /dc f <player> [dist] [height] [smooth] chase a player
-  /dc o p <n> [r] [spd] [h]               orbit a player
-  /dc o pos [r] [spd] [h]                 orbit current look-at position
-  /dc o s <deg/sec>                       change orbit speed live
-  /dc s p <n>                             security cam, track player
-  /dc s pos                               security cam, track look-at position
-Free-fly: WASD move  QE up/down  Shift fast  RMB/arrows rotate  F8 toggle
-NOTE: You can also use freefly for ff, player for p, follow for f, orbit for o, and security for s.
-NOTE: Player names with spaces must be quoted, e.g. /dc f \"Big Viking\" 8 3
+  /dc on | ff | freefly - enter free-fly setup
+  /dc off - return to normal camera
+  /dc players - list visible players
+  /dc f p <player> [dist] [h] [sm]   follow a player
+  /dc f e <enemy>  [dist] [h] [sm]   follow nearest named enemy
+  /dc o p <n> [r] [spd] [h] - orbit a player
+  /dc o e <n> [r] [spd] [h] - orbit nearest named enemy
+  /dc o pos [r] [spd] [h] - orbit current look-at position
+  /dc o s <deg/sec> - change orbit speed live
+  /dc s p <n> - security cam, track player
+  /dc s pos - security cam, track look-at position
+  /dc te - target nearest enemy for look-at
+  /dc te <name> - target named enemy for look-at
+  /dc te c - clear enemy look-at target
+  /dc hud - toggle HUD visibility
+Player names with spaces must be quoted: /dc f p "Big Viking"
+Wheel: dist/radius  Alt+wheel: height  Ctrl+wheel: orbit speed
+. / , keys cycle next/prev player target  F8 toggle
 ```
+
+v0.1.8
+ - Unified targeting for player/enemy/pos
+ - added `/dronecam follow enemy` and `/dronecam orbit enemy` commands specifying enemy name for nearest enemy
+ - added `/dronecam hud` command to toggle HUD visibility
 
 v0.1.7
  - fixed a chat console entry bug
