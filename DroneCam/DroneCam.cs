@@ -69,7 +69,7 @@ namespace DroneCam
         public const string ModSpeed = "DroneCam_ModSpeed";
         public const string NextPlayer = "DroneCam_NextPlayer";
         public const string PrevPlayer = "DroneCam_PrevPlayer";
-        
+
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -131,6 +131,10 @@ namespace DroneCam
         private bool _targetIsPlayer;
         private Vector3 _lastRelativeOffset = Vector3.zero;
         private bool _waitingForPlayerReturn = false;
+        private Transform _enemyTarget;
+        private string _enemyTargetName;
+        private Transform _targetTransform;  // works for both players and enemies
+        private string _targetName;       // display name for notifications
 
         // ── follow params ─────────────────────────────────────────────────────
         private float _followDistance = 5f;
@@ -412,26 +416,26 @@ namespace DroneCam
         }
         private void UpdateFollow()
         {
-            RefreshTargetPlayer();
-            if (_targetPlayer == null) return;
+            RefreshTarget();
+            if (_targetTransform == null) return;
 
-            Vector3 targetPos = _targetPlayer.transform.position;
+            Vector3 targetPos = GetTargetCenter();
             Vector3 desiredPos = targetPos
-                               + (-_targetPlayer.transform.forward * _followDistance)
+                               + (-_targetTransform.forward * _followDistance)
                                + _followHeightOffset;
 
             transform.position = Vector3.SmoothDamp(
                 transform.position, desiredPos, ref _smoothVelRef, _followSmoothTime);
 
-            LookSmoothAt(targetPos + Vector3.up * 1.5f);
+            LookSmoothAt(GetLookTarget());
         }
 
         private void UpdateOrbit()
         {
-            if (_targetIsPlayer)
+            if (_targetIsPlayer || _targetTransform != null)
             {
-                RefreshTargetPlayer();
-                if (_targetPlayer == null) return;
+                RefreshTarget();
+                if (_targetTransform == null) return;
             }
 
             Vector3 center = GetTargetCenter();
@@ -446,14 +450,19 @@ namespace DroneCam
             transform.position = Vector3.SmoothDamp(
                 transform.position, center + offset, ref _smoothVelRef, DroneCamPlugin.SmoothTime.Value);
 
-            LookSmoothAt(center + Vector3.up * 1.5f);
+            LookSmoothAt(GetLookTarget());
         }
 
-        // ── security ──────────────────────────────────────────────────────────
         private void UpdateSecurity()
         {
+            if (_targetIsPlayer)
+            {
+                RefreshTarget();
+                if (_targetTransform == null) return;
+            }
+
             transform.position = _securityPos;
-            LookSmoothAt(GetTargetCenter() + Vector3.up * 1.5f, lerpSpeed: 3f);
+            LookSmoothAt(GetLookTarget(), lerpSpeed: 3f);
         }
 
         // ── helpers ───────────────────────────────────────────────────────────
@@ -469,59 +478,58 @@ namespace DroneCam
 
         private Vector3 GetTargetCenter()
         {
-            if (_targetIsPlayer)
+            if (_targetTransform != null)
             {
-                RefreshTargetPlayer();
-                if (_targetPlayer != null)
-                {
-                    _lastKnownTargetPos = _targetPlayer.transform.position;
-                    return _lastKnownTargetPos;
-                }
-                // Player ref lost - hold last known position until they reappear
+                _lastKnownTargetPos = _targetTransform.position;
                 return _lastKnownTargetPos;
             }
-            return _targetWorldPos;
+            return _lastKnownTargetPos != Vector3.zero ? _lastKnownTargetPos : _targetWorldPos;
         }
 
-        private void RefreshTargetPlayer()
+        private void RefreshTarget()
         {
-            if (_targetPlayer != null && _targetPlayer.isActiveAndEnabled)
+            // If we have a live transform reference already, just update tracking
+            if (_targetTransform != null && _targetTransform.gameObject.activeInHierarchy)
             {
-                // Player is present - check if they just moved a large distance (walked into portal)
-                Vector3 currentPos = _targetPlayer.transform.position;
+                Vector3 currentPos = _targetTransform.position;
                 if (_lastTargetPosition != Vector3.zero &&
                     Vector3.Distance(currentPos, _lastTargetPosition) > TeleportDetectionDistance)
-                {
-                    // Large jump while ref was still valid - snap immediately
                     SnapRelativeToTarget(currentPos);
-                }
+
                 _lastTargetPosition = currentPos;
                 _lastKnownTargetPos = currentPos;
                 _waitingForPlayerReturn = false;
                 return;
             }
 
-            // Player ref lost - store relative offset the first time we notice
-            if (!_waitingForPlayerReturn)
+            // Transform lost
+            if (!_waitingForPlayerReturn && _lastKnownTargetPos != Vector3.zero)
             {
                 _lastRelativeOffset = transform.position - _lastKnownTargetPos;
                 _waitingForPlayerReturn = true;
-                _lastTargetPosition = Vector3.zero; // prevent stale distance check on return
-                DroneCamPlugin.Log.LogInfo("[DroneCam] Target lost - waiting for return.");
+                _lastTargetPosition = Vector3.zero;
             }
 
-            // Keep searching every frame until they reappear
-            _targetPlayer = FindPlayerByName(_targetPlayerName);
-
-            if (_targetPlayer != null)
+            // Try to reacquire by name - check players first, then characters
+            Player p = FindPlayerByName(_targetPlayerName);
+            if (p != null)
             {
-                // Player just reappeared - snap to relative position immediately
+                _targetTransform = p.transform;
+                _targetPlayer = p;
                 _waitingForPlayerReturn = false;
-                SnapRelativeToTarget(_targetPlayer.transform.position);
-                DroneCamPlugin.Log.LogInfo("[DroneCam] Target reacquired - snapping to relative position.");
+                SnapRelativeToTarget(p.transform.position);
+                return;
+            }
+
+            Character c = FindCharacterByName(_targetPlayerName);
+            if (c != null)
+            {
+                _targetTransform = c.transform;
+                _targetPlayer = null;
+                _waitingForPlayerReturn = false;
+                SnapRelativeToTarget(c.transform.position);
             }
         }
-
         private void SnapRelativeToTarget(Vector3 targetPos)
         {
             _smoothVelocity = Vector3.zero;
@@ -546,6 +554,15 @@ namespace DroneCam
             }
         }
 
+        private static Character FindCharacterByName(string name)
+        {
+            foreach (Character c in Character.GetAllCharacters())
+                if (string.Equals(c.m_name, name, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(c.name, name, StringComparison.OrdinalIgnoreCase))
+                    return c;
+            return null;
+        }
+
         private static Player FindPlayerByName(string name)
         {
             if (string.IsNullOrEmpty(name)) return null;
@@ -563,6 +580,47 @@ namespace DroneCam
                 return GetTargetCenter();
 
             return transform.position + transform.forward * _followDistance;
+        }
+        private static Character FindNearestCharacter(string name, Vector3 near)
+        {
+            Character nearest = null;
+            float bestDist = float.MaxValue;
+
+            foreach (Character c in Character.GetAllCharacters())
+            {
+                if (c is Player) continue; // skip players
+                bool nameMatch = string.IsNullOrEmpty(name) ||
+                                 string.Equals(c.m_name, name, StringComparison.OrdinalIgnoreCase);
+                if (!nameMatch) continue;
+
+                float dist = Vector3.Distance(c.transform.position, near);
+                if (dist < bestDist)
+                {
+                    bestDist = dist;
+                    nearest = c;
+                }
+            }
+            return nearest;
+        }
+
+        private Vector3 GetLookTarget()
+        {
+            if (_enemyTarget != null && _enemyTarget.gameObject.activeInHierarchy)
+                return _enemyTarget.position + Vector3.up * 1.5f;
+
+            // Enemy target lost - try to reacquire by name
+            if (!string.IsNullOrEmpty(_enemyTargetName))
+            {
+                Character c = FindNearestCharacter(_enemyTargetName, transform.position);
+                if (c != null)
+                {
+                    _enemyTarget = c.transform;
+                    return _enemyTarget.position + Vector3.up * 1.5f;
+                }
+            }
+
+            // Fall back to movement target
+            return GetTargetCenter() + Vector3.up * 1.5f;
         }
 
         private static void Notify(string msg)
@@ -693,6 +751,30 @@ namespace DroneCam
             Notify($"Orbit speed set to {speed} deg/sec");
         }
 
+        public void SetEnemyTargetNearest()
+        {
+            Character c = FindNearestCharacter(null, transform.position);
+            if (c == null) { Notify("No enemies nearby."); return; }
+            _enemyTarget = c.transform;
+            _enemyTargetName = c.GetHoverName();
+            Notify($"Enemy target: {c.GetHoverName()}");
+        }
+
+        public void SetEnemyTargetNamed(string name)
+        {
+            Character c = FindNearestCharacter(name, transform.position);
+            if (c == null) { Notify($"No enemy '{name}' found nearby."); return; }
+            _enemyTarget = c.transform;
+            _enemyTargetName = c.GetHoverName();
+            Notify($"Enemy target: {c.GetHoverName()}");
+        }
+
+        public void ClearEnemyTarget()
+        {
+            _enemyTarget = null;
+            _enemyTargetName = null;
+            Notify("Enemy target cleared.");
+        }
         public static IEnumerable<string> GetPlayerNames()
             => Player.GetAllPlayers().Select(p => p.GetPlayerName());
 
@@ -731,6 +813,16 @@ namespace DroneCam
             }
 
             DroneCamPlugin.Log.LogInfo("[DroneCam] Target teleported - snapping drone to new position.");
+        }
+
+        private void ResetTargetState()
+        {
+            _lastKnownTargetPos = Vector3.zero;
+            _lastTargetPosition = Vector3.zero;
+            _lastRelativeOffset = Vector3.zero;
+            _waitingForPlayerReturn = false;
+            _enemyTarget = null;
+            _enemyTargetName = null;
         }
     }
 
@@ -847,18 +939,22 @@ namespace DroneCam
             "  /dc off                                 return to normal camera\n" +
             "  /dc freefly                             enter free-fly mode\n" +
             "  /dc players                             list visible players\n" +
-            "  /dc follow <player> [dist] [height] [smooth]\n" + 
+            "  /dc follow <player> [dist] [height] [smooth]\n" +
             "      - chase a player\n" +
-            "  /dc orbit player <name> [dist] [speed] [height]\n" + 
+            "  /dc orbit player <name> [dist] [speed] [height]\n" +
             "      - orbit a player\n" +
             "  /dc orbit pos [dist] [speed] [height]\n" +
             "      - orbit current look-at position\n" +
             "  /dc orbit speed <deg/sec>               change orbit speed live\n" +
             "  /dc security player <n>                 security cam, track player\n" +
             "  /dc security pos                        security cam, track look-at position\n" +
-            "  Other Controls:\n" + 
+            "  /dc targetenemy                         target nearest enemy for look-at\n" +
+            "  /dc targetenemy <name>                  target named enemy for look-at\n" +
+            "  /dc targetenemy clear                   clear enemy target\n" +
+            "\n" +
+            "  Other Controls:\n" +
             "    Free-fly: WASD move  QE up/down  Shift fast  RMB/arrows rotate  F8 toggle\n" +
-            "    Cycle Players: . / ,  cycle to next/prev player target" + 
+            "    Cycle Players: . / ,  cycle to next/prev player target" +
             "    Mouse wheel: distance/radius  Alt+wheel: height  Ctrl+wheel: orbit speed\n" +
             "NOTE: Player names with spaces must be quoted, e.g. /dc f \"Big Viking\" 8 3";
 
@@ -877,6 +973,8 @@ namespace DroneCam
         { "follow",   HandleFollow },   { "f", HandleFollow },
         { "orbit",    HandleOrbit },    { "o", HandleOrbit },
         { "security", HandleSecurity }, { "s", HandleSecurity },
+        { "te",  t => HandleTargetEnemy(t) },
+        { "targetenemy", t => HandleTargetEnemy(t) },
         };
 
         public static void Handle(string raw)
@@ -952,6 +1050,30 @@ namespace DroneCam
                     break;
                 default:
                     Msg($"Unknown security sub-command '{t[2]}'.");
+                    break;
+            }
+        }
+
+        private static void HandleTargetEnemy(string[] t)
+        {
+            if (t.Length < 3)
+            {
+                Ctrl.SetEnemyTargetNearest();
+                return;
+            }
+            switch (t[2].ToLower())
+            {
+                case "nearest":
+                case "n":
+                    Ctrl.SetEnemyTargetNearest();
+                    break;
+                case "clear":
+                case "c":
+                    Ctrl.ClearEnemyTarget();
+                    break;
+                default:
+                    // Anything else is treated as a name
+                    Ctrl.SetEnemyTargetNamed(t[2]);
                     break;
             }
         }
