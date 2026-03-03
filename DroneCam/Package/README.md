@@ -22,6 +22,21 @@ NOTE: You can also use freefly for ff, player for p, follow for f, orbit for o, 
 NOTE: Player names with spaces must be quoted, e.g. /dc f \"Big Viking\" 8 3
 ```
 
+v0.1.6
+ - added `/dc targetenemy                         target nearest enemy for look-at`
+ - added `/dc targetenemy <name>                  target named enemy for look-at`
+ - added `/dc targetenemy clear                   clear enemy target`
+
+v0.1.5
+ - fixed bug where `/dc` was ignored
+ - prevent drone player from falling to death when turning `/dronecam off`
+ - dronecam now no longer prevents players from sleeping
+ - fix to re-aquiring player target after player goes through portal
+ - made sure drone can't be hit or die (should be in god/ghost mode)
+ - make Valheim server ignore drone with regards to difficulty scaling
+ - added modifiers (alt and ctrl) for scroll wheel to adjust drone distance and height on the fly
+ - added keys '.' and ',' to cycle the drone's target through players on the server
+
 v0.1.4
 - added requested features
 v0.1.0 

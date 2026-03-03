@@ -16,7 +16,7 @@ namespace DroneCam
     {
         public const string PluginGUID = "com.oathorse.dronecam";
         public const string PluginName = "DroneCam";
-        public const string PluginVersion = "0.1.4";
+        public const string PluginVersion = "0.1.5";
 
         internal static ManualLogSource Log;
 
@@ -65,6 +65,11 @@ namespace DroneCam
         public const string MouseLook = "DroneCam_MouseLook";
         public const string WheelUp = "DroneCam_WheelUp";
         public const string WheelDown = "DroneCam_WheelDown";
+        public const string ModHeight = "DroneCam_ModHeight";
+        public const string ModSpeed = "DroneCam_ModSpeed";
+        public const string NextPlayer = "DroneCam_NextPlayer";
+        public const string PrevPlayer = "DroneCam_PrevPlayer";
+        
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -90,6 +95,10 @@ namespace DroneCam
             __instance.AddButton(Btn.MouseLook, "<Mouse>/rightButton");
             __instance.AddButton(Btn.WheelUp, "<Mouse>/scroll/up");
             __instance.AddButton(Btn.WheelDown, "<Mouse>/scroll/down");
+            __instance.AddButton(Btn.ModHeight, "<Keyboard>/leftAlt");
+            __instance.AddButton(Btn.ModSpeed, "<Keyboard>/leftCtrl");
+            __instance.AddButton(Btn.NextPlayer, "<Keyboard>/period");
+            __instance.AddButton(Btn.PrevPlayer, "<Keyboard>/comma");
         }
     }
 
@@ -111,6 +120,7 @@ namespace DroneCam
     public class DroneCamController : MonoBehaviour
     {
         public static DroneCamController Instance { get; private set; }
+        public Player TargetPlayer => _targetIsPlayer ? _targetPlayer : null;
 
         public DroneCamMode Mode { get; private set; } = DroneCamMode.Disabled;
 
@@ -158,6 +168,45 @@ namespace DroneCam
             _gameCamera = GetComponent<GameCamera>();
         }
 
+        private void HandlePlayerCycle()
+        {
+            if (Chat.instance != null && Chat.instance.HasFocus()) return;
+            if (!_targetIsPlayer) return;
+
+            int dir = 0;
+            if (ZInput.GetButtonDown(Btn.NextPlayer)) dir = 1;
+            if (ZInput.GetButtonDown(Btn.PrevPlayer)) dir = -1;
+            if (dir == 0) return;
+
+            List<Player> players = Player.GetAllPlayers();
+            if (players.Count < 2) return;
+
+            int current = players.FindIndex(p =>
+                string.Equals(p.GetPlayerName(), _targetPlayerName, StringComparison.OrdinalIgnoreCase));
+
+            // If current target not found, start from beginning
+            int next = current < 0
+                ? 0
+                : (current + dir + players.Count) % players.Count;
+
+            Player nextPlayer = players[next];
+            string nextName = nextPlayer.GetPlayerName();
+
+            // Re-enter current mode with new target
+            switch (Mode)
+            {
+                case DroneCamMode.Follow:
+                    SetFollow(nextName, _followDistance, _followHeightOffset.y, _followSmoothTime);
+                    break;
+                case DroneCamMode.Orbit:
+                    SetOrbitPlayer(nextName, _orbitRadius, _orbitSpeed, _orbitHeight);
+                    break;
+                case DroneCamMode.Security:
+                    SetSecurityPlayer(nextName);
+                    break;
+            }
+        }
+
         private void Update()
         {
             if (ZInput.instance == null) return;
@@ -178,6 +227,9 @@ namespace DroneCam
                 case DroneCamMode.Orbit: UpdateOrbit(); break;
                 case DroneCamMode.Security: UpdateSecurity(); break;
             }
+
+            if (Mode == DroneCamMode.Follow || Mode == DroneCamMode.Orbit || Mode == DroneCamMode.Security)
+                HandlePlayerCycle();
 
             if (Mode != DroneCamMode.Disabled)
                 HandleScrollWheel();
@@ -200,19 +252,40 @@ namespace DroneCam
             if (ZInput.GetButton(Btn.WheelDown)) delta += DroneCamPlugin.ScrollSensitivity.Value;
             if (Mathf.Approximately(delta, 0f)) return;
 
+            bool modHeight = ZInput.GetButton(Btn.ModHeight);
+            bool modSpeed = ZInput.GetButton(Btn.ModSpeed);
+
             switch (Mode)
             {
                 case DroneCamMode.Follow:
-                    _followDistance = Mathf.Max(1f, _followDistance + delta);
+                    if (modHeight) _followHeightOffset.y = Mathf.Max(0f, _followHeightOffset.y + delta);
+                    else _followDistance = Mathf.Max(1f, _followDistance + delta);
                     break;
-                case DroneCamMode.Orbit:
-                    _orbitRadius = Mathf.Max(1f, _orbitRadius + delta);
-                    break;
+
                 case DroneCamMode.FreeSetup:
-                    // Wheel adjusts the projected look-at distance used by orbit pos / security pos
                     _followDistance = Mathf.Max(1f, _followDistance + delta);
+                    break;
+
+                case DroneCamMode.Orbit:
+                    if (modHeight) _orbitHeight = Mathf.Max(0f, _orbitHeight + delta);
+                    else if (modSpeed) _orbitSpeed = Mathf.Max(1f, _orbitSpeed + delta * 10f);
+                    else _orbitRadius = Mathf.Max(1f, _orbitRadius + delta);
+                    break;
+
+                case DroneCamMode.Security:
+                    // No distance concept but alt-wheel tilts the mount point up/down
+                    if (modHeight) _securityPos.y = Mathf.Max(0f, _securityPos.y + delta);
                     break;
             }
+        }
+
+        private void EnterDroneMode()
+        {
+            if (Player.m_localPlayer == null) return;
+            _wasGodMode = Player.m_localPlayer.m_godMode;
+            _wasGhostMode = Player.m_localPlayer.m_ghostMode;
+            Player.m_localPlayer.m_godMode = true;
+            Player.m_localPlayer.m_ghostMode = true;
         }
 
         // ── mode entry / exit ─────────────────────────────────────────────────
@@ -222,6 +295,9 @@ namespace DroneCam
             _droneRot = transform.rotation;
             _smoothVelocity = Vector3.zero;
             Mode = DroneCamMode.FreeSetup;
+
+            EnterDroneMode();
+
             SetGameCameraEnabled(false);
 
             if (Player.m_localPlayer != null)
@@ -235,6 +311,20 @@ namespace DroneCam
             Notify("Free-fly active. WASD/QE move, Shift=fast, RMB/arrows rotate. F8 to exit.");
         }
 
+        private Vector3 FindGroundPosition(Vector3 from)
+        {
+            // Cast down from current camera position to find ground
+            if (Physics.Raycast(from, Vector3.down, out RaycastHit hit, 2000f, ZoneSystem.instance.m_solidRayMask))
+                return hit.point + Vector3.up * 0.5f; // small offset so player isn't inside the ground
+
+            // Fallback - try from above in case camera is underground
+            if (Physics.Raycast(from + Vector3.up * 500f, Vector3.down, out hit, 2000f, ZoneSystem.instance.m_solidRayMask))
+                return hit.point + Vector3.up * 0.5f;
+
+            // Nothing hit - return original position and hope for the best
+            return from;
+        }
+
         public void ExitDroneCam()
         {
             Mode = DroneCamMode.Disabled;
@@ -244,6 +334,11 @@ namespace DroneCam
             {
                 Player.m_localPlayer.m_godMode = _wasGodMode;
                 Player.m_localPlayer.m_ghostMode = _wasGhostMode;
+
+                Vector3 groundPos = FindGroundPosition(transform.position);
+                Player.m_localPlayer.m_body.position = groundPos;
+                Player.m_localPlayer.m_body.velocity = Vector3.zero; // clear any accumulated velocity
+
                 Player.m_localPlayer.SetVisible(true);
             }
 
@@ -315,13 +410,10 @@ namespace DroneCam
             transform.position = _dronePos;
             transform.rotation = _droneRot;
         }
-
-        // ── follow ────────────────────────────────────────────────────────────
         private void UpdateFollow()
         {
             RefreshTargetPlayer();
             if (_targetPlayer == null) return;
-            CheckForTargetTeleport();
 
             Vector3 targetPos = _targetPlayer.transform.position;
             Vector3 desiredPos = targetPos
@@ -334,10 +426,13 @@ namespace DroneCam
             LookSmoothAt(targetPos + Vector3.up * 1.5f);
         }
 
-        // ── orbit ─────────────────────────────────────────────────────────────
         private void UpdateOrbit()
         {
-            CheckForTargetTeleport();
+            if (_targetIsPlayer)
+            {
+                RefreshTargetPlayer();
+                if (_targetPlayer == null) return;
+            }
 
             Vector3 center = GetTargetCenter();
             _orbitAngle += _orbitSpeed * Time.deltaTime;
@@ -357,8 +452,6 @@ namespace DroneCam
         // ── security ──────────────────────────────────────────────────────────
         private void UpdateSecurity()
         {
-            CheckForTargetTeleport();
-
             transform.position = _securityPos;
             LookSmoothAt(GetTargetCenter() + Vector3.up * 1.5f, lerpSpeed: 3f);
         }
@@ -394,27 +487,38 @@ namespace DroneCam
         {
             if (_targetPlayer != null && _targetPlayer.isActiveAndEnabled)
             {
+                // Player is present - check if they just moved a large distance (walked into portal)
+                Vector3 currentPos = _targetPlayer.transform.position;
+                if (_lastTargetPosition != Vector3.zero &&
+                    Vector3.Distance(currentPos, _lastTargetPosition) > TeleportDetectionDistance)
+                {
+                    // Large jump while ref was still valid - snap immediately
+                    SnapRelativeToTarget(currentPos);
+                }
+                _lastTargetPosition = currentPos;
+                _lastKnownTargetPos = currentPos;
                 _waitingForPlayerReturn = false;
                 return;
             }
 
-            // Player ref just became invalid - store relative offset before losing position
-            if (!_waitingForPlayerReturn && _lastKnownTargetPos != Vector3.zero)
+            // Player ref lost - store relative offset the first time we notice
+            if (!_waitingForPlayerReturn)
             {
                 _lastRelativeOffset = transform.position - _lastKnownTargetPos;
                 _waitingForPlayerReturn = true;
-                DroneCamPlugin.Log.LogInfo("[DroneCam] Target player lost - storing relative offset, waiting for return.");
+                _lastTargetPosition = Vector3.zero; // prevent stale distance check on return
+                DroneCamPlugin.Log.LogInfo("[DroneCam] Target lost - waiting for return.");
             }
 
+            // Keep searching every frame until they reappear
             _targetPlayer = FindPlayerByName(_targetPlayerName);
 
-            // Player just reappeared - snap to relative offset at new position
-            if (_targetPlayer != null && _waitingForPlayerReturn)
+            if (_targetPlayer != null)
             {
+                // Player just reappeared - snap to relative position immediately
                 _waitingForPlayerReturn = false;
-                _lastTargetPosition = Vector3.zero; // prevent CheckForTargetTeleport misfiring
                 SnapRelativeToTarget(_targetPlayer.transform.position);
-                DroneCamPlugin.Log.LogInfo("[DroneCam] Target player reacquired - snapping to relative position.");
+                DroneCamPlugin.Log.LogInfo("[DroneCam] Target reacquired - snapping to relative position.");
             }
         }
 
@@ -423,17 +527,19 @@ namespace DroneCam
             _smoothVelocity = Vector3.zero;
             _smoothVelRef = Vector3.zero;
             _lastKnownTargetPos = targetPos;
+            _lastTargetPosition = targetPos; // seed so next frame doesn't retrigger
 
             switch (Mode)
             {
                 case DroneCamMode.Follow:
-                    // Reapply the exact relative offset from before the portal
                     transform.position = targetPos + _lastRelativeOffset;
                     _dronePos = transform.position;
+                    // Restore relative orientation
+                    transform.rotation = Quaternion.LookRotation(
+                        targetPos - transform.position + _followHeightOffset);
                     break;
 
                 case DroneCamMode.Orbit:
-                    // Reset orbit at same radius but snap position to relative offset
                     _orbitAngle = 0f;
                     transform.position = targetPos + _lastRelativeOffset.normalized * _orbitRadius;
                     break;
@@ -465,18 +571,31 @@ namespace DroneCam
         public void OnPlayerSleep()
         {
             if (Mode == DroneCamMode.Disabled) return;
+            if (_modeBeforeSleep != DroneCamMode.Disabled) return;
             _modeBeforeSleep = Mode;
             SetGameCameraEnabled(true);
-            Notify("Player sleeping - drone suspended.");
+
+            // Skip time to morning so drone player doesn't have to find a bed
+            if (Player.m_localPlayer != null)
+            {
+                Player.m_localPlayer.SetSleeping(true);
+                EnvMan.instance.SkipToMorning();
+            }
+
+            Notify("Target sleeping - drone suspended, skipping to morning.");
         }
 
         public void OnPlayerWake()
         {
             if (_modeBeforeSleep == DroneCamMode.Disabled) return;
+
+            if (Player.m_localPlayer != null)
+                Player.m_localPlayer.SetSleeping(false);
+
             SetGameCameraEnabled(false);
             Mode = _modeBeforeSleep;
             _modeBeforeSleep = DroneCamMode.Disabled;
-            Notify("Player awake - drone resumed.");
+            Notify("Target awake - drone resumed.");
         }
 
         // ── public API ────────────────────────────────────────────────────────
@@ -497,6 +616,7 @@ namespace DroneCam
             if (_targetPlayer == null) { Notify($"Player '{playerName}' not found."); return; }
 
             Mode = DroneCamMode.Follow;
+            EnterDroneMode();
             SetGameCameraEnabled(false);
             Notify($"Following {playerName} - dist={distance} height={heightOffset} smooth={smoothTime}");
         }
@@ -518,6 +638,7 @@ namespace DroneCam
             if (_targetPlayer == null) { Notify($"Player '{playerName}' not found."); return; }
 
             Mode = DroneCamMode.Orbit;
+            EnterDroneMode();
             SetGameCameraEnabled(false);
             Notify($"Orbiting {playerName} - radius={radius} speed={speed} height={height}");
         }
@@ -534,6 +655,7 @@ namespace DroneCam
             _lastKnownTargetPos = Vector3.zero;
 
             Mode = DroneCamMode.Orbit;
+            EnterDroneMode();
             SetGameCameraEnabled(false);
             Notify($"Orbiting position - radius={radius} speed={speed} height={height}");
         }
@@ -548,6 +670,7 @@ namespace DroneCam
             if (_targetPlayer == null) { Notify($"Player '{playerName}' not found."); return; }
 
             Mode = DroneCamMode.Security;
+            EnterDroneMode();
             SetGameCameraEnabled(false);
             Notify($"Security cam tracking {playerName}");
         }
@@ -559,6 +682,7 @@ namespace DroneCam
             _targetWorldPos = pos;
 
             Mode = DroneCamMode.Security;
+            EnterDroneMode();
             SetGameCameraEnabled(false);
             Notify("Security cam tracking look-at position");
         }
@@ -574,22 +698,6 @@ namespace DroneCam
 
         private Vector3 _lastTargetPosition;
         private const float TeleportDetectionDistance = 50f;
-
-        private void CheckForTargetTeleport()
-        {
-            if (_targetPlayer == null) return;
-
-            Vector3 currentPos = _targetPlayer.transform.position;
-            float dist = Vector3.Distance(currentPos, _lastTargetPosition);
-
-            if (dist > TeleportDetectionDistance && _lastTargetPosition != Vector3.zero)
-            {
-                // Target player teleported - snap drone to their new position
-                SnapToTarget(currentPos);
-            }
-
-            _lastTargetPosition = currentPos;
-        }
 
         private void SnapToTarget(Vector3 targetPos)
         {
@@ -675,7 +783,8 @@ namespace DroneCam
         {
             string text = __instance.m_terminalInstance.m_input.text?.Trim();
             if (string.IsNullOrEmpty(text) ||
-                !text.StartsWith("/dronecam", StringComparison.OrdinalIgnoreCase))
+                (!text.StartsWith("/dronecam", StringComparison.OrdinalIgnoreCase) ||
+                !text.StartsWith("/dc", StringComparison.OrdinalIgnoreCase)))
                 return true; // not our command – let Valheim handle normally
 
             DroneCamCommands.Handle(text);
@@ -693,10 +802,15 @@ namespace DroneCam
             if (Player.m_localPlayer == null) return true;
             if (__instance.gameObject != Player.m_localPlayer.gameObject) return true;
 
-            // Return underground position so other clients render us below terrain,
-            // while m_body.position remains at the camera for local chunk loading
-            __result = Player.m_localPlayer.m_body.position + Vector3.down * 1000f;
-            return false; // skip original
+            Vector3 realPos = Player.m_localPlayer.m_body.position;
+
+            // Offset XZ far enough to be outside the 100m difficulty scaling radius,
+            // and underground so other clients don't see us
+            __result = new Vector3(
+                realPos.x + 200f,
+                realPos.y - 1000f,
+                realPos.z + 200f);
+            return false;
         }
     }
 
@@ -705,8 +819,12 @@ namespace DroneCam
     {
         static void Postfix(Player __instance, bool sleep)
         {
-            if (__instance != Player.m_localPlayer) return;
             if (DroneCamController.Instance == null) return;
+
+            bool isLocalPlayer = __instance == Player.m_localPlayer;
+            bool isTargetPlayer = __instance == DroneCamController.Instance.TargetPlayer;
+
+            if (!isLocalPlayer && !isTargetPlayer) return;
 
             if (sleep)
                 DroneCamController.Instance.OnPlayerSleep();
@@ -727,16 +845,21 @@ namespace DroneCam
             "  /dc help\n" +
             "  /dc on                                  enter free-fly setup\n" +
             "  /dc off                                 return to normal camera\n" +
-            "  /dc ff                                  enter free-fly mode\n" +
+            "  /dc freefly                             enter free-fly mode\n" +
             "  /dc players                             list visible players\n" +
-            "  /dc f <player> [dist] [height] [smooth] chase a player\n" +
-            "  /dc o p <n> [r] [spd] [h]               orbit a player\n" +
-            "  /dc o pos [r] [spd] [h]                 orbit current look-at position\n" +
-            "  /dc o s <deg/sec>                       change orbit speed live\n" +
-            "  /dc s p <n>                             security cam, track player\n" +
-            "  /dc s pos                               security cam, track look-at position\n" +
-            "Free-fly: WASD move  QE up/down  Shift fast  RMB/arrows rotate  F8 toggle\n" +
-            "NOTE: You can also use freefly for ff, player for p, follow for f, orbit for o, and security for s.\n"+
+            "  /dc follow <player> [dist] [height] [smooth]\n" + 
+            "      - chase a player\n" +
+            "  /dc orbit player <name> [dist] [speed] [height]\n" + 
+            "      - orbit a player\n" +
+            "  /dc orbit pos [dist] [speed] [height]\n" +
+            "      - orbit current look-at position\n" +
+            "  /dc orbit speed <deg/sec>               change orbit speed live\n" +
+            "  /dc security player <n>                 security cam, track player\n" +
+            "  /dc security pos                        security cam, track look-at position\n" +
+            "  Other Controls:\n" + 
+            "    Free-fly: WASD move  QE up/down  Shift fast  RMB/arrows rotate  F8 toggle\n" +
+            "    Cycle Players: . / ,  cycle to next/prev player target" + 
+            "    Mouse wheel: distance/radius  Alt+wheel: height  Ctrl+wheel: orbit speed\n" +
             "NOTE: Player names with spaces must be quoted, e.g. /dc f \"Big Viking\" 8 3";
 
         // Each handler receives the full token array so it can read its own args
