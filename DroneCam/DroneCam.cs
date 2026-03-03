@@ -7,7 +7,7 @@ using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
 using UnityEngine;
-
+ 
 namespace DroneCam
 {
     [BepInPlugin(PluginGUID, PluginName, PluginVersion)]
@@ -762,7 +762,7 @@ namespace DroneCam
     // ─────────────────────────────────────────────────────────────────────────
     // Harmony – block local player input while drone cam is active
     // ─────────────────────────────────────────────────────────────────────────
-    [HarmonyPatch(typeof(Player), "TakeInput")]
+    [HarmonyPatch(typeof(Player), "TakeInput")] 
     public static class Player_TakeInput_Patch
     {
         static bool Prefix(Player __instance)
@@ -783,7 +783,7 @@ namespace DroneCam
         {
             string text = __instance.m_terminalInstance.m_input.text?.Trim();
             if (string.IsNullOrEmpty(text) ||
-                (!text.StartsWith("/dronecam", StringComparison.OrdinalIgnoreCase) ||
+                (!text.StartsWith("/dronecam", StringComparison.OrdinalIgnoreCase) &&
                 !text.StartsWith("/dc", StringComparison.OrdinalIgnoreCase)))
                 return true; // not our command – let Valheim handle normally
 
@@ -807,9 +807,9 @@ namespace DroneCam
             // Offset XZ far enough to be outside the 100m difficulty scaling radius,
             // and underground so other clients don't see us
             __result = new Vector3(
-                realPos.x + 200f,
+                realPos.x + 100f,
                 realPos.y - 1000f,
-                realPos.z + 200f);
+                realPos.z + 100f);
             return false;
         }
     }
