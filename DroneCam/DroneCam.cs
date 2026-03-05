@@ -314,6 +314,8 @@ namespace DroneCam
             if (Player.m_localPlayer == null) return;
             Player.m_localPlayer.m_godMode = true;
             Player.m_localPlayer.m_ghostMode = true;
+            Player.m_localPlayer.m_seman?.RemoveStatusEffect(SEMan.s_statusEffectWet, true);
+            Player.m_localPlayer.m_seman?.RemoveStatusEffect(SEMan.s_statusEffectTared, true);
         }
 
         private void SetGameCameraEnabled(bool state)
@@ -945,6 +947,17 @@ namespace DroneCam
         {
             if (_anchor == null || _anchor.Type != TargetType.Player) return false;
             return _anchor.Transform == p.transform;
+        }
+    }
+
+    [HarmonyPatch(typeof(Character), "UpdateWater")]
+    public static class Character_UpdateWater_Patch
+    {
+        static bool Prefix(Character __instance)
+        {
+            if (__instance != Player.m_localPlayer) return true;
+            if (DroneCamController.Instance == null) return true;
+            return DroneCamController.Instance.Mode == DroneCamMode.Disabled;
         }
     }
 
