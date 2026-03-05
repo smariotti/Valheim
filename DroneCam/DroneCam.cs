@@ -293,16 +293,27 @@ namespace DroneCam
             if (_modeBeforeSleep != DroneCamMode.Disabled) return;
             _modeBeforeSleep = Mode;
             SetGameCameraEnabled(true);
+
             if (Player.m_localPlayer != null)
+            {
                 Player.m_localPlayer.m_sleeping = true;
+                // Register as in-bed with the server so EverybodyIsTryingToSleep() passes
+                Player.m_localPlayer.m_nview.GetZDO().Set(ZDOVars.s_inBed, true);
+            }
+
             Notify("Sleeping - drone suspended.");
         }
 
         public void OnPlayerWake()
         {
             if (_modeBeforeSleep == DroneCamMode.Disabled) return;
+
             if (Player.m_localPlayer != null)
+            {
                 Player.m_localPlayer.m_sleeping = false;
+                Player.m_localPlayer.m_nview.GetZDO().Set(ZDOVars.s_inBed, false);
+            }
+
             SetGameCameraEnabled(false);
             Mode = _modeBeforeSleep;
             _modeBeforeSleep = DroneCamMode.Disabled;
