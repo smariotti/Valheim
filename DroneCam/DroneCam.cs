@@ -515,15 +515,17 @@ namespace DroneCam
 
             if (_anchor.IsValid)
             {
-                Vector3 currentPos = _anchor.GetPosition();
-
-                if (_anchorLastPos != Vector3.zero &&
-                    Vector3.Distance(currentPos, _anchorLastPos) > DroneCamPlugin.TeleportDetectionDistance.Value)
-                    SnapRelativeToTarget(currentPos);
-
-                _anchorLastPos = currentPos;
-                _anchorLastKnownPos = currentPos;
+                _anchorLastPos = _anchor.GetPosition();
+                _anchorLastKnownPos = _anchorLastPos;
                 _anchorWaiting = false;
+
+                // Only snap on large distance jump for enemy targets -
+                // player teleports are handled by Player_TeleportTo_Patch
+                if (_anchor.Type == TargetType.Enemy &&
+                    _anchorLastRelOffset != Vector3.zero &&
+                    Vector3.Distance(_anchorLastPos, _anchorLastKnownPos) > DroneCamPlugin.TeleportDetectionDistance.Value)
+                    SnapRelativeToTarget(_anchorLastPos);
+
                 return;
             }
 
@@ -546,7 +548,8 @@ namespace DroneCam
                 _anchor.Transform = found;
                 _anchorWaiting = false;
                 _anchorLastPos = Vector3.zero;
-                SnapRelativeToTarget(found.position);
+                if (_anchor.Type == TargetType.Enemy)
+                    SnapRelativeToTarget(found.position);
                 DroneCamPlugin.Log.LogInfo("[DroneCam] Anchor reacquired.");
             }
         }
@@ -958,6 +961,20 @@ namespace DroneCam
             if (__instance != Player.m_localPlayer) return true;
             if (DroneCamController.Instance == null) return true;
             return DroneCamController.Instance.Mode == DroneCamMode.Disabled;
+        }
+    }
+
+    [HarmonyPatch(typeof(Player), "TeleportTo")]
+    public static class Player_TeleportTo_Patch
+    {
+        static void Postfix(Player __instance, Vector3 pos, Quaternion rot, bool distantTeleport)
+        {
+            if (DroneCamController.Instance == null) return;
+            if (DroneCamController.Instance.Mode == DroneCamMode.Disabled) return;
+            if (__instance == Player.m_localPlayer) return;
+            if (!DroneCamController.Instance.IsTargetPlayer(__instance)) return;
+
+            Player.m_localPlayer?.TeleportTo(pos, rot, distantTeleport);
         }
     }
 
