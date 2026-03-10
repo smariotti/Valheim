@@ -27,6 +27,15 @@ Wheel: dist/radius  Alt+wheel: height  Ctrl+wheel: orbit speed
 . / , keys cycle next/prev player target  F8 toggle
 ```
 
+v0.1.10
+ - another attempt at sleeping when player sleeps
+ - don't get the drone wet when passing through water
+ - use built in teleport function when player teleports rather than trying to relocate drone
+ - sleeping now uses "in bed" setting when drone tries to sleep
+  
+v0.1.9 
+ - fixed a bug with command line interpret
+
 v0.1.8
  - Unified targeting for player/enemy/pos
  - added `/dronecam follow enemy` and `/dronecam orbit enemy` commands specifying enemy name for nearest enemy

@@ -18,7 +18,7 @@ namespace DroneCam
     {
         public const string PluginGUID = "com.oathorse.dronecam";
         public const string PluginName = "DroneCam";
-        public const string PluginVersion = "0.1.9";
+        public const string PluginVersion = "0.1.10";
 
         internal static ManualLogSource Log;
 
@@ -170,6 +170,7 @@ namespace DroneCam
         private Vector3 _anchorLastKnownPos = Vector3.zero;
         private Vector3 _anchorLastRelOffset = Vector3.zero;
         private bool _anchorWaiting = false;
+        private Vector3 _lastLookPosition = Vector3.zero;
 
         // ── follow params ─────────────────────────────────────────────────────
         private float _followDistance = 5f;
@@ -394,8 +395,11 @@ namespace DroneCam
             if (ZInput.GetButtonDown(Btn.PrevPlayer)) dir = -1;
             if (dir == 0) return;
 
-            List<Player> players = Player.GetAllPlayers();
-            if (players.Count < 2) return;
+            List<Player> players = Player.GetAllPlayers()
+                .Where(p => p != Player.m_localPlayer)
+                .ToList();
+
+            if (players.Count < 1) return;
 
             int current = players.FindIndex(p =>
                 string.Equals(p.GetPlayerName(), _anchor.Name, StringComparison.OrdinalIgnoreCase));
@@ -575,6 +579,8 @@ namespace DroneCam
 
         private Vector3 GetLookTarget()
         {
+            Vector3 result;
+
             if (_lookTarget != null)
             {
                 if (_lookTarget.Type == TargetType.Enemy)
@@ -593,10 +599,16 @@ namespace DroneCam
                 }
 
                 if (_lookTarget != null)
-                    return _lookTarget.GetPosition() + Vector3.up * 1.5f;
+                {
+                    result = _lookTarget.GetPosition() + Vector3.up * 1.5f;
+                    _lastLookPosition = result;
+                    return result;
+                }
             }
 
-            return GetTargetCenter() + Vector3.up * 1.5f;
+            result = GetTargetCenter() + Vector3.up * 1.5f;
+            _lastLookPosition = result;
+            return result;
         }
 
         private void SnapRelativeToTarget(Vector3 targetPos)
@@ -638,6 +650,7 @@ namespace DroneCam
             _anchorLastKnownPos = Vector3.zero;
             _anchorLastRelOffset = Vector3.zero;
             _anchorWaiting = false;
+            _lastLookPosition = Vector3.zero;
         }
 
         // ── finders ───────────────────────────────────────────────────────────
@@ -673,8 +686,10 @@ namespace DroneCam
         // ── look-at position for pos commands ─────────────────────────────────
         public Vector3 GetLookAtPosition()
         {
-            if (Mode == DroneCamMode.Security)
-                return GetTargetCenter();
+            if (_lastLookPosition != Vector3.zero)
+                return _lastLookPosition;
+
+            // Fallback - project forward from camera if no look history yet
             return transform.position + transform.forward * _followDistance;
         }
 
