@@ -791,6 +791,7 @@ namespace DroneCam
         private static Player FindPlayerByName(string name)
         {
             if (string.IsNullOrEmpty(name)) return null;
+
             foreach (Player p in Player.GetAllPlayers())
             {
                 if (p == Player.m_localPlayer) continue; // drone can never target itself
@@ -1092,7 +1093,6 @@ namespace DroneCam
             return false;
         }
     }
-
 
     // ─────────────────────────────────────────────────────────────────────────
     // Harmony – intercept /dronecam and /dc commands
