@@ -18,7 +18,7 @@ namespace DroneCam
     {
         public const string PluginGUID = "com.oathorse.dronecam";
         public const string PluginName = "DroneCam";
-        public const string PluginVersion = "0.1.10";
+        public const string PluginVersion = "0.1.18";
 
         internal static ManualLogSource Log;
 
@@ -251,6 +251,35 @@ namespace DroneCam
                 Player.m_localPlayer.m_body.position = transform.position;
                 Player.m_localPlayer.SetVisible(false);
             }
+
+            if (Mode != DroneCamMode.Disabled)
+                PollTargetSleepState();
+
+        }
+
+        private bool _targetWasSleeping = false;
+
+        private void PollTargetSleepState()
+        {
+            if (_anchor == null || _anchor.Type != TargetType.Player) return;
+            if (_anchor.Transform == null) return;
+
+            Player p = _anchor.Transform.GetComponent<Player>();
+            if (p == null) return;
+
+            // Read sleep state directly from ZDO rather than relying on SetSleeping patch
+            bool isSleeping = p.m_nview?.GetZDO()?.GetBool(ZDOVars.s_inBed) ?? false;
+
+            if (isSleeping && !_targetWasSleeping)
+            {
+                _targetWasSleeping = true;
+                OnPlayerSleep();
+            }
+            else if (!isSleeping && _targetWasSleeping)
+            {
+                _targetWasSleeping = false;
+                OnPlayerWake();
+            }
         }
 
         // ── mode entry / exit ─────────────────────────────────────────────────
@@ -287,19 +316,38 @@ namespace DroneCam
 
             Notify("Disabled - normal camera restored.");
         }
+        
+        private GameObject _fakeAttachPoint;
 
+        private bool _broadcastRealPosition = false;
+        public bool BroadcastRealPosition => _broadcastRealPosition;
         public void OnPlayerSleep()
         {
             if (Mode == DroneCamMode.Disabled) return;
             if (_modeBeforeSleep != DroneCamMode.Disabled) return;
+
             _modeBeforeSleep = Mode;
             SetGameCameraEnabled(true);
 
             if (Player.m_localPlayer != null)
             {
+                _broadcastRealPosition = true;
+
+                _fakeAttachPoint = new GameObject("DroneCam_FakeBed");
+                _fakeAttachPoint.transform.position = Player.m_localPlayer.transform.position;
+
+                Player.m_localPlayer.AttachStart(
+                    _fakeAttachPoint.transform,
+                    null, false, true, false,
+                    "attach_bed", Vector3.zero, null);
+
                 Player.m_localPlayer.m_sleeping = true;
-                // Register as in-bed with the server so EverybodyIsTryingToSleep() passes
-                Player.m_localPlayer.m_nview.GetZDO().Set(ZDOVars.s_inBed, true);
+
+                // Force immediate ZDO flush to server so EverybodyIsTryingToSleep
+                // sees s_inBed=true on our ZDO before it checks
+                ZDO zdo = Player.m_localPlayer.m_nview.GetZDO();
+                zdo.Set(ZDOVars.s_inBed, true);
+                ZDOMan.instance.FlushClientObjects();
             }
 
             Notify("Sleeping - drone suspended.");
@@ -308,11 +356,18 @@ namespace DroneCam
         public void OnPlayerWake()
         {
             if (_modeBeforeSleep == DroneCamMode.Disabled) return;
+            _broadcastRealPosition = false;
 
             if (Player.m_localPlayer != null)
             {
+                Player.m_localPlayer.AttachStop();
                 Player.m_localPlayer.m_sleeping = false;
-                Player.m_localPlayer.m_nview.GetZDO().Set(ZDOVars.s_inBed, false);
+
+                if (_fakeAttachPoint != null)
+                {
+                    UnityEngine.Object.Destroy(_fakeAttachPoint);
+                    _fakeAttachPoint = null;
+                }
             }
 
             SetGameCameraEnabled(false);
@@ -476,7 +531,7 @@ namespace DroneCam
         private void UpdateFollow()
         {
             RefreshTarget();
-            if (_anchor == null || (!_anchor.IsValid && _anchorLastKnownPos == Vector3.zero)) return;
+            if (_anchor == null || _anchorLastKnownPos == Vector3.zero) return;
 
             Vector3 targetPos = GetTargetCenter();
             Vector3 forward = _anchor.Transform != null ? _anchor.Transform.forward : transform.forward;
@@ -522,58 +577,108 @@ namespace DroneCam
             LookSmoothAt(GetLookTarget(), lerpSpeed: 3f);
         }
 
+        private float _anchorReacquireTimer = 0f;
+        private const float ReacquireStableTime = 0.5f; // player must be present for 500ms before snap fires
+
+
         // ── target management ─────────────────────────────────────────────────
         private void RefreshTarget()
         {
-            if (_anchor == null) return;
-            if (_anchor.Type == TargetType.Position) return;
+            if (_anchor == null || _anchor.Type == TargetType.Position) return;
 
-            if (_anchor.IsValid)
+            if (_anchor.Type == TargetType.Player)
             {
-                _anchorLastPos = _anchor.GetPosition();
-                _anchorLastKnownPos = _anchorLastPos;
-                _anchorWaiting = false;
+                // Remote players may not have a Player component on this client -
+                // use ZDO as the primary source of truth for position
+                ZDO zdo = FindPlayerZdoByName(_anchor.Name);
 
-                // Only snap on large distance jump for enemy targets -
-                // player teleports are handled by Player_TeleportTo_Patch
-                if (_anchor.Type == TargetType.Enemy &&
-                    _anchorLastRelOffset != Vector3.zero &&
-                    Vector3.Distance(_anchorLastPos, _anchorLastKnownPos) > DroneCamPlugin.TeleportDetectionDistance.Value)
-                    SnapRelativeToTarget(_anchorLastPos);
+                if (zdo != null)
+                {
+                    Vector3 pos = zdo.GetPosition();
 
+                    if (_anchorLastKnownPos != Vector3.zero &&
+                        Vector3.Distance(pos, _anchorLastKnownPos) > DroneCamPlugin.TeleportDetectionDistance.Value)
+                    {
+                        DroneCamPlugin.Log.LogInfo("[DroneCam] Portal jump detected - snapping drone.");
+                        SnapDroneTo(pos + _anchorLastRelOffset);
+                    }
+
+                    // Try to get the Player component for transform/forward reference
+                    // but don't depend on it being present
+                    Player p = FindPlayerByName(_anchor.Name);
+                    _anchor.Transform = p != null ? p.transform : _anchor.Transform;
+                    _anchorLastKnownPos = pos;
+                    _anchorLastPos = pos;
+                    _anchorWaiting = false;
+                    _anchorLastRelOffset = transform.position - pos;
+                    return;
+                }
+
+                if (!_anchorWaiting)
+                {
+                    _anchorLastRelOffset = transform.position - _anchorLastKnownPos;
+                    _anchorWaiting = true;
+                    DroneCamPlugin.Log.LogInfo($"[DroneCam] Player '{_anchor.Name}' ZDO lost - waiting.");
+                }
                 return;
             }
 
-            // Anchor lost
+            // Enemy anchor
+            if (_anchor.IsValid)
+            {
+                Vector3 pos = _anchor.GetPosition();
+                if (_anchorLastPos != Vector3.zero &&
+                    Vector3.Distance(pos, _anchorLastPos) > DroneCamPlugin.TeleportDetectionDistance.Value)
+                    SnapRelativeToTarget(pos);
+
+                _anchorLastPos = pos;
+                _anchorLastKnownPos = pos;
+                _anchorLastRelOffset = transform.position - pos;
+                _anchorWaiting = false;
+                return;
+            }
+
             if (!_anchorWaiting && _anchorLastKnownPos != Vector3.zero)
             {
                 _anchorLastRelOffset = transform.position - _anchorLastKnownPos;
                 _anchorWaiting = true;
                 _anchorLastPos = Vector3.zero;
-                DroneCamPlugin.Log.LogInfo("[DroneCam] Anchor lost - waiting for return.");
+                DroneCamPlugin.Log.LogInfo("[DroneCam] Enemy anchor lost - waiting.");
             }
 
-            // Try to reacquire
-            Transform found = _anchor.Type == TargetType.Player
-                ? FindPlayerByName(_anchor.Name)?.transform
-                : FindNearestCharacter(_anchor.Name, transform.position)?.transform;
+            Character c = FindNearestCharacter(_anchor.Name, transform.position);
+            if (c == null) return;
 
-            if (found != null)
-            {
-                _anchor.Transform = found;
-                _anchorWaiting = false;
-                _anchorLastPos = Vector3.zero;
-                if (_anchor.Type == TargetType.Enemy)
-                    SnapRelativeToTarget(found.position);
-                DroneCamPlugin.Log.LogInfo("[DroneCam] Anchor reacquired.");
-            }
+            _anchor.Transform = c.transform;
+            _anchorWaiting = false;
+            _anchorLastPos = Vector3.zero;
+            SnapRelativeToTarget(c.transform.position);
+            DroneCamPlugin.Log.LogInfo("[DroneCam] Enemy anchor reacquired.");
+        }
+
+        private void SnapDroneTo(Vector3 pos)
+        {
+            transform.position = pos;
+            _dronePos = pos;
+            _smoothVelocity = Vector3.zero;
+            _smoothVelRef = Vector3.zero;
+            if (Player.m_localPlayer != null)
+                Player.m_localPlayer.m_body.position = pos;
+            DroneCamPlugin.Log.LogInfo($"[DroneCam] Drone snapped to {pos}");
         }
 
         private Vector3 GetTargetCenter()
         {
             if (_anchor == null) return transform.position;
+
+            if (_anchor.Type == TargetType.Player)
+                return _anchorLastKnownPos != Vector3.zero
+                    ? _anchorLastKnownPos
+                    : transform.position;
+
             if (_anchor.IsValid)
                 return _anchorLastKnownPos = _anchor.GetPosition();
+
             return _anchorLastKnownPos;
         }
 
@@ -611,27 +716,52 @@ namespace DroneCam
             return result;
         }
 
-        private void SnapRelativeToTarget(Vector3 targetPos)
+        public void SnapToPlayer()
         {
+            if (_anchor == null || _anchor.Type != TargetType.Player)
+            {
+                Notify("No player target set.");
+                return;
+            }
+
+            Player p = FindPlayerByName(_anchor.Name);
+            if (p == null)
+            {
+                Notify($"Player '{_anchor.Name}' not found.");
+                return;
+            }
+
+            ZDO zdo = p.m_nview?.GetZDO();
+            Vector3 playerPos = zdo != null ? zdo.GetPosition() : p.transform.position;
+
+            transform.position = playerPos + _anchorLastRelOffset;
+            _dronePos = transform.position;
             _smoothVelocity = Vector3.zero;
             _smoothVelRef = Vector3.zero;
+            _anchorLastKnownPos = playerPos;
+            _anchorLastPos = playerPos;
+
+            if (Player.m_localPlayer != null)
+                Player.m_localPlayer.m_body.position = transform.position;
+
+            Notify($"Snapped to {_anchor.Name}.");
+        }
+
+        private void SnapRelativeToTarget(Vector3 targetPos)
+        {
             _anchorLastKnownPos = targetPos;
             _anchorLastPos = targetPos;
 
             switch (Mode)
             {
                 case DroneCamMode.Follow:
-                    transform.position = targetPos + _anchorLastRelOffset;
-                    _dronePos = transform.position;
+                    SnapDroneTo(targetPos + _anchorLastRelOffset);
                     break;
-
                 case DroneCamMode.Orbit:
                     _orbitAngle = 0f;
-                    transform.position = targetPos + _anchorLastRelOffset.normalized * _orbitRadius;
+                    SnapDroneTo(targetPos + _anchorLastRelOffset.normalized * _orbitRadius);
                     break;
             }
-
-            DroneCamPlugin.Log.LogInfo("[DroneCam] Snapped to target.");
         }
 
         private void LookSmoothAt(Vector3 worldPoint, float lerpSpeed = 5f)
@@ -650,16 +780,39 @@ namespace DroneCam
             _anchorLastKnownPos = Vector3.zero;
             _anchorLastRelOffset = Vector3.zero;
             _anchorWaiting = false;
+            _anchorReacquireTimer = 0f;
             _lastLookPosition = Vector3.zero;
+            _targetWasSleeping = false;
         }
 
         // ── finders ───────────────────────────────────────────────────────────
+
+
         private static Player FindPlayerByName(string name)
         {
             if (string.IsNullOrEmpty(name)) return null;
             foreach (Player p in Player.GetAllPlayers())
-                if (string.Equals(p.GetPlayerName(), name, StringComparison.OrdinalIgnoreCase))
+            {
+                if (p == Player.m_localPlayer) continue; // drone can never target itself
+                string pName = p.GetPlayerName();
+                if (string.IsNullOrEmpty(pName) && p.m_nview != null)
+                    pName = p.m_nview.GetZDO()?.GetString(ZDOVars.s_playerName) ?? "";
+                if (string.Equals(pName, name, StringComparison.OrdinalIgnoreCase))
                     return p;
+            }
+            return null;
+        }
+
+        private static ZDO FindPlayerZdoByName(string name)
+        {
+            foreach (ZDO zdo in ZDOMan.instance.m_objectsByID.Values)
+            {
+                string zdoName = zdo.GetString(ZDOVars.s_playerName);
+                if (string.IsNullOrEmpty(zdoName)) continue;
+//                DroneCamPlugin.Log.LogInfo($"[DroneCam] FindPlayerZdoByName: checking '{zdoName}' against '{name}'");
+                if (string.Equals(zdoName, name, StringComparison.OrdinalIgnoreCase))
+                    return zdo;
+            }
             return null;
         }
 
@@ -700,10 +853,21 @@ namespace DroneCam
 
         public void SetFollow(string playerName, float distance, float heightOffset, float smoothTime)
         {
-            Player p = FindPlayerByName(playerName);
-            if (p == null) { Notify($"Player '{playerName}' not found."); return; }
+            ZDO zdo = FindPlayerZdoByName(playerName);
+            if (zdo == null) { Notify($"Player '{playerName}' not found."); return; }
+
             ResetTargetState();
-            _anchor = DroneCamTarget.ForPlayer(p);
+
+            // Try to get Player component for transform - may be null for remote players
+            Player p = FindPlayerByName(playerName);
+            _anchor = new DroneCamTarget
+            {
+                Type = TargetType.Player,
+                Name = playerName,
+                Transform = p?.transform,
+            };
+
+            _anchorLastKnownPos = zdo.GetPosition();
             _followDistance = distance;
             _followHeightOffset = new Vector3(0, heightOffset, 0);
             _followSmoothTime = smoothTime;
@@ -730,10 +894,20 @@ namespace DroneCam
 
         public void SetOrbitPlayer(string playerName, float radius, float speed, float height)
         {
-            Player p = FindPlayerByName(playerName);
-            if (p == null) { Notify($"Player '{playerName}' not found."); return; }
+            ZDO zdo = FindPlayerZdoByName(playerName);
+            if (zdo == null) { Notify($"Player '{playerName}' not found."); return; }
+
             ResetTargetState();
-            _anchor = DroneCamTarget.ForPlayer(p);
+
+            Player p = FindPlayerByName(playerName);
+            _anchor = new DroneCamTarget
+            {
+                Type = TargetType.Player,
+                Name = playerName,
+                Transform = p?.transform,
+            };
+
+            _anchorLastKnownPos = zdo.GetPosition();
             _orbitRadius = radius;
             _orbitSpeed = speed;
             _orbitHeight = height;
@@ -743,6 +917,7 @@ namespace DroneCam
             SetGameCameraEnabled(false);
             Notify($"Orbiting {playerName}");
         }
+
 
         public void SetOrbitEnemy(string enemyName, float radius, float speed, float height)
         {
@@ -776,10 +951,20 @@ namespace DroneCam
 
         public void SetSecurityPlayer(string playerName)
         {
-            Player p = FindPlayerByName(playerName);
-            if (p == null) { Notify($"Player '{playerName}' not found."); return; }
+            ZDO zdo = FindPlayerZdoByName(playerName);
+            if (zdo == null) { Notify($"Player '{playerName}' not found."); return; }
+
             ResetTargetState();
-            _anchor = DroneCamTarget.ForPlayer(p);
+
+            Player p = FindPlayerByName(playerName);
+            _anchor = new DroneCamTarget
+            {
+                Type = TargetType.Player,
+                Name = playerName,
+                Transform = p?.transform,
+            };
+
+            _anchorLastKnownPos = zdo.GetPosition();
             _securityPos = transform.position;
             Mode = DroneCamMode.Security;
             EnterDroneMode();
@@ -908,27 +1093,6 @@ namespace DroneCam
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Harmony – suspend/resume drone when local player or target sleeps/wakes
-    // ─────────────────────────────────────────────────────────────────────────
-    [HarmonyPatch(typeof(Player), "SetSleeping")]
-    public static class Player_SetSleeping_Patch
-    {
-        static void Postfix(Player __instance, bool sleep)
-        {
-            if (DroneCamController.Instance == null) return;
-
-            bool isLocal = __instance == Player.m_localPlayer;
-            bool isTarget = DroneCamController.Instance.IsTargetPlayer(__instance);
-
-            if (!isLocal && !isTarget) return;
-
-            if (sleep)
-                DroneCamController.Instance.OnPlayerSleep();
-            else
-                DroneCamController.Instance.OnPlayerWake();
-        }
-    }
 
     // ─────────────────────────────────────────────────────────────────────────
     // Harmony – intercept /dronecam and /dc commands
@@ -975,32 +1139,28 @@ namespace DroneCam
         public bool IsTargetPlayer(Player p)
         {
             if (_anchor == null || _anchor.Type != TargetType.Player) return false;
-            return _anchor.Transform == p.transform;
+            string pName = p.GetPlayerName();
+            if (string.IsNullOrEmpty(pName) && p.m_nview != null)
+                pName = p.m_nview.GetZDO()?.GetString(ZDOVars.s_playerName) ?? "";
+            return string.Equals(_anchor.Name, pName, StringComparison.OrdinalIgnoreCase);
         }
     }
 
-    [HarmonyPatch(typeof(Character), "UpdateWater")]
-    public static class Character_UpdateWater_Patch
+    // prevent water effect on both client and server
+    [HarmonyPatch(typeof(SEMan), "AddStatusEffect", typeof(int), typeof(bool), typeof(int), typeof(float))]
+    public static class SEMan_AddStatusEffect_Patch
     {
-        static bool Prefix(Character __instance)
+        static bool Prefix(SEMan __instance, int nameHash)
         {
-            if (__instance != Player.m_localPlayer) return true;
             if (DroneCamController.Instance == null) return true;
-            return DroneCamController.Instance.Mode == DroneCamMode.Disabled;
-        }
-    }
+            if (DroneCamController.Instance.Mode == DroneCamMode.Disabled) return true;
+            if (Player.m_localPlayer == null) return true;
+            if (__instance != Player.m_localPlayer.m_seman) return true;
 
-    [HarmonyPatch(typeof(Player), "TeleportTo")]
-    public static class Player_TeleportTo_Patch
-    {
-        static void Postfix(Player __instance, Vector3 pos, Quaternion rot, bool distantTeleport)
-        {
-            if (DroneCamController.Instance == null) return;
-            if (DroneCamController.Instance.Mode == DroneCamMode.Disabled) return;
-            if (__instance == Player.m_localPlayer) return;
-            if (!DroneCamController.Instance.IsTargetPlayer(__instance)) return;
+            if (nameHash == SEMan.s_statusEffectWet || nameHash == SEMan.s_statusEffectTared)
+                return false;
 
-            Player.m_localPlayer?.TeleportTo(pos, rot, distantTeleport);
+            return true;
         }
     }
 
@@ -1029,6 +1189,7 @@ namespace DroneCam
             "  /dc te <name> - target named enemy for look-at\n" +
             "  /dc te c - clear enemy look-at target\n" +
             "  /dc hud - toggle HUD visibility\n" +
+            "  /dc snap - snap drone to current player position\n" +
             "Player names with spaces must be quoted: /dc f p \"Big Viking\"\n" +
             "Wheel: dist/radius  Alt+wheel: height  Ctrl+wheel: orbit speed\n" +
             ". / , keys cycle next/prev player target  F8 toggle";
@@ -1049,6 +1210,8 @@ namespace DroneCam
             { "security",    HandleSecurity }, { "s",  HandleSecurity },
             { "targetenemy", HandleTargetEnemy }, { "te", HandleTargetEnemy },
             { "hud", t => Ctrl.ToggleHud() },
+            { "snap", t => Ctrl.SnapToPlayer() },
+
 
         };
 

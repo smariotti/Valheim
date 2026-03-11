@@ -27,6 +27,36 @@ Wheel: dist/radius  Alt+wheel: height  Ctrl+wheel: orbit speed
 . / , keys cycle next/prev player target  F8 toggle
 ```
 
+v0.1.18
+ - ZDO based player name lookup everywhere
+
+v0.1.17
+ - added `/snap` command to snap drone to player position and rotation, useful for teleporting to player position without having to wait for the drone to catch up
+ - refactored code to use the same function for snapping to player position on teleport and for the new snap command
+
+v0.1.16
+ - use ZDO to look up players, and get player position
+
+v0.1.15
+ - added grace period for reacquiring player target after teleporting to prevent rapid reacquisition if player is still in the process of teleporting/loading in
+
+v0.1.14
+ - use the body position to determine player teleport and not the position on the player's transform?
+
+v0.1.13
+ - remove SetSleeping patch and simply poll for sleep state
+ - Don't use drone TeleportTo() and simply snap the drone to the player's new position, moving the drone's rigid body so zone loading occurs
+
+v0.1.12
+ - wait for player to fully reappear after teleporting before trying to reacquire target
+ - push sleep state for all players to server after setting it for drone so server has current data before checking for all sleepers
+
+v0.1.11
+ - when switching from player or enemy targeting to position targeting, use the last position it was looking at. Should make setting up orbits easier.
+ - hide wet effect on drone for both client and server when drone passes though water
+ - use a fake bed when trying to get drone to sleep
+ - scan for player every tick rather than caching its target point to make it possible to reacquire after going through portal
+
 v0.1.10
  - another attempt at sleeping when player sleeps
  - don't get the drone wet when passing through water

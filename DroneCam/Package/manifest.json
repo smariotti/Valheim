@@ -1,7 +1,7 @@
 ﻿{
     "name": "KillCam",
     "description": "Picture in Picture of arrow/spear flight during gameplay",
-    "version_number": "0.1.10",
+    "version_number": "0.1.18",
     "website_url": "https://github.com/smariotti/",
     "dependencies": [
         "denikson-BepInExPack_Valheim-5.4.2202"
