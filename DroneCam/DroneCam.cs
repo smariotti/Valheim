@@ -18,7 +18,7 @@ namespace DroneCam
     {
         public const string PluginGUID = "com.oathorse.dronecam";
         public const string PluginName = "DroneCam";
-        public const string PluginVersion = "0.1.18";
+        public const string PluginVersion = "0.1.19";
 
         internal static ManualLogSource Log;
 
@@ -450,17 +450,14 @@ namespace DroneCam
             if (ZInput.GetButtonDown(Btn.PrevPlayer)) dir = -1;
             if (dir == 0) return;
 
-            List<Player> players = Player.GetAllPlayers()
-                .Where(p => p != Player.m_localPlayer)
-                .ToList();
+            List<string> names = GetPlayerNames().ToList();
+            if (names.Count < 1) return;
 
-            if (players.Count < 1) return;
+            int current = names.FindIndex(n =>
+                string.Equals(n, _anchor.Name, StringComparison.OrdinalIgnoreCase));
 
-            int current = players.FindIndex(p =>
-                string.Equals(p.GetPlayerName(), _anchor.Name, StringComparison.OrdinalIgnoreCase));
-
-            int next = current < 0 ? 0 : (current + dir + players.Count) % players.Count;
-            string nextName = players[next].GetPlayerName();
+            int next = current < 0 ? 0 : (current + dir + names.Count) % names.Count;
+            string nextName = names[next];
 
             switch (Mode)
             {
@@ -588,8 +585,6 @@ namespace DroneCam
 
             if (_anchor.Type == TargetType.Player)
             {
-                // Remote players may not have a Player component on this client -
-                // use ZDO as the primary source of truth for position
                 ZDO zdo = FindPlayerZdoByName(_anchor.Name);
 
                 if (zdo != null)
@@ -603,10 +598,9 @@ namespace DroneCam
                         SnapDroneTo(pos + _anchorLastRelOffset);
                     }
 
-                    // Try to get the Player component for transform/forward reference
-                    // but don't depend on it being present
-                    Player p = FindPlayerByName(_anchor.Name);
-                    _anchor.Transform = p != null ? p.transform : _anchor.Transform;
+                    Player p = FindPlayerByZdo(zdo);
+                    if (p != null) _anchor.Transform = p.transform;
+
                     _anchorLastKnownPos = pos;
                     _anchorLastPos = pos;
                     _anchorWaiting = false;
@@ -627,6 +621,7 @@ namespace DroneCam
             if (_anchor.IsValid)
             {
                 Vector3 pos = _anchor.GetPosition();
+
                 if (_anchorLastPos != Vector3.zero &&
                     Vector3.Distance(pos, _anchorLastPos) > DroneCamPlugin.TeleportDetectionDistance.Value)
                     SnapRelativeToTarget(pos);
@@ -724,28 +719,20 @@ namespace DroneCam
                 return;
             }
 
-            Player p = FindPlayerByName(_anchor.Name);
-            if (p == null)
+            ZDO zdo = FindPlayerZdoByName(_anchor.Name);
+            if (zdo == null)
             {
                 Notify($"Player '{_anchor.Name}' not found.");
                 return;
             }
 
-            ZDO zdo = p.m_nview?.GetZDO();
-            Vector3 playerPos = zdo != null ? zdo.GetPosition() : p.transform.position;
-
-            transform.position = playerPos + _anchorLastRelOffset;
-            _dronePos = transform.position;
-            _smoothVelocity = Vector3.zero;
-            _smoothVelRef = Vector3.zero;
+            Vector3 playerPos = zdo.GetPosition();
+            SnapDroneTo(playerPos + _anchorLastRelOffset);
             _anchorLastKnownPos = playerPos;
             _anchorLastPos = playerPos;
-
-            if (Player.m_localPlayer != null)
-                Player.m_localPlayer.m_body.position = transform.position;
-
             Notify($"Snapped to {_anchor.Name}.");
         }
+
 
         private void SnapRelativeToTarget(Vector3 targetPos)
         {
@@ -787,35 +774,43 @@ namespace DroneCam
 
         // ── finders ───────────────────────────────────────────────────────────
 
-
-        private static Player FindPlayerByName(string name)
+        private static ZNetPeer FindPeerByName(string name)
         {
             if (string.IsNullOrEmpty(name)) return null;
-
-            foreach (Player p in Player.GetAllPlayers())
-            {
-                if (p == Player.m_localPlayer) continue; // drone can never target itself
-                string pName = p.GetPlayerName();
-                if (string.IsNullOrEmpty(pName) && p.m_nview != null)
-                    pName = p.m_nview.GetZDO()?.GetString(ZDOVars.s_playerName) ?? "";
-                if (string.Equals(pName, name, StringComparison.OrdinalIgnoreCase))
-                    return p;
-            }
+            foreach (ZNetPeer peer in ZNet.instance.GetPeers())
+                if (string.Equals(peer.m_playerName, name, StringComparison.OrdinalIgnoreCase))
+                    return peer;
             return null;
         }
 
         private static ZDO FindPlayerZdoByName(string name)
         {
-            foreach (ZDO zdo in ZDOMan.instance.m_objectsByID.Values)
-            {
-                string zdoName = zdo.GetString(ZDOVars.s_playerName);
-                if (string.IsNullOrEmpty(zdoName)) continue;
-//                DroneCamPlugin.Log.LogInfo($"[DroneCam] FindPlayerZdoByName: checking '{zdoName}' against '{name}'");
-                if (string.Equals(zdoName, name, StringComparison.OrdinalIgnoreCase))
-                    return zdo;
-            }
+            ZNetPeer peer = FindPeerByName(name);
+            if (peer == null) return null;
+            return ZDOMan.instance.GetZDO(peer.m_characterID);
+        }
+
+        private static Player FindPlayerByZdo(ZDO zdo)
+        {
+            if (zdo == null) return null;
+            foreach (Player p in Player.GetAllPlayers())
+                if (p.m_nview != null && p.m_nview.GetZDO() == zdo)
+                    return p;
             return null;
         }
+
+        private static Player FindPlayerByName(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return null;
+            ZDO zdo = FindPlayerZdoByName(name);
+            if (zdo == null) return null;
+            return FindPlayerByZdo(zdo);
+        }
+
+        public static IEnumerable<string> GetPlayerNames()
+            => ZNet.instance.GetPeers()
+               .Where(p => p.IsReady() && !string.IsNullOrEmpty(p.m_playerName))
+               .Select(p => p.m_playerName);
 
         private static Character FindNearestCharacter(string name, Vector3 near)
         {
@@ -859,8 +854,7 @@ namespace DroneCam
 
             ResetTargetState();
 
-            // Try to get Player component for transform - may be null for remote players
-            Player p = FindPlayerByName(playerName);
+            Player p = FindPlayerByZdo(zdo);
             _anchor = new DroneCamTarget
             {
                 Type = TargetType.Player,
@@ -900,7 +894,7 @@ namespace DroneCam
 
             ResetTargetState();
 
-            Player p = FindPlayerByName(playerName);
+            Player p = FindPlayerByZdo(zdo);
             _anchor = new DroneCamTarget
             {
                 Type = TargetType.Player,
@@ -918,6 +912,7 @@ namespace DroneCam
             SetGameCameraEnabled(false);
             Notify($"Orbiting {playerName}");
         }
+
 
 
         public void SetOrbitEnemy(string enemyName, float radius, float speed, float height)
@@ -957,7 +952,7 @@ namespace DroneCam
 
             ResetTargetState();
 
-            Player p = FindPlayerByName(playerName);
+            Player p = FindPlayerByZdo(zdo);
             _anchor = new DroneCamTarget
             {
                 Type = TargetType.Player,
@@ -1011,9 +1006,6 @@ namespace DroneCam
             _lookTarget = null;
             Notify("Enemy target cleared.");
         }
-
-        public static IEnumerable<string> GetPlayerNames()
-            => Player.GetAllPlayers().Select(p => p.GetPlayerName());
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1139,11 +1131,14 @@ namespace DroneCam
         public bool IsTargetPlayer(Player p)
         {
             if (_anchor == null || _anchor.Type != TargetType.Player) return false;
-            string pName = p.GetPlayerName();
-            if (string.IsNullOrEmpty(pName) && p.m_nview != null)
-                pName = p.m_nview.GetZDO()?.GetString(ZDOVars.s_playerName) ?? "";
-            return string.Equals(_anchor.Name, pName, StringComparison.OrdinalIgnoreCase);
+            if (p == null) return false;
+            ZDO zdo = p.m_nview?.GetZDO();
+            if (zdo == null) return false;
+            ZNetPeer peer = FindPeerByName(_anchor.Name);
+            if (peer == null) return false;
+            return zdo.m_uid == peer.m_characterID;
         }
+
     }
 
     // prevent water effect on both client and server

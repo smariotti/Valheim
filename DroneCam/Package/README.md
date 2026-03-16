@@ -27,6 +27,10 @@ Wheel: dist/radius  Alt+wheel: height  Ctrl+wheel: orbit speed
 . / , keys cycle next/prev player target  F8 toggle
 ```
 
+
+v0.1.19
+ - Use ZNetPeer to get list of players in game (on server)
+
 v0.1.18
  - ZDO based player name lookup everywhere
 

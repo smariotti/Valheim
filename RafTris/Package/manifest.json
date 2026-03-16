@@ -1,0 +1,9 @@
+{
+  "name": "RafTris",
+  "version_number": "1.0.0",
+  "website_url": "",
+  "description": "Play Tetris on your raft! Biome-themed levels cycle through Meadows, Black Forest, Swamp, Mountains, Plains, Mistlands, Ashlands and Deep North — each using enemy and boss trophy icons as block art. Fully playable with keyboard or mouse. Press F7 to open anytime.",
+  "dependencies": [
+    "denikson-BepInExPack_Valheim-5.4.2202"
+  ]
+}
