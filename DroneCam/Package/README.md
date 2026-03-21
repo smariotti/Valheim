@@ -1,4 +1,4 @@
-# Dronecam
+# XDC - Xpert's Drone Cam
 
 Mod to implement a drone for a Valehim world.
 
@@ -27,6 +27,12 @@ Wheel: dist/radius  Alt+wheel: height  Ctrl+wheel: orbit speed
 . / , keys cycle next/prev player target  F8 toggle
 ```
 
+v0.1.21
+ - Fix Console argument parsing bug
+
+v0.1.20
+ - Added vertical offset for focal point, adjustable with scroll wheel while holding control
+ - Allow console commands to be entered via the dev console as well as the chat console
 
 v0.1.19
  - Use ZNetPeer to get list of players in game (on server)

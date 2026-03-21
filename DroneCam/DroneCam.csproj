@@ -7,8 +7,8 @@
     <ProjectGuid>{256D4813-A4F8-4D2B-9FB2-4C0A0662B80E}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>DroneCam</RootNamespace>
-    <AssemblyName>DroneCam</AssemblyName>
+    <RootNamespace>XpertsDroneCam</RootNamespace>
+    <AssemblyName>XpertsDroneCam</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>

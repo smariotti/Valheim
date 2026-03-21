@@ -2,23 +2,23 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using System.Text;
 using System.Text.RegularExpressions;
 using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
 using UnityEngine;
- 
+using static Terminal;
+
 namespace DroneCam
 {
     [BepInPlugin(PluginGUID, PluginName, PluginVersion)]
     [BepInProcess("valheim.exe")]
     public class DroneCamPlugin : BaseUnityPlugin
     {
-        public const string PluginGUID = "com.oathorse.dronecam";
-        public const string PluginName = "DroneCam";
-        public const string PluginVersion = "0.1.19";
+        public const string PluginGUID = "com.oathorse.xdc";
+        public const string PluginName = "Xpert's Drone Cam";
+        public const string PluginVersion = "0.1.21";
 
         internal static ManualLogSource Log;
 
@@ -42,8 +42,18 @@ namespace DroneCam
             TeleportDetectionDistance = Config.Bind("Camera", "TeleportDetectionDistance", 50f, "Distance delta in one frame that triggers a drone snap on target teleport.");
             ScrollSensitivity = Config.Bind("Camera", "ScrollSensitivity", 0.5f, "Mouse wheel sensitivity for distance/radius adjustment.");
 
+            RegisterConsoleCommands();
             _harmony.PatchAll();
-            Log.LogInfo($"{PluginName} {PluginVersion} loaded. Type /dc help in chat.");
+            Log.LogInfo($"{PluginName} {PluginVersion} loaded. Console: 'dc help'  Chat: '/dc help'");
+        }
+
+        private static void RegisterConsoleCommands()
+        {
+            new ConsoleCommand("dc", "[subcommand] DroneCam control. Type 'dc help' for usage.",
+                args => DroneCamCommands.Handle(
+                    args.Args.Skip(1)
+                             .Where(s => !string.IsNullOrEmpty(s))
+                             .ToArray()));
         }
 
         private void OnDestroy() => _harmony.UnpatchSelf();
@@ -73,9 +83,6 @@ namespace DroneCam
             if (Transform != null) return Transform.position;
             return Vector3.zero;
         }
-
-        public static DroneCamTarget ForPlayer(Player p)
-            => new DroneCamTarget { Type = TargetType.Player, Name = p.GetPlayerName(), Transform = p.transform };
 
         public static DroneCamTarget ForEnemy(Character c)
             => new DroneCamTarget { Type = TargetType.Enemy, Name = c.m_name, Transform = c.transform };
@@ -155,21 +162,23 @@ namespace DroneCam
     // ─────────────────────────────────────────────────────────────────────────
     // Core controller
     // ─────────────────────────────────────────────────────────────────────────
-    public partial class DroneCamController : MonoBehaviour
+    public class DroneCamController : MonoBehaviour
     {
         public static DroneCamController Instance { get; private set; }
 
         public DroneCamMode Mode { get; private set; } = DroneCamMode.Disabled;
 
         // ── unified target state ──────────────────────────────────────────────
-        private DroneCamTarget _anchor;       // what the camera moves relative to
-        private DroneCamTarget _lookTarget;   // what the camera points at (null = use anchor)
+        private DroneCamTarget _anchor;      // what the camera moves relative to
+        private DroneCamTarget _lookTarget;  // what the camera points at (null = use anchor)
 
         // anchor tracking
         private Vector3 _anchorLastPos = Vector3.zero;
         private Vector3 _anchorLastKnownPos = Vector3.zero;
         private Vector3 _anchorLastRelOffset = Vector3.zero;
         private bool _anchorWaiting = false;
+
+        // last resolved look position - used by orbit pos, security pos
         private Vector3 _lastLookPosition = Vector3.zero;
 
         // ── follow params ─────────────────────────────────────────────────────
@@ -183,6 +192,8 @@ namespace DroneCam
         private float _orbitHeight = 4f;
         private float _orbitAngle = 0f;
 
+        private float _focalOffsetY = 0f;
+
         // ── security ──────────────────────────────────────────────────────────
         private Vector3 _securityPos;
 
@@ -194,22 +205,29 @@ namespace DroneCam
 
         // ── sleep state ───────────────────────────────────────────────────────
         private DroneCamMode _modeBeforeSleep = DroneCamMode.Disabled;
+        private GameObject _fakeAttachPoint;
+        private bool _broadcastRealPosition = false;
+        public bool BroadcastRealPosition => _broadcastRealPosition;
+
+        // ── sleep poll ────────────────────────────────────────────────────────
+        private bool _targetWasSleeping = false;
+
+        // ── hud state ─────────────────────────────────────────────────────────
+        private bool _hudHidden = false;
+        public bool HudHidden => _hudHidden;
+
+        // ── streaming ─────────────────────────────────────────────────────────
+        private Camera _streamCamera;
+        private RenderTexture _streamTexture;
+        private Component _spoutSender;
+        private bool _streamActive = false;
+        private int _streamWidth = 1920;
+        private int _streamHeight = 1080;
 
         // ── refs ──────────────────────────────────────────────────────────────
         private GameCamera _gameCamera;
 
         // ─────────────────────────────────────────────────────────────────────
-
-        private bool _hudHidden = false;
-        public bool HudHidden => _hudHidden;
-
-        public void ToggleHud()
-        {
-            _hudHidden = !_hudHidden;
-            Hud.instance?.gameObject.SetActive(!_hudHidden);
-            Notify(_hudHidden ? "HUD hidden." : "HUD visible.");
-        }
-
         private void Awake()
         {
             Instance = this;
@@ -222,10 +240,8 @@ namespace DroneCam
 
             if (ZInput.GetButtonDown(Btn.Toggle))
             {
-                if (Mode == DroneCamMode.Disabled)
-                    EnterFreeSetup();
-                else
-                    ExitDroneCam();
+                if (Mode == DroneCamMode.Disabled) EnterFreeSetup();
+                else ExitDroneCam();
                 return;
             }
 
@@ -241,6 +257,7 @@ namespace DroneCam
             {
                 HandleScrollWheel();
                 HandlePlayerCycle();
+                PollTargetSleepState();
             }
 
             if (Mode != DroneCamMode.Disabled &&
@@ -251,35 +268,21 @@ namespace DroneCam
                 Player.m_localPlayer.m_body.position = transform.position;
                 Player.m_localPlayer.SetVisible(false);
             }
-
-            if (Mode != DroneCamMode.Disabled)
-                PollTargetSleepState();
-
         }
 
-        private bool _targetWasSleeping = false;
-
-        private void PollTargetSleepState()
+        private void LateUpdate()
         {
-            if (_anchor == null || _anchor.Type != TargetType.Player) return;
-            if (_anchor.Transform == null) return;
+            if (!_streamActive || _streamCamera == null) return;
+            if (Mode == DroneCamMode.Disabled) return;
 
-            Player p = _anchor.Transform.GetComponent<Player>();
-            if (p == null) return;
+            _streamCamera.transform.position = transform.position;
+            _streamCamera.transform.rotation = transform.rotation;
 
-            // Read sleep state directly from ZDO rather than relying on SetSleeping patch
-            bool isSleeping = p.m_nview?.GetZDO()?.GetBool(ZDOVars.s_inBed) ?? false;
+            Camera gameCam = _gameCamera?.GetComponent<Camera>();
+            if (gameCam != null)
+                _streamCamera.fieldOfView = gameCam.fieldOfView;
 
-            if (isSleeping && !_targetWasSleeping)
-            {
-                _targetWasSleeping = true;
-                OnPlayerSleep();
-            }
-            else if (!isSleeping && _targetWasSleeping)
-            {
-                _targetWasSleeping = false;
-                OnPlayerWake();
-            }
+            _streamCamera.Render();
         }
 
         // ── mode entry / exit ─────────────────────────────────────────────────
@@ -296,10 +299,12 @@ namespace DroneCam
 
         public void ExitDroneCam()
         {
+            if (_streamActive)
+                TeardownStreamCamera();
+
             Mode = DroneCamMode.Disabled;
             SetGameCameraEnabled(true);
 
-            // Restore HUD if it was hidden
             if (_hudHidden)
             {
                 _hudHidden = false;
@@ -310,22 +315,24 @@ namespace DroneCam
             {
                 Vector3 groundPos = FindGroundPosition(transform.position);
                 Player.m_localPlayer.m_body.position = groundPos;
-                Player.m_localPlayer.m_body.linearVelocity = Vector3.zero;
+                Player.m_localPlayer.m_body.velocity = Vector3.zero;
                 Player.m_localPlayer.SetVisible(true);
             }
 
             Notify("Disabled - normal camera restored.");
         }
-        
-        private GameObject _fakeAttachPoint;
 
-        private bool _broadcastRealPosition = false;
-        public bool BroadcastRealPosition => _broadcastRealPosition;
+        public void ToggleHud()
+        {
+            _hudHidden = !_hudHidden;
+            Hud.instance?.gameObject.SetActive(!_hudHidden);
+            Notify(_hudHidden ? "HUD hidden." : "HUD visible.");
+        }
+
         public void OnPlayerSleep()
         {
             if (Mode == DroneCamMode.Disabled) return;
             if (_modeBeforeSleep != DroneCamMode.Disabled) return;
-
             _modeBeforeSleep = Mode;
             SetGameCameraEnabled(true);
 
@@ -343,8 +350,6 @@ namespace DroneCam
 
                 Player.m_localPlayer.m_sleeping = true;
 
-                // Force immediate ZDO flush to server so EverybodyIsTryingToSleep
-                // sees s_inBed=true on our ZDO before it checks
                 ZDO zdo = Player.m_localPlayer.m_nview.GetZDO();
                 zdo.Set(ZDOVars.s_inBed, true);
                 ZDOMan.instance.FlushClientObjects();
@@ -365,7 +370,7 @@ namespace DroneCam
 
                 if (_fakeAttachPoint != null)
                 {
-                    UnityEngine.Object.Destroy(_fakeAttachPoint);
+                    Destroy(_fakeAttachPoint);
                     _fakeAttachPoint = null;
                 }
             }
@@ -374,6 +379,29 @@ namespace DroneCam
             Mode = _modeBeforeSleep;
             _modeBeforeSleep = DroneCamMode.Disabled;
             Notify("Awake - drone resumed.");
+        }
+
+        // Poll target player's ZDO sleep state - more reliable than patching
+        // SetSleeping which may not fire on the drone client for remote players
+        private void PollTargetSleepState()
+        {
+            if (_anchor == null || _anchor.Type != TargetType.Player) return;
+
+            ZDO zdo = FindPlayerZdoByName(_anchor.Name);
+            if (zdo == null) return;
+
+            bool isSleeping = zdo.GetBool(ZDOVars.s_inBed);
+
+            if (isSleeping && !_targetWasSleeping)
+            {
+                _targetWasSleeping = true;
+                OnPlayerSleep();
+            }
+            else if (!isSleeping && _targetWasSleeping)
+            {
+                _targetWasSleeping = false;
+                OnPlayerWake();
+            }
         }
 
         private void EnterDroneMode()
@@ -396,10 +424,8 @@ namespace DroneCam
         {
             if (Physics.Raycast(from, Vector3.down, out RaycastHit hit, 2000f, ZoneSystem.instance.m_solidRayMask))
                 return hit.point + Vector3.up * 0.5f;
-
             if (Physics.Raycast(from + Vector3.up * 500f, Vector3.down, out hit, 2000f, ZoneSystem.instance.m_solidRayMask))
                 return hit.point + Vector3.up * 0.5f;
-
             return from;
         }
 
@@ -413,8 +439,23 @@ namespace DroneCam
             if (ZInput.GetButton(Btn.WheelDown)) delta += DroneCamPlugin.ScrollSensitivity.Value;
             if (Mathf.Approximately(delta, 0f)) return;
 
-            bool modHeight = ZInput.GetButton(Btn.ModHeight);
-            bool modSpeed = ZInput.GetButton(Btn.ModSpeed);
+            bool modHeight = ZInput.GetButton(Btn.ModHeight); // alt
+            bool modSpeed = ZInput.GetButton(Btn.ModSpeed);  // ctrl
+
+            // alt+ctrl+wheel: orbit speed (all modes)
+            if (modHeight && modSpeed)
+            {
+                if (Mode == DroneCamMode.Orbit)
+                    _orbitSpeed = Mathf.Max(1f, _orbitSpeed + delta * 10f);
+                return;
+            }
+
+            // ctrl+wheel: slide focal point up/down (follow, orbit, security)
+            if (modSpeed)
+            {
+                _focalOffsetY += delta;
+                return;
+            }
 
             switch (Mode)
             {
@@ -429,7 +470,6 @@ namespace DroneCam
 
                 case DroneCamMode.Orbit:
                     if (modHeight) _orbitHeight = Mathf.Max(0f, _orbitHeight + delta);
-                    else if (modSpeed) _orbitSpeed = Mathf.Max(1f, _orbitSpeed + delta * 10f);
                     else _orbitRadius = Mathf.Max(1f, _orbitRadius + delta);
                     break;
 
@@ -472,9 +512,7 @@ namespace DroneCam
         {
             if (Chat.instance != null && Chat.instance.HasFocus()) return;
 
-            float speed = ZInput.GetButton(Btn.Fast)
-                           ? DroneCamPlugin.FlySpeedFast.Value
-                           : DroneCamPlugin.FlySpeed.Value;
+            float speed = ZInput.GetButton(Btn.Fast) ? DroneCamPlugin.FlySpeedFast.Value : DroneCamPlugin.FlySpeed.Value;
             float rotSpd = DroneCamPlugin.RotationSpeed.Value;
             float smooth = DroneCamPlugin.SmoothTime.Value;
 
@@ -493,12 +531,10 @@ namespace DroneCam
             if (ZInput.GetButton(Btn.MouseLook))
             {
                 Vector2 delta = ZInput.GetMouseDelta();
-                float yaw = delta.x * rotSpd * Time.deltaTime;
-                float pitch = -delta.y * rotSpd * Time.deltaTime;
                 Vector3 e = _droneRot.eulerAngles;
-                _droneRot = Quaternion.Euler(e.x + pitch, e.y + yaw, 0f);
+                _droneRot = Quaternion.Euler(e.x + -delta.y * rotSpd * Time.deltaTime,
+                                                 e.y + delta.x * rotSpd * Time.deltaTime, 0f);
             }
-
             if (ZInput.GetButton(Btn.YawLeft))
             {
                 Vector3 e = _droneRot.eulerAngles;
@@ -546,7 +582,7 @@ namespace DroneCam
             if (_anchor != null && _anchor.Type != TargetType.Position)
             {
                 RefreshTarget();
-                if (_anchor == null || (!_anchor.IsValid && _anchorLastKnownPos == Vector3.zero)) return;
+                if (_anchor == null || _anchorLastKnownPos == Vector3.zero) return;
             }
 
             Vector3 center = GetTargetCenter();
@@ -574,10 +610,6 @@ namespace DroneCam
             LookSmoothAt(GetLookTarget(), lerpSpeed: 3f);
         }
 
-        private float _anchorReacquireTimer = 0f;
-        private const float ReacquireStableTime = 0.5f; // player must be present for 500ms before snap fires
-
-
         // ── target management ─────────────────────────────────────────────────
         private void RefreshTarget()
         {
@@ -598,6 +630,7 @@ namespace DroneCam
                         SnapDroneTo(pos + _anchorLastRelOffset);
                     }
 
+                    // Upgrade to Player Transform for orientation if instantiated nearby
                     Player p = FindPlayerByZdo(zdo);
                     if (p != null) _anchor.Transform = p.transform;
 
@@ -651,6 +684,49 @@ namespace DroneCam
             DroneCamPlugin.Log.LogInfo("[DroneCam] Enemy anchor reacquired.");
         }
 
+        private Vector3 GetTargetCenter()
+        {
+            if (_anchor == null) return transform.position;
+
+            Vector3 base_;
+
+            if (_anchor.Type == TargetType.Player)
+                base_ = _anchorLastKnownPos != Vector3.zero ? _anchorLastKnownPos : transform.position;
+            else if (_anchor.IsValid)
+                base_ = _anchorLastKnownPos = _anchor.GetPosition();
+            else
+                base_ = _anchorLastKnownPos;
+
+            return base_ + Vector3.up * _focalOffsetY;
+        }
+
+        private Vector3 GetLookTarget()
+        {
+            if (_lookTarget != null)
+            {
+                if (_lookTarget.Type == TargetType.Enemy && !_lookTarget.IsValid)
+                {
+                    Character c = FindNearestCharacter(_lookTarget.Name, transform.position);
+                    if (c != null && !c.IsDead())
+                        _lookTarget.Transform = c.transform;
+                    else
+                    {
+                        Notify("Enemy target died - returning to anchor target.");
+                        _lookTarget = null;
+                    }
+                }
+
+                if (_lookTarget != null)
+                {
+                    _lastLookPosition = _lookTarget.GetPosition() + Vector3.up * 1.5f;
+                    return _lastLookPosition;
+                }
+            }
+
+            _lastLookPosition = GetTargetCenter() + Vector3.up * 1.5f;
+            return _lastLookPosition;
+        }
+
         private void SnapDroneTo(Vector3 pos)
         {
             transform.position = pos;
@@ -661,78 +737,6 @@ namespace DroneCam
                 Player.m_localPlayer.m_body.position = pos;
             DroneCamPlugin.Log.LogInfo($"[DroneCam] Drone snapped to {pos}");
         }
-
-        private Vector3 GetTargetCenter()
-        {
-            if (_anchor == null) return transform.position;
-
-            if (_anchor.Type == TargetType.Player)
-                return _anchorLastKnownPos != Vector3.zero
-                    ? _anchorLastKnownPos
-                    : transform.position;
-
-            if (_anchor.IsValid)
-                return _anchorLastKnownPos = _anchor.GetPosition();
-
-            return _anchorLastKnownPos;
-        }
-
-        private Vector3 GetLookTarget()
-        {
-            Vector3 result;
-
-            if (_lookTarget != null)
-            {
-                if (_lookTarget.Type == TargetType.Enemy)
-                {
-                    if (!_lookTarget.IsValid)
-                    {
-                        Character c = FindNearestCharacter(_lookTarget.Name, transform.position);
-                        if (c != null && !c.IsDead())
-                            _lookTarget.Transform = c.transform;
-                        else
-                        {
-                            Notify("Enemy target died - returning to anchor target.");
-                            _lookTarget = null;
-                        }
-                    }
-                }
-
-                if (_lookTarget != null)
-                {
-                    result = _lookTarget.GetPosition() + Vector3.up * 1.5f;
-                    _lastLookPosition = result;
-                    return result;
-                }
-            }
-
-            result = GetTargetCenter() + Vector3.up * 1.5f;
-            _lastLookPosition = result;
-            return result;
-        }
-
-        public void SnapToPlayer()
-        {
-            if (_anchor == null || _anchor.Type != TargetType.Player)
-            {
-                Notify("No player target set.");
-                return;
-            }
-
-            ZDO zdo = FindPlayerZdoByName(_anchor.Name);
-            if (zdo == null)
-            {
-                Notify($"Player '{_anchor.Name}' not found.");
-                return;
-            }
-
-            Vector3 playerPos = zdo.GetPosition();
-            SnapDroneTo(playerPos + _anchorLastRelOffset);
-            _anchorLastKnownPos = playerPos;
-            _anchorLastPos = playerPos;
-            Notify($"Snapped to {_anchor.Name}.");
-        }
-
 
         private void SnapRelativeToTarget(Vector3 targetPos)
         {
@@ -767,13 +771,12 @@ namespace DroneCam
             _anchorLastKnownPos = Vector3.zero;
             _anchorLastRelOffset = Vector3.zero;
             _anchorWaiting = false;
-            _anchorReacquireTimer = 0f;
             _lastLookPosition = Vector3.zero;
             _targetWasSleeping = false;
+            _focalOffsetY = 0f;
         }
 
         // ── finders ───────────────────────────────────────────────────────────
-
         private static ZNetPeer FindPeerByName(string name)
         {
             if (string.IsNullOrEmpty(name)) return null;
@@ -799,19 +802,6 @@ namespace DroneCam
             return null;
         }
 
-        private static Player FindPlayerByName(string name)
-        {
-            if (string.IsNullOrEmpty(name)) return null;
-            ZDO zdo = FindPlayerZdoByName(name);
-            if (zdo == null) return null;
-            return FindPlayerByZdo(zdo);
-        }
-
-        public static IEnumerable<string> GetPlayerNames()
-            => ZNet.instance.GetPeers()
-               .Where(p => p.IsReady() && !string.IsNullOrEmpty(p.m_playerName))
-               .Select(p => p.m_playerName);
-
         private static Character FindNearestCharacter(string name, Vector3 near)
         {
             Character nearest = null;
@@ -832,15 +822,10 @@ namespace DroneCam
             return nearest;
         }
 
-        // ── look-at position for pos commands ─────────────────────────────────
         public Vector3 GetLookAtPosition()
-        {
-            if (_lastLookPosition != Vector3.zero)
-                return _lastLookPosition;
-
-            // Fallback - project forward from camera if no look history yet
-            return transform.position + transform.forward * _followDistance;
-        }
+            => _lastLookPosition != Vector3.zero
+                ? _lastLookPosition
+                : transform.position + transform.forward * _followDistance;
 
         private static void Notify(string msg)
             => Chat.instance?.AddString($"[DroneCam] {msg}");
@@ -851,17 +836,9 @@ namespace DroneCam
         {
             ZDO zdo = FindPlayerZdoByName(playerName);
             if (zdo == null) { Notify($"Player '{playerName}' not found."); return; }
-
             ResetTargetState();
-
             Player p = FindPlayerByZdo(zdo);
-            _anchor = new DroneCamTarget
-            {
-                Type = TargetType.Player,
-                Name = playerName,
-                Transform = p?.transform,
-            };
-
+            _anchor = new DroneCamTarget { Type = TargetType.Player, Name = playerName, Transform = p?.transform };
             _anchorLastKnownPos = zdo.GetPosition();
             _followDistance = distance;
             _followHeightOffset = new Vector3(0, heightOffset, 0);
@@ -891,17 +868,9 @@ namespace DroneCam
         {
             ZDO zdo = FindPlayerZdoByName(playerName);
             if (zdo == null) { Notify($"Player '{playerName}' not found."); return; }
-
             ResetTargetState();
-
             Player p = FindPlayerByZdo(zdo);
-            _anchor = new DroneCamTarget
-            {
-                Type = TargetType.Player,
-                Name = playerName,
-                Transform = p?.transform,
-            };
-
+            _anchor = new DroneCamTarget { Type = TargetType.Player, Name = playerName, Transform = p?.transform };
             _anchorLastKnownPos = zdo.GetPosition();
             _orbitRadius = radius;
             _orbitSpeed = speed;
@@ -912,8 +881,6 @@ namespace DroneCam
             SetGameCameraEnabled(false);
             Notify($"Orbiting {playerName}");
         }
-
-
 
         public void SetOrbitEnemy(string enemyName, float radius, float speed, float height)
         {
@@ -949,17 +916,9 @@ namespace DroneCam
         {
             ZDO zdo = FindPlayerZdoByName(playerName);
             if (zdo == null) { Notify($"Player '{playerName}' not found."); return; }
-
             ResetTargetState();
-
             Player p = FindPlayerByZdo(zdo);
-            _anchor = new DroneCamTarget
-            {
-                Type = TargetType.Player,
-                Name = playerName,
-                Transform = p?.transform,
-            };
-
+            _anchor = new DroneCamTarget { Type = TargetType.Player, Name = playerName, Transform = p?.transform };
             _anchorLastKnownPos = zdo.GetPosition();
             _securityPos = transform.position;
             Mode = DroneCamMode.Security;
@@ -1005,6 +964,140 @@ namespace DroneCam
         {
             _lookTarget = null;
             Notify("Enemy target cleared.");
+        }
+
+        public void SnapToPlayer()
+        {
+            if (_anchor == null || _anchor.Type != TargetType.Player)
+            {
+                Notify("No player target set.");
+                return;
+            }
+
+            ZDO zdo = FindPlayerZdoByName(_anchor.Name);
+            if (zdo == null) { Notify($"Player '{_anchor.Name}' not found."); return; }
+
+            Vector3 playerPos = zdo.GetPosition();
+            SnapDroneTo(playerPos + _anchorLastRelOffset);
+            _anchorLastKnownPos = playerPos;
+            _anchorLastPos = playerPos;
+            Notify($"Snapped to {_anchor.Name}.");
+        }
+
+        public bool IsTargetPlayer(Player p)
+        {
+            if (_anchor == null || _anchor.Type != TargetType.Player) return false;
+            if (p?.m_nview == null) return false;
+            ZNetPeer peer = FindPeerByName(_anchor.Name);
+            if (peer == null) return false;
+            return p.m_nview.GetZDO()?.m_uid == peer.m_characterID;
+        }
+
+        public static IEnumerable<string> GetPlayerNames()
+            => ZNet.instance.GetPeers()
+               .Where(p => p.IsReady() && !string.IsNullOrEmpty(p.m_playerName))
+               .Select(p => p.m_playerName);
+
+        // ── streaming ─────────────────────────────────────────────────────────
+        public void StartStream(int width, int height)
+        {
+            if (Mode == DroneCamMode.Disabled) { Notify("Enable drone cam before starting stream."); return; }
+
+            _streamWidth = width;
+            _streamHeight = height;
+
+            if (_streamCamera != null) TeardownStreamCamera();
+
+            SetupStreamCamera();
+
+            if (_spoutSender == null) { Notify("Stream setup failed - KlakSpout not found. See log."); return; }
+
+            _streamActive = true;
+            Notify($"Streaming via Spout 'DroneCam' - {width}x{height}");
+        }
+
+        public void StopStream()
+        {
+            TeardownStreamCamera();
+            Notify("Stream stopped.");
+        }
+
+        public void SetStreamResolution(int width, int height)
+        {
+            if (!_streamActive) { Notify("No active stream."); return; }
+            StartStream(width, height);
+        }
+
+        private void SetupStreamCamera()
+        {
+            if (_streamCamera != null) return;
+
+            GameObject go = new GameObject("DroneCam_StreamCamera");
+            DontDestroyOnLoad(go);
+
+            _streamCamera = go.AddComponent<Camera>();
+            _streamCamera.enabled = false;
+
+            Camera gameCam = _gameCamera?.GetComponent<Camera>();
+            if (gameCam != null)
+            {
+                _streamCamera.cullingMask = gameCam.cullingMask;
+                _streamCamera.nearClipPlane = gameCam.nearClipPlane;
+                _streamCamera.farClipPlane = gameCam.farClipPlane;
+                _streamCamera.fieldOfView = gameCam.fieldOfView;
+                _streamCamera.allowHDR = gameCam.allowHDR;
+                _streamCamera.allowMSAA = gameCam.allowMSAA;
+                _streamCamera.renderingPath = gameCam.renderingPath;
+            }
+
+            _streamTexture = new RenderTexture(_streamWidth, _streamHeight, 24, RenderTextureFormat.ARGB32);
+            _streamTexture.Create();
+            _streamCamera.targetTexture = _streamTexture;
+
+            TryAttachSpoutSender(go);
+        }
+
+        private void TryAttachSpoutSender(GameObject go)
+        {
+            try
+            {
+                Type senderType = Type.GetType("Klak.Spout.SpoutSender, Klak.Spout.Runtime");
+                if (senderType == null)
+                {
+                    DroneCamPlugin.Log.LogWarning(
+                        "[DroneCam] KlakSpout not found - streaming unavailable. " +
+                        "Place Klak.Spout.Runtime.dll and KlakSpout.dll in BepInEx/plugins/DroneCam/");
+                    return;
+                }
+
+                _spoutSender = (Component)go.AddComponent(senderType);
+
+                // Log all properties on first load so names can be verified
+                foreach (var prop in senderType.GetProperties())
+                    DroneCamPlugin.Log.LogInfo($"[DroneCam] SpoutSender.{prop.Name} ({prop.PropertyType.Name})");
+
+                senderType.GetProperty("spoutName")?.SetValue(_spoutSender, "DroneCam");
+
+                var captureTypeProp = senderType.GetProperty("captureType");
+                if (captureTypeProp != null)
+                    captureTypeProp.SetValue(_spoutSender,
+                        Enum.Parse(captureTypeProp.PropertyType, "Texture"));
+
+                senderType.GetProperty("sourceTexture")?.SetValue(_spoutSender, _streamTexture);
+
+                DroneCamPlugin.Log.LogInfo("[DroneCam] Spout sender attached.");
+            }
+            catch (Exception e)
+            {
+                DroneCamPlugin.Log.LogError($"[DroneCam] Spout sender setup failed: {e}");
+            }
+        }
+
+        private void TeardownStreamCamera()
+        {
+            if (_streamCamera != null) { Destroy(_streamCamera.gameObject); _streamCamera = null; _spoutSender = null; }
+            if (_streamTexture != null) { _streamTexture.Release(); Destroy(_streamTexture); _streamTexture = null; }
+            _streamActive = false;
         }
     }
 
@@ -1061,7 +1154,26 @@ namespace DroneCam
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Harmony – broadcast underground+offset position to other clients
+    // Harmony – block wet/tar status effects while drone cam is active
+    // ─────────────────────────────────────────────────────────────────────────
+    [HarmonyPatch(typeof(SEMan), "AddStatusEffect", typeof(int), typeof(bool), typeof(int), typeof(float))]
+    public static class SEMan_AddStatusEffect_Patch
+    {
+        static bool Prefix(SEMan __instance, int nameHash)
+        {
+            if (DroneCamController.Instance == null) return true;
+            if (DroneCamController.Instance.Mode == DroneCamMode.Disabled) return true;
+            if (Player.m_localPlayer == null) return true;
+            if (__instance != Player.m_localPlayer.m_seman) return true;
+            if (nameHash == SEMan.s_statusEffectWet || nameHash == SEMan.s_statusEffectTared)
+                return false;
+            return true;
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Harmony – broadcast offset position to other clients while drone is
+    // active. During sleep, broadcast real position so server ZDO stays loaded.
     // ─────────────────────────────────────────────────────────────────────────
     [HarmonyPatch(typeof(ZSyncTransform), "GetPosition")]
     public static class ZSyncTransform_GetPosition_Patch
@@ -1072,22 +1184,48 @@ namespace DroneCam
             if (DroneCamController.Instance.Mode == DroneCamMode.Disabled) return true;
             if (Player.m_localPlayer == null) return true;
             if (__instance.gameObject != Player.m_localPlayer.gameObject) return true;
-
-            // Fixed remote location: underground, far from all play areas,
-            // outside the 100m XZ difficulty scaling radius
+            if (DroneCamController.Instance.BroadcastRealPosition) return true;
 
             Vector3 realPos = Player.m_localPlayer.m_body.position;
-
-            __result = new Vector3(
-                realPos.x + 101f,
-                realPos.y - 1000f,
-                realPos.z);
+            __result = new Vector3(realPos.x + 101f, realPos.y - 1000f, realPos.z);
             return false;
         }
     }
-     
+
     // ─────────────────────────────────────────────────────────────────────────
-    // Harmony – intercept /dronecam and /dc commands
+    // Harmony – hide crosshair while drone cam is active
+    // ─────────────────────────────────────────────────────────────────────────
+    [HarmonyPatch(typeof(Hud), "UpdateCrosshair")]
+    public static class Hud_UpdateCrosshair_Patch
+    {
+        static void Postfix(Hud __instance)
+        {
+            if (DroneCamController.Instance == null) return;
+            if (DroneCamController.Instance.Mode == DroneCamMode.Disabled) return;
+            if (DroneCamController.Instance.HudHidden) return;
+            __instance.m_crosshair.gameObject.SetActive(false);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Harmony – suspend/resume drone when local player sleeps/wakes
+    // (remote target player sleep is handled via ZDO polling in Update)
+    // ─────────────────────────────────────────────────────────────────────────
+    [HarmonyPatch(typeof(Player), "SetSleeping")]
+    public static class Player_SetSleeping_Patch
+    {
+        static void Postfix(Player __instance, bool sleep)
+        {
+            if (DroneCamController.Instance == null) return;
+            if (__instance != Player.m_localPlayer) return;
+
+            if (sleep) DroneCamController.Instance.OnPlayerSleep();
+            else DroneCamController.Instance.OnPlayerWake();
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Harmony – intercept /dc and /dronecam chat commands
     // ─────────────────────────────────────────────────────────────────────────
     [HarmonyPatch(typeof(Chat), "InputText")]
     public static class Chat_InputText_Patch
@@ -1104,117 +1242,83 @@ namespace DroneCam
 
             if (!isDroneCamCmd) return true;
 
-            DroneCamCommands.Handle(text);
+            DroneCamCommands.HandleChat(text);
             return false;
         }
     }
-    // ─────────────────────────────────────────────────────────────────────────
-    // Harmony – hide crosshair while drone cam is active
-    // ─────────────────────────────────────────────────────────────────────────
-    [HarmonyPatch(typeof(Hud), "UpdateCrosshair")]
-    public static class Hud_UpdateCrosshair_Patch
-    {
-        static void Postfix(Hud __instance)
-        {
-            if (DroneCamController.Instance == null) return;
-            if (DroneCamController.Instance.Mode == DroneCamMode.Disabled) return;
-            if (DroneCamController.Instance.HudHidden) return; // already hidden entirely
-            __instance.m_crosshair.gameObject.SetActive(false);
-        }
-    }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // IsTargetPlayer helper (needed by sleep patch)
-    // ─────────────────────────────────────────────────────────────────────────
-    public partial class DroneCamController
-    {
-        public bool IsTargetPlayer(Player p)
-        {
-            if (_anchor == null || _anchor.Type != TargetType.Player) return false;
-            if (p == null) return false;
-            ZDO zdo = p.m_nview?.GetZDO();
-            if (zdo == null) return false;
-            ZNetPeer peer = FindPeerByName(_anchor.Name);
-            if (peer == null) return false;
-            return zdo.m_uid == peer.m_characterID;
-        }
-
-    }
-
-    // prevent water effect on both client and server
-    [HarmonyPatch(typeof(SEMan), "AddStatusEffect", typeof(int), typeof(bool), typeof(int), typeof(float))]
-    public static class SEMan_AddStatusEffect_Patch
-    {
-        static bool Prefix(SEMan __instance, int nameHash)
-        {
-            if (DroneCamController.Instance == null) return true;
-            if (DroneCamController.Instance.Mode == DroneCamMode.Disabled) return true;
-            if (Player.m_localPlayer == null) return true;
-            if (__instance != Player.m_localPlayer.m_seman) return true;
-
-            if (nameHash == SEMan.s_statusEffectWet || nameHash == SEMan.s_statusEffectTared)
-                return false;
-
-            return true;
-        }
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Chat command parser + dispatcher
+    // Command parser + dispatcher
     // ─────────────────────────────────────────────────────────────────────────
     public static class DroneCamCommands
     {
         private static DroneCamController Ctrl => DroneCamController.Instance;
 
         private const string Help =
-            "[DroneCam] Commands (/dronecam or /dc):\n" +
-            "  /dc help\n" +
-            "  /dc on | ff | freefly - enter free-fly setup\n" +
-            "  /dc off - return to normal camera\n" +
-            "  /dc players - list visible players\n" +
-            "  /dc f p <player> [dist] [h] [sm]   follow a player\n" +
-            "  /dc f e <enemy>  [dist] [h] [sm]   follow nearest named enemy\n" +
-            "  /dc o p <n> [r] [spd] [h] - orbit a player\n" +
-            "  /dc o e <n> [r] [spd] [h] - orbit nearest named enemy\n" +
-            "  /dc o pos [r] [spd] [h] - orbit current look-at position\n" +
-            "  /dc o s <deg/sec> - change orbit speed live\n" +
-            "  /dc s p <n> - security cam, track player\n" +
-            "  /dc s pos - security cam, track look-at position\n" +
-            "  /dc te - target nearest enemy for look-at\n" +
-            "  /dc te <name> - target named enemy for look-at\n" +
-            "  /dc te c - clear enemy look-at target\n" +
-            "  /dc hud - toggle HUD visibility\n" +
-            "  /dc snap - snap drone to current player position\n" +
-            "Player names with spaces must be quoted: /dc f p \"Big Viking\"\n" +
-            "Wheel: dist/radius  Alt+wheel: height  Ctrl+wheel: orbit speed\n" +
-            ". / , keys cycle next/prev player target  F8 toggle";
+            "<mspace>" + 
+            "[DroneCam] Commands - console: 'dc {sub-cmd}'  chat: '/dc {sub-cmd}'\n" +
+            "  help\n" +
+            "  on | ff | freefly                    enter free-fly\n" +
+            "  off                                  exit drone cam\n" +
+            "  hud                                  toggle HUD\n" +
+            "  snap                                 snap drone to player target\n" +
+            "  players                              list players\n" +
+            "  follow p <name> [dist] [h] [smooth]  follow player\n" +
+            "  follow e <name> [dist] [h] [smooth]  follow enemy\n" +
+            "  orbit p <name> [r] [spd] [h]         orbit player\n" +
+            "  orbit e <name> [r] [spd] [h]         orbit enemy\n" +
+            "  orbit pos [r] [spd] [h]              orbit look-at position\n" +
+            "  orbit s <deg/sec>                    set orbit speed\n" +
+            "  security p <name>                    security cam on player\n" +
+            "  security pos                         security cam on look-at\n" +
+            "  te                                   target nearest enemy\n" +
+            "  te <name>                            target named enemy\n" +
+            "  te c                                 clear enemy target\n" +
+            "  stream on [w] [h]                    start Spout stream\n" +
+            "  stream off                           stop Spout stream\n" +
+            "  stream res <w> <h>                   change stream resolution\n" +
+            "Wheel: dist/radius  Alt+wheel: height  Ctrl+wheel: focal offset  Alt+Ctrl+wheel: orbit speed  F8: toggle\n" +
+            "Player names with spaces: use quotes e.g. follow p \"Big Viking\"" + 
+            "</mspace>";
 
-        private delegate void CmdHandler(string[] t);
+        private delegate void CmdHandler(string[] args);
 
         private static readonly Dictionary<string, CmdHandler> Commands =
             new Dictionary<string, CmdHandler>(StringComparer.OrdinalIgnoreCase)
         {
-            { "help",        t => Msg(Help) },
-            { "on",          t => Ctrl.EnterFreeSetup() },
-            { "off",         t => Ctrl.ExitDroneCam() },
-            { "ff",          t => Ctrl.EnterFreeSetup() },
-            { "freefly",     t => Ctrl.EnterFreeSetup() },
-            { "players",     t => Msg($"[DroneCam] Players: {string.Join(", ", DroneCamController.GetPlayerNames())}") },
-            { "follow",      HandleFollow },   { "f",  HandleFollow },
-            { "orbit",       HandleOrbit },    { "o",  HandleOrbit },
-            { "security",    HandleSecurity }, { "s",  HandleSecurity },
+            { "help",        args => Msg(Help) },
+            { "on",          args => Ctrl.EnterFreeSetup() },
+            { "off",         args => Ctrl.ExitDroneCam() },
+            { "ff",          args => Ctrl.EnterFreeSetup() },
+            { "freefly",     args => Ctrl.EnterFreeSetup() },
+            { "hud",         args => Ctrl.ToggleHud() },
+            { "snap",        args => Ctrl.SnapToPlayer() },
+            { "players",     args => Msg($"[DroneCam] Players: {string.Join(", ", DroneCamController.GetPlayerNames())}") },
+            { "follow",      HandleFollow },      { "f",  HandleFollow },
+            { "orbit",       HandleOrbit },       { "o",  HandleOrbit },
+            { "security",    HandleSecurity },    { "s",  HandleSecurity },
             { "targetenemy", HandleTargetEnemy }, { "te", HandleTargetEnemy },
-            { "hud", t => Ctrl.ToggleHud() },
-            { "snap", t => Ctrl.SnapToPlayer() },
-
-
+            { "stream",      HandleStream },      { "st", HandleStream },
         };
 
-        public static void Handle(string raw)
+        // Entry point from console - args is everything after "dc"
+        public static void Handle(string[] args)
+        {
+            if (Ctrl == null) { Msg("[DroneCam] Controller not ready."); return; }
+            if (args == null || args.Length == 0) { Msg(Help); return; }
+
+            string sub = args[0];
+            if (Commands.TryGetValue(sub, out CmdHandler handler))
+                handler(args);
+            else
+                Msg($"[DroneCam] Unknown command '{sub}'. Type 'dc help'.");
+        }
+
+        // Entry point from chat - strips /dc or /dronecam prefix then calls Handle
+        public static void HandleChat(string raw)
         {
             if (Ctrl == null) { Msg("[DroneCam] Controller not ready."); return; }
 
-            // Extract quoted name before splitting on spaces
             var match = Regex.Match(raw, "\"([^\"]+)\"");
             if (match.Success)
             {
@@ -1226,119 +1330,125 @@ namespace DroneCam
             for (int i = 0; i < t.Length; i++)
                 t[i] = t[i].Replace('\x01', ' ');
 
-            string sub = t.Length > 1 ? t[1] : "help";
-
-            if (Commands.TryGetValue(sub, out CmdHandler handler))
-                handler(t);
-            else
-                Msg($"[DroneCam] Unknown command '{sub}'. Type /dc help.");
+            // t[0] is /dc or /dronecam - skip it
+            Handle(t.Skip(1).ToArray());
         }
 
         // ── sub-command handlers ──────────────────────────────────────────────
 
-        private static void HandleFollow(string[] t)
+        private static void HandleFollow(string[] args)
         {
-            if (t.Length < 3) { Msg("Usage: /dc f p <player> | e <enemy> [dist] [h] [smooth]"); return; }
-            switch (t[2].ToLower())
+            if (args.Length < 2) { Msg("Usage: follow p <player> | e <enemy> [dist] [h] [smooth]"); return; }
+            switch (args[1].ToLower())
             {
                 case "p":
                 case "player":
-                    if (t.Length < 4) { Msg("Usage: /dc f p <player> [dist] [h] [smooth]"); return; }
-                    Ctrl.SetFollow(t[3], F(t, 4, 5f), F(t, 5, 2f), F(t, 6, 0.1f));
+                    if (args.Length < 3) { Msg("Usage: follow p <player> [dist] [h] [smooth]"); return; }
+                    Ctrl.SetFollow(args[2], F(args, 3, 5f), F(args, 4, 2f), F(args, 5, 0.1f));
                     break;
                 case "e":
                 case "enemy":
-                    if (t.Length < 4) { Msg("Usage: /dc f e <enemy> [dist] [h] [smooth]"); return; }
-                    Ctrl.SetFollowEnemy(t[3], F(t, 4, 5f), F(t, 5, 2f), F(t, 6, 0.1f));
+                    if (args.Length < 3) { Msg("Usage: follow e <enemy> [dist] [h] [smooth]"); return; }
+                    Ctrl.SetFollowEnemy(args[2], F(args, 3, 5f), F(args, 4, 2f), F(args, 5, 0.1f));
                     break;
                 default:
-                    // Bare name - backwards compat, default to player
-                    Ctrl.SetFollow(t[2], F(t, 3, 5f), F(t, 4, 2f), F(t, 5, 0.1f));
+                    Ctrl.SetFollow(args[1], F(args, 2, 5f), F(args, 3, 2f), F(args, 4, 0.1f));
                     break;
             }
         }
 
-        private static void HandleOrbit(string[] t)
+        private static void HandleOrbit(string[] args)
         {
-            if (t.Length < 3) { Msg("Usage: /dc o p <n> | e <n> | pos | s <val>"); return; }
-            switch (t[2].ToLower())
+            if (args.Length < 2) { Msg("Usage: orbit p <n> | e <n> | pos | s <val>"); return; }
+            switch (args[1].ToLower())
             {
                 case "p":
                 case "player":
-                    if (t.Length < 4) { Msg("Usage: /dc o p <n> [r] [spd] [h]"); return; }
-                    Ctrl.SetOrbitPlayer(t[3], F(t, 4, 10f), F(t, 5, 30f), F(t, 6, 4f));
+                    if (args.Length < 3) { Msg("Usage: orbit p <n> [r] [spd] [h]"); return; }
+                    Ctrl.SetOrbitPlayer(args[2], F(args, 3, 10f), F(args, 4, 30f), F(args, 5, 4f));
                     break;
                 case "e":
                 case "enemy":
-                    if (t.Length < 4) { Msg("Usage: /dc o e <n> [r] [spd] [h]"); return; }
-                    Ctrl.SetOrbitEnemy(t[3], F(t, 4, 10f), F(t, 5, 30f), F(t, 6, 4f));
+                    if (args.Length < 3) { Msg("Usage: orbit e <n> [r] [spd] [h]"); return; }
+                    Ctrl.SetOrbitEnemy(args[2], F(args, 3, 10f), F(args, 4, 30f), F(args, 5, 4f));
                     break;
                 case "pos":
-                    Ctrl.SetOrbitPosition(Ctrl.GetLookAtPosition(), F(t, 3, 10f), F(t, 4, 30f), F(t, 5, 4f));
+                    Ctrl.SetOrbitPosition(Ctrl.GetLookAtPosition(), F(args, 2, 10f), F(args, 3, 30f), F(args, 4, 4f));
                     break;
                 case "s":
                 case "speed":
-                    if (t.Length < 4) { Msg("Usage: /dc o s <deg/sec>"); return; }
-                    Ctrl.SetOrbitSpeed(F(t, 3, 30f));
+                    if (args.Length < 3) { Msg("Usage: orbit s <deg/sec>"); return; }
+                    Ctrl.SetOrbitSpeed(F(args, 2, 30f));
                     break;
                 default:
-                    Msg($"Unknown orbit sub-command '{t[2]}'.");
+                    Msg($"Unknown orbit sub-command '{args[1]}'.");
                     break;
             }
         }
 
-        private static void HandleSecurity(string[] t)
+        private static void HandleSecurity(string[] args)
         {
-            if (t.Length < 3) { Msg("Usage: /dc s p <n> | pos"); return; }
-            switch (t[2].ToLower())
+            if (args.Length < 2) { Msg("Usage: security p <n> | pos"); return; }
+            switch (args[1].ToLower())
             {
                 case "p":
                 case "player":
-                    if (t.Length < 4) { Msg("Usage: /dc s p <n>"); return; }
-                    Ctrl.SetSecurityPlayer(t[3]);
+                    if (args.Length < 3) { Msg("Usage: security p <n>"); return; }
+                    Ctrl.SetSecurityPlayer(args[2]);
                     break;
                 case "pos":
                     Ctrl.SetSecurityPosition(Ctrl.GetLookAtPosition());
                     break;
                 default:
-                    Msg($"Unknown security sub-command '{t[2]}'.");
+                    Msg($"Unknown security sub-command '{args[1]}'.");
                     break;
             }
         }
 
-        private static void HandleTargetEnemy(string[] t)
+        private static void HandleTargetEnemy(string[] args)
         {
-            if (t.Length < 3) { Ctrl.SetEnemyTargetNearest(); return; }
-            switch (t[2].ToLower())
+            if (args.Length < 2) { Ctrl.SetEnemyTargetNearest(); return; }
+            switch (args[1].ToLower())
             {
-                case "c":
-                case "clear":
-                    Ctrl.ClearEnemyTarget();
+                case "c": case "clear": Ctrl.ClearEnemyTarget(); break;
+                case "n": case "nearest": Ctrl.SetEnemyTargetNearest(); break;
+                default: Ctrl.SetEnemyTargetNamed(args[1]); break;
+            }
+        }
+
+        private static void HandleStream(string[] args)
+        {
+            if (args.Length < 2) { Msg("Usage: stream on [w] [h] | off | res <w> <h>"); return; }
+            switch (args[1].ToLower())
+            {
+                case "on":
+                    Ctrl.StartStream((int)F(args, 2, 1920f), (int)F(args, 3, 1080f));
                     break;
-                case "n":
-                case "nearest":
-                    Ctrl.SetEnemyTargetNearest();
+                case "off":
+                    Ctrl.StopStream();
+                    break;
+                case "res":
+                case "resolution":
+                    if (args.Length < 4) { Msg("Usage: stream res <width> <height>"); return; }
+                    Ctrl.SetStreamResolution((int)F(args, 2, 1920f), (int)F(args, 3, 1080f));
                     break;
                 default:
-                    Ctrl.SetEnemyTargetNamed(t[2]);
+                    Msg($"Unknown stream sub-command '{args[1]}'.");
                     break;
             }
         }
 
         // ── helpers ───────────────────────────────────────────────────────────
 
+        private static float F(string[] args, int i, float fallback)
+            => args.Length > i && float.TryParse(args[i], NumberStyles.Float,
+               CultureInfo.InvariantCulture, out float v) ? v : fallback;
+
         private static void Msg(string s)
         {
+            Console.instance?.Print(s);
             Chat.instance?.AddString(s);
             DroneCamPlugin.Log.LogInfo(s);
         }
-
-        private static float F(string[] t, int i, float fallback)
-            => t.Length > i && float.TryParse(t[i], NumberStyles.Float,
-               CultureInfo.InvariantCulture, out float v) ? v : fallback;
-
-        private static float F(string s, float fallback)
-            => float.TryParse(s, NumberStyles.Float,
-               CultureInfo.InvariantCulture, out float v) ? v : fallback;
     }
 }
