@@ -78,7 +78,7 @@ namespace DroneCam
             => new DroneCamTarget { Type = TargetType.Player, Name = p.GetPlayerName(), Transform = p.transform };
 
         public static DroneCamTarget ForEnemy(Character c)
-            => new DroneCamTarget { Type = TargetType.Enemy, Name = c.GetHoverName(), Transform = c.transform };
+            => new DroneCamTarget { Type = TargetType.Enemy, Name = c.m_name, Transform = c.transform };
 
         public static DroneCamTarget ForPosition(Vector3 pos)
             => new DroneCamTarget { Type = TargetType.Position, WorldPosition = pos };
