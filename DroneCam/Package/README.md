@@ -5,27 +5,44 @@ Mod to implement a drone for a Valehim world.
 ## Controlling It
 
 ```
-[DroneCam] Commands (/dronecam or /dc):
-  /dc help
-  /dc on | ff | freefly - enter free-fly setup
-  /dc off - return to normal camera
-  /dc players - list visible players
-  /dc f p <player> [dist] [h] [sm]   follow a player
-  /dc f e <enemy>  [dist] [h] [sm]   follow nearest named enemy
-  /dc o p <n> [r] [spd] [h] - orbit a player
-  /dc o e <n> [r] [spd] [h] - orbit nearest named enemy
-  /dc o pos [r] [spd] [h] - orbit current look-at position
-  /dc o s <deg/sec> - change orbit speed live
-  /dc s p <n> - security cam, track player
-  /dc s pos - security cam, track look-at position
-  /dc te - target nearest enemy for look-at
-  /dc te <name> - target named enemy for look-at
-  /dc te c - clear enemy look-at target
-  /dc hud - toggle HUD visibility
-Player names with spaces must be quoted: /dc f p "Big Viking"
-Wheel: dist/radius  Alt+wheel: height  Ctrl+wheel: orbit speed
-. / , keys cycle next/prev player target  F8 toggle
+[XDC] Xpert's Drone Cam 
+console: 'dc (sub)' 
+chat: '/dc (sub)'
+sub-commands:
+  help - show this help
+  on / ff / freefly - enter free-fly
+  off - exit drone cam
+  hud - toggle HUD
+  snap - snap drone to player target
+  players - list players
+  follow p (name) [dist] [h] [smooth] - follow player
+  follow e (name) [dist] [h] [smooth] - follow enemy
+  orbit p (name) [r] [spd] [h] - orbit player
+  orbit e (name) [r] [spd] [h] - orbit enemy
+  orbit pos [r] [spd] [h] - orbit look-at position
+  orbit s (deg/sec) - set orbit speed
+  security p (name) - security cam on player
+  security pos - security cam on look-at position
+  te - target nearest enemy for look-at
+  te (name) - target named enemy for look-at
+  te c - clear enemy look-at target
+  stream on [w] [h] - start Spout stream (default 1920x1080)
+  stream off - stop Spout stream
+  stream res (w) (h) - change stream resolution
+Wheel - dist/radius / Alt+wheel - height / Ctrl+wheel - focal offset / Alt+Ctrl+wheel - orbit speed
+. / , - cycle players / F8 - toggle
+Names with spaces: use quotes e.g. follow p "Big Viking"
 ```
+
+v0.1.24
+ - Fix player name quoted string parsing bug
+ - Allow drone to re-acquire target after teleporting, either through portal or to reach distant player
+
+v0.1.23
+ - Use standard Player.TeleportTo() functionality instead of trying to move the drone to the player's new location when they teleport. Applies to cycling to distant players on servers as well.
+
+v0.1.22
+ - When a net peer is found, but has no associated ZDO due to distance/unloaded state, use peer's location for moving camera and loading zone
 
 v0.1.21
  - Fix Console argument parsing bug

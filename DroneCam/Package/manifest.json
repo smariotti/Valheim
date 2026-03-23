@@ -1,7 +1,7 @@
 ﻿{
     "name": "Xpert's Drone Cam'",
     "description": "Turns a player into a Drone Cam for joining Multiplayer servers and observing!",
-    "version_number": "0.1.21",
+    "version_number": "0.1.24",
     "website_url": "https://github.com/smariotti/",
     "dependencies": [
         "denikson-BepInExPack_Valheim-5.4.2202"
