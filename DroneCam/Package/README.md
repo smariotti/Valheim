@@ -34,6 +34,10 @@ Wheel - dist/radius / Alt+wheel - height / Ctrl+wheel - focal offset / Alt+Ctrl+
 Names with spaces: use quotes e.g. follow p "Big Viking"
 ```
 
+v0.1.25
+ - Fix bug where teleport would happen even if the player's ZDO had a valid Player object
+ - Fixed bug where drone would fail to reacquire player target 
+
 v0.1.24
  - Fix player name quoted string parsing bug
  - Allow drone to re-acquire target after teleporting, either through portal or to reach distant player
