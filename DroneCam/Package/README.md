@@ -34,6 +34,9 @@ Wheel - dist/radius / Alt+wheel - height / Ctrl+wheel - focal offset / Alt+Ctrl+
 Names with spaces: use quotes e.g. follow p "Big Viking"
 ```
 
+v0.1.26
+ - Fixed lock on problems using ZNetPeer, but still doesn't follow the player through portals
+
 v0.1.25
  - Fix bug where teleport would happen even if the player's ZDO had a valid Player object
  - Fixed bug where drone would fail to reacquire player target 

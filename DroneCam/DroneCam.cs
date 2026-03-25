@@ -18,7 +18,7 @@ namespace DroneCam
     {
         public const string PluginGUID = "com.oathorse.xdc";
         public const string PluginName = "Xpert's Drone Cam";
-        public const string PluginVersion = "0.1.25";
+        public const string PluginVersion = "0.1.26";
 
         internal static ManualLogSource Log;
 
@@ -256,9 +256,9 @@ namespace DroneCam
                 return;
             }
 
-            // While teleporting let Valheim's UpdateTeleport run undisturbed
             if (_waitingForTeleport)
             {
+                DroneCamPlugin.Log.LogInfo($"[XDC-DBG] Update: waiting for teleport, IsTeleporting={Player.m_localPlayer?.IsTeleporting()}");
                 PollTeleportComplete();
                 return;
             }
@@ -286,7 +286,6 @@ namespace DroneCam
                 Player.m_localPlayer.m_body.position = transform.position;
                 Player.m_localPlayer.SetVisible(false);
 
-                // Track last safe ground position for F8 emergency exit
                 if (ZNetScene.instance != null && ZNetScene.instance.IsAreaReady(transform.position))
                 {
                     Vector3 ground = FindGroundPosition(transform.position);
@@ -360,31 +359,30 @@ namespace DroneCam
         }
 
         // ── teleport handling ─────────────────────────────────────────────────
-        private void TravelToPlayer(string playerName, Vector3 refPos)
+        private void TravelToPlayer(string playerName, Vector3 targetPos)
         {
             if (Player.m_localPlayer == null) return;
-            DroneCamPlugin.Log.LogInfo($"[DroneCam] Initiating teleport to '{playerName}' at {refPos}");
-            bool started = Player.m_localPlayer.TeleportTo(refPos, Player.m_localPlayer.transform.rotation, true);
+            DroneCamPlugin.Log.LogInfo($"[DroneCam] TravelToPlayer: '{playerName}' at {targetPos}");
+
+            bool started = Player.m_localPlayer.TeleportTo(
+                targetPos, Player.m_localPlayer.transform.rotation, true);
+
             if (started)
             {
                 _waitingForTeleport = true;
                 Notify($"Teleporting to {playerName}...");
+                return;
             }
-            else
-            {
-                DroneCamPlugin.Log.LogInfo("[DroneCam] TeleportTo returned false - on cooldown or already teleporting.");
-                // If teleport failed and ZDO is available, fall back to normal tracking
-                ZDO zdo = FindPlayerZdoByName(playerName);
-                if (zdo != null)
-                {
-                    Vector3 pos = zdo.GetPosition();
-                    _anchorLastKnownPos = pos;
-                    _anchorLastPos = pos;
-                    _anchorLastRelOffset = transform.position - pos;
-                    _anchorWaiting = false;
-                    Notify($"Tracking {playerName}.");
-                }
-            }
+
+            // Teleport on cooldown - snap drone directly to relative position
+            // and let normal tracking resume
+            DroneCamPlugin.Log.LogInfo("[DroneCam] TravelToPlayer: on cooldown - snapping drone.");
+            Vector3 droneDestination = targetPos + _anchorLastRelOffset;
+            SnapDroneTo(droneDestination);
+            _anchorLastKnownPos = targetPos;
+            _anchorLastPos = targetPos;
+            _anchorLastRelOffset = droneDestination - targetPos;
+            _anchorWaiting = false;
         }
 
         private void PollTeleportComplete()
@@ -717,8 +715,6 @@ namespace DroneCam
             transform.position = _securityPos;
             LookSmoothAt(GetLookTarget(), lerpSpeed: 3f);
         }
-
-        // ── target management ─────────────────────────────────────────────────
         private void RefreshTarget()
         {
             if (_anchor == null || _anchor.Type == TargetType.Position) return;
@@ -730,17 +726,30 @@ namespace DroneCam
                 if (zdo != null)
                 {
                     Vector3 pos = zdo.GetPosition();
+                    float dist = _anchorLastKnownPos != Vector3.zero
+                        ? Vector3.Distance(pos, _anchorLastKnownPos)
+                        : 0f;
 
-                    if (_anchorLastKnownPos != Vector3.zero &&
-                        Vector3.Distance(pos, _anchorLastKnownPos) > DroneCamPlugin.TeleportDetectionDistance.Value)
+                    if (dist > DroneCamPlugin.TeleportDetectionDistance.Value)
                     {
-                        DroneCamPlugin.Log.LogInfo("[DroneCam] Portal jump detected - teleporting drone.");
-                        TravelToPlayer(_anchor.Name, pos);
+                        // Player portaled - snap drone to relative position at new location
+                        // Don't use TeleportTo here - it has a cooldown and the drone
+                        // doesn't need the full teleport animation just to reposition
+                        DroneCamPlugin.Log.LogInfo($"[DroneCam] Portal detected - snapping drone. dist={dist}");
+                        Vector3 droneDestination = pos + _anchorLastRelOffset;
+                        SnapDroneTo(droneDestination);
+                        _anchorLastKnownPos = pos;
+                        _anchorLastPos = pos;
+                        _anchorLastRelOffset = droneDestination - pos;
+                        _anchorWaiting = false;
+
+                        Player p = FindPlayerByZdo(zdo);
+                        if (p != null) _anchor.Transform = p.transform;
                         return;
                     }
 
-                    Player p = FindPlayerByZdo(zdo);
-                    if (p != null) _anchor.Transform = p.transform;
+                    Player player = FindPlayerByZdo(zdo);
+                    if (player != null) _anchor.Transform = player.transform;
 
                     _anchorLastKnownPos = pos;
                     _anchorLastPos = pos;
@@ -749,7 +758,6 @@ namespace DroneCam
                     return;
                 }
 
-                // ZDO not available - update from peer refPos
                 ZNetPeer peer = FindPeerByName(_anchor.Name);
                 if (peer != null && peer.m_refPos != Vector3.zero)
                     _anchorLastKnownPos = peer.m_refPos;
@@ -763,15 +771,13 @@ namespace DroneCam
                 return;
             }
 
-            // Enemy anchor
+            // enemy path unchanged
             if (_anchor.IsValid)
             {
                 Vector3 pos = _anchor.GetPosition();
-
                 if (_anchorLastPos != Vector3.zero &&
                     Vector3.Distance(pos, _anchorLastPos) > DroneCamPlugin.TeleportDetectionDistance.Value)
                     SnapRelativeToTarget(pos);
-
                 _anchorLastPos = pos;
                 _anchorLastKnownPos = pos;
                 _anchorLastRelOffset = transform.position - pos;
@@ -796,7 +802,6 @@ namespace DroneCam
             SnapRelativeToTarget(c.transform.position);
             DroneCamPlugin.Log.LogInfo("[DroneCam] Enemy anchor reacquired.");
         }
-
         private Vector3 GetTargetCenter()
         {
             if (_anchor == null) return transform.position;
@@ -904,9 +909,29 @@ namespace DroneCam
         {
             ZNetPeer peer = FindPeerByName(name);
             if (peer == null) return null;
-            if (peer.m_characterID.IsNone()) return null;
-            return ZDOMan.instance.GetZDO(peer.m_characterID);
+
+            // Primary path - use characterID if valid
+            if (!peer.m_characterID.IsNone())
+            {
+                ZDO zdo = ZDOMan.instance.GetZDO(peer.m_characterID);
+                if (zdo != null) return zdo;
+            }
+
+            // Fallback - scan all ZDOs for matching player name
+            // Used when m_characterID is temporarily None (portal transit, loading)
+            foreach (ZDO zdo in ZDOMan.instance.m_objectsByID.Values)
+            {
+                string zdoName = zdo.GetString(ZDOVars.s_playerName);
+                if (string.IsNullOrEmpty(zdoName)) continue;
+                if (string.Equals(zdoName.Trim(), name.Trim(), StringComparison.OrdinalIgnoreCase))
+                {
+                    return zdo;
+                }
+            }
+
+            return null;
         }
+
 
         private static Player FindPlayerByZdo(ZDO zdo)
         {
