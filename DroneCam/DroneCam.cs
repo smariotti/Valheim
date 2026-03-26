@@ -19,7 +19,7 @@ namespace DroneCam
     {
         public const string PluginGUID = "com.oathorse.xdc";
         public const string PluginName = "Xpert's Drone Cam";
-        public const string PluginVersion = "0.1.26";
+        public const string PluginVersion = "0.1.27";
 
         internal static ManualLogSource Log;
 
@@ -260,7 +260,7 @@ namespace DroneCam
 
             if (_waitingForTeleport)
             {
-                DroneCamPlugin.Log.LogInfo($"[XDC-DBG] Update: waiting for teleport, IsTeleporting={Player.m_localPlayer?.IsTeleporting()}");
+//                DroneCamPlugin.Log.LogInfo($"[XDC-DBG] Update: waiting for teleport, IsTeleporting={Player.m_localPlayer?.IsTeleporting()}");
                 PollTeleportComplete();
                 return;
             }
@@ -446,24 +446,47 @@ namespace DroneCam
                 _anchorWaiting = false;
             }
         }
-
+        private void TravelToPosition(Vector3 targetPos)
+        {
+            if (Player.m_localPlayer == null) return;
+            DroneCamPlugin.Log.LogInfo($"[DroneCam] TravelToPosition: {targetPos}");
+            bool started = Player.m_localPlayer.TeleportTo(
+                targetPos, Player.m_localPlayer.transform.rotation, true);
+            if (started)
+            {
+                _waitingForTeleport = true;
+                Notify("Teleporting...");
+            }
+            else
+            {
+                DroneCamPlugin.Log.LogInfo("[DroneCam] TeleportTo on cooldown - snapping directly.");
+                SnapDroneTo(targetPos);
+                _anchorLastRelOffset = targetPos - _anchorLastKnownPos;
+                _anchorWaiting = false;
+            }
+        }
         private void PollTeleportComplete()
         {
             if (Player.m_localPlayer == null) return;
             if (Player.m_localPlayer.IsTeleporting()) return;
 
-            // Immediately hide and reposition before any rendering occurs
-            // This prevents the one-frame visibility flash at the destination
-            if (Player.m_localPlayer != null)
-            {
-                Player.m_localPlayer.SetVisible(false);
-                Player.m_localPlayer.m_body.position = transform.position;
-            }
+            // Immediately hide before any rendering
+            Player.m_localPlayer.SetVisible(false);
+            Player.m_localPlayer.m_body.position = transform.position;
 
             _waitingForTeleport = false;
             DroneCamPlugin.Log.LogInfo("[DroneCam] Teleport complete - resuming tracking.");
 
             if (_anchor == null) return;
+
+            // Drone landed at the pre-calculated offset position
+            // No lerp needed - we're already in the right place
+            Vector3 landedPos = Player.m_localPlayer.transform.position;
+            transform.position = landedPos;
+            _dronePos = landedPos;
+            _smoothVelocity = Vector3.zero;
+            _smoothVelRef = Vector3.zero;
+            Player.m_localPlayer.m_body.position = landedPos;
 
             PlayerInfo pi = FindPlayerInfo(_anchor.Name);
             Vector3 infoPos = GetPlayerInfoPosition(pi);
@@ -472,15 +495,6 @@ namespace DroneCam
 
             if (pos != Vector3.zero)
             {
-                Vector3 landedPos = Player.m_localPlayer.transform.position;
-                transform.position = landedPos;
-                _dronePos = landedPos;
-                _smoothVelocity = Vector3.zero;
-                _smoothVelRef = Vector3.zero;
-
-                if (Player.m_localPlayer != null)
-                    Player.m_localPlayer.m_body.position = landedPos;
-
                 _anchorLastKnownPos = pos;
                 _anchorLastPos = pos;
                 _anchorLastInfoPos = infoPos != Vector3.zero ? infoPos : pos;
@@ -807,7 +821,7 @@ namespace DroneCam
                 Vector3 realtimePos = GetPlayerRealtimePosition(pi);
                 Vector3 actualPos = realtimePos != Vector3.zero ? realtimePos : infoPos;
 
-                DroneCamPlugin.Log.LogInfo($"[DroneCam] RefreshTarget: infoPos={infoPos} realtimePos={realtimePos} pos={actualPos} lastKnown={_anchorLastKnownPos} lastInfo={_anchorLastInfoPos}");
+//                DroneCamPlugin.Log.LogInfo($"[DroneCam] RefreshTarget: infoPos={infoPos} realtimePos={realtimePos} pos={actualPos} lastKnown={_anchorLastKnownPos} lastInfo={_anchorLastInfoPos}");
 
                 if (actualPos == Vector3.zero)
                 {
@@ -822,25 +836,28 @@ namespace DroneCam
                         ? Vector3.Distance(infoPos, _anchorLastInfoPos)
                         : 0f;
 
-                    DroneCamPlugin.Log.LogInfo($"[DroneCam] RefreshTarget: infoPos={infoPos} realtimePos={realtimePos} dist={dist}");
+                    //                    DroneCamPlugin.Log.LogInfo($"[DroneCam] RefreshTarget: infoPos={infoPos} realtimePos={realtimePos} dist={dist}");
 
                     if (dist > DroneCamPlugin.TeleportDetectionDistance.Value)
                     {
                         DroneCamPlugin.Log.LogInfo($"[DroneCam] Portal detected - dist={dist}");
-                        if (ZNetScene.instance.IsAreaReady(infoPos))
+
+                        Vector3 droneDest = infoPos + _anchorLastRelOffset;
+
+                        if (ZNetScene.instance.IsAreaReady(droneDest))
                         {
-                            Vector3 dest = infoPos + _anchorLastRelOffset;
-                            SnapDroneTo(dest);
-                            _anchorLastRelOffset = dest - infoPos;
+                            SnapDroneTo(droneDest);
+                            _anchorLastRelOffset = droneDest - infoPos;
                         }
                         else
                         {
-                            TravelToPlayer(_anchor.Name, infoPos);
+                            TravelToPosition(droneDest);
                         }
                         _anchorLastInfoPos = infoPos;
+                        _anchorLastKnownPos = infoPos;
+                        _anchorLastPos = infoPos;
                         return;
                     }
-
                     _anchorLastInfoPos = infoPos;
                 }
 
@@ -1230,7 +1247,7 @@ namespace DroneCam
             else
                 Notify($"Security cam tracking {playerName}");
         }
-
+         
         public void SetSecurityPosition(Vector3 pos)
         {
             ResetTargetState();
