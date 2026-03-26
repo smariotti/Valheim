@@ -34,6 +34,11 @@ Wheel - dist/radius / Alt+wheel - height / Ctrl+wheel - focal offset / Alt+Ctrl+
 Names with spaces: use quotes e.g. follow p "Big Viking"
 ```
 
+
+v0.1.27
+ - Fix teleport/distant player target acquire/reacquire problem
+ - Use PlayerInfo instead of ZNetPeer and modify player teleport/distant player check to use it
+
 v0.1.26
  - Fixed lock on problems using ZNetPeer, but still doesn't follow the player through portals
 
