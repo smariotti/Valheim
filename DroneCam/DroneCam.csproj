@@ -163,7 +163,8 @@
   <PropertyGroup>
     <PostBuildEvent>$(SolutionDir)\utils\pdb2mdb.exe $(TargetPath)
 xcopy /F /Y "$(TargetDir)\$(TargetFileName)" "$(ProjectDir)\Package\plugins"
-xcopy /F /Y "$(TargetDir)\$(TargetFileName)" "$(ValheimPath)\BepInEx\Plugins"</PostBuildEvent>
+xcopy /F /Y "$(TargetDir)\$(TargetFileName)" "$(ValheimPath)\BepInEx\Plugins"
+xcopy /F /Y "$(TargetDir)\$(TargetFileName).mdb" "$(ValheimPath)\BepInEx\Plugins"</PostBuildEvent>
   </PropertyGroup>
   <Import Project="..\packages\Baseclass.Contrib.Nuget.Output.2.4.3\build\Baseclass.Contrib.Nuget.Output.targets" Condition="Exists('..\packages\Baseclass.Contrib.Nuget.Output.2.4.3\build\Baseclass.Contrib.Nuget.Output.targets')" />
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
