@@ -162,6 +162,8 @@
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>$(SolutionDir)\utils\pdb2mdb.exe $(TargetPath)
+echo $(TargetPath)
+echo $(TargetFileName)
 xcopy /F /Y "$(TargetDir)\$(TargetFileName)" "$(ProjectDir)\Package\plugins"
 xcopy /F /Y "$(TargetDir)\$(TargetFileName)" "$(ValheimPath)\BepInEx\Plugins"
 xcopy /F /Y "$(TargetDir)\$(TargetFileName).mdb" "$(ValheimPath)\BepInEx\Plugins"</PostBuildEvent>

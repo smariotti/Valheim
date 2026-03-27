@@ -19,7 +19,7 @@ namespace DroneCam
     {
         public const string PluginGUID = "com.oathorse.xdc";
         public const string PluginName = "Xpert's Drone Cam";
-        public const string PluginVersion = "0.1.27";
+        public const string PluginVersion = "0.1.28";
 
         internal static ManualLogSource Log;
 
