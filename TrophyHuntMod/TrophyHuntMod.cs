@@ -29,7 +29,7 @@ namespace TrophyHuntMod
         public const string PluginName = "TrophyHuntMod";
 
 
-        public const string PluginVersion = "0.10.25";
+        public const string PluginVersion = "0.10.26";
         private readonly Harmony harmony = new Harmony(PluginGUID);
 
         // Configuration variables
@@ -385,6 +385,8 @@ namespace TrophyHuntMod
         static bool __m_collectingPlayerPath = false;
         static float __m_playerPathCollectionInterval = 5.0f;
         static float __m_minPathPlayerMoveDistance = 10.0f;
+        static bool __m_pendingDeathRegistration = false;
+        static Vector3 __m_pendingDeathPosition = Vector3.zero;
 
         // Trophy Pins
         public class TrophyPin
@@ -1654,6 +1656,7 @@ namespace TrophyHuntMod
             __m_pendingEvents.Clear();
             __m_lastSentEventIndex = 0;
             __m_collectingPlayerPath = false;
+            __m_pendingDeathRegistration = false;
             __m_mapFilesPosted = false;
             __m_sentFinalData = false;
             __m_firstInputDetected = false;
@@ -2634,6 +2637,38 @@ namespace TrophyHuntMod
             }
         }
 
+        // Calculates the player's current score and updates __m_deaths and __m_playerCurrentScore.
+        // Call this anywhere score is needed without triggering a full UI refresh.
+        public static int CalculateCurrentScore(Player player)
+        {
+            if (player == null) return __m_playerCurrentScore;
+
+            int score = 0;
+            if (GetGameMode() == TrophyGameMode.CulinarySaga)
+                score = CalculateCookingScore(player);
+            else if (GetGameMode() != TrophyGameMode.CasualSaga)
+                score = CalculateTrophyScore(player);
+
+            PlayerProfile profile = Game.instance?.GetPlayerProfile();
+            if (profile?.m_playerStats != null)
+            {
+                __m_deaths = (int)profile.m_playerStats[PlayerStatType.Deaths];
+                score += CalculateDeathPenalty();
+            }
+
+            if (!__m_ignoreLogouts)
+                score += CalculateLogoutPenalty();
+
+            if (GetGameMode() == TrophyGameMode.TrophyRush || GetGameMode() == TrophyGameMode.TrophyBlitz ||
+                GetGameMode() == TrophyGameMode.TrophyTrailblazer || GetGameMode() == TrophyGameMode.TrophyPacifist)
+                score += CalculateBiomeBonusScore(player);
+
+            score += __m_extraTimeScore;
+
+            __m_playerCurrentScore = score;
+            return score;
+        }
+
         public static void UpdateModUI(Player player)
         {
             // If there's no Hud yet, don't do anything here
@@ -2662,95 +2697,45 @@ namespace TrophyHuntMod
                 return;
             }
 
-            int score = 0;
+            // Enable trophy/cooking icons (UI only)
             if (GetGameMode() == TrophyGameMode.CulinarySaga)
-            {
                 EnableCookingIcons(player);
-
-                score = CalculateCookingScore(player);
-            }
             else if (GetGameMode() != TrophyGameMode.CasualSaga)
             {
                 EnableTrophyHuntIcons(player);
-
                 EnableBiomes(player);
-
-                score = CalculateTrophyScore(player);
             }
 
-            // Update the deaths text and subtract deaths from score
-            //
-            PlayerProfile profile = Game.instance.GetPlayerProfile();
-            if (profile != null)
+            int score = CalculateCurrentScore(player);
+
+            // Update deaths counter UI
+            if (__m_deathsTextElement)
             {
-                PlayerProfile.PlayerStats stats = profile.m_playerStats;
-                if (stats != null)
-                {
-                    __m_deaths = (int)stats[PlayerStatType.Deaths];
-
-                    //                        Debug.LogWarning($"Subtracting score for {__m_deaths} deaths.");
-
-                    score += CalculateDeathPenalty();
-
-                    if (__m_deathsTextElement)
-                    {
-                        // Update the UI element
-                        TMPro.TextMeshProUGUI deathsText = __m_deathsTextElement.GetComponent<TMPro.TextMeshProUGUI>();
-                        if (deathsText != null)
-                        {
-                            deathsText.SetText(__m_deaths.ToString());
-                        }
-                    }
-                }
+                TMPro.TextMeshProUGUI deathsText = __m_deathsTextElement.GetComponent<TMPro.TextMeshProUGUI>();
+                if (deathsText != null)
+                    deathsText.SetText(__m_deaths.ToString());
             }
 
-            // Subtract points for logouts
-            //                Debug.LogWarning($"Subtracting score for {__m_logoutCount} logouts.");
-            if (!__m_ignoreLogouts)
-            {
-                score += CalculateLogoutPenalty();
-            }
-
-            if (GetGameMode() == TrophyGameMode.TrophyRush || GetGameMode() == TrophyGameMode.TrophyBlitz || GetGameMode() == TrophyGameMode.TrophyTrailblazer || GetGameMode() == TrophyGameMode.TrophyPacifist)
-            {
-                score += CalculateBiomeBonusScore(player);
-            }
-
-            score += __m_extraTimeScore;
-
-
-            // Update the Score string
+            // Update score UI
             if (__m_scoreTextElement)
             {
                 if (GetGameMode() == TrophyGameMode.CasualSaga)
-                {
                     __m_scoreTextElement.GetComponent<TMPro.TextMeshProUGUI>().text = "Saga";
-                }
                 else
-                {
                     __m_scoreTextElement.GetComponent<TMPro.TextMeshProUGUI>().text = score.ToString();
-                }
             }
 
-            // Update the Logouts string
+            // Update logouts UI
             if (__m_relogsTextElement)
-            {
                 __m_relogsTextElement.GetComponent<TMPro.TextMeshProUGUI>().text = __m_logoutCount.ToString();
-            }
 
             if (IsPacifist())
             {
                 if (__m_allCharmedCharacters != null && __m_allCharmedCharacters.Count > 0)
-                {
                     ShowThrallsWindow(__m_thrallsWindowObject);
-                }
                 else
-                {
                     HideThrallsWindow();
-                }
             }
-
-            __m_playerCurrentScore = score;
         }
 
         static IEnumerator FlashImage(UnityEngine.UI.Image targetImage, RectTransform imageRect)
@@ -3265,6 +3250,14 @@ namespace TrophyHuntMod
 
                 float onFootDistance = GetTotalOnFootDistance(__instance);
                 //                    Debug.LogError($"Total on-foot distance moved: {onFootDistance}");
+
+                // CheatDeath: player quit within 3 seconds of dying (while paused or very quickly).
+                // Cancel the pending death and forgive the logout — this was a cheat-death escape, not a tactical logout.
+                if (__m_pendingDeathRegistration)
+                {
+                    __m_pendingDeathRegistration = false;
+                    return;
+                }
 
                 // If you've never logged out, and your total run/walk distance is less than the max grace distance, no penalty
                 if (__m_logoutCount < 1 && onFootDistance < LOGOUT_PENALTY_GRACE_DISTANCE)
@@ -6972,11 +6965,27 @@ namespace TrophyHuntMod
         {
             static void Prefix(Player __instance)
             {
-                if (__instance != null)
-                {
-                    AddPlayerEvent(PlayerEventType.Misc, "PenaltyDeath", __instance.transform.position);
-                }
+                if (__instance == null) return;
+                // Record position now (transform will be gone after death), then start the
+                // CheatDeath window. WaitForSeconds uses scaled time, so the countdown
+                // freezes while the game is paused — quitting while paused cancels the death.
+                __m_pendingDeathPosition = __instance.transform.position;
+                __m_pendingDeathRegistration = true;
+                __m_trophyHuntMod.StartCoroutine(RegisterDeathAfterDelay());
             }
+        }
+
+        static IEnumerator RegisterDeathAfterDelay()
+        {
+            // Scaled time: countdown pauses when the game is paused (single-player).
+            // If the player quits within this window, Game_Logout_Patch clears the flag
+            // and forgives both the death and the logout (CheatDeath).
+            yield return new WaitForSeconds(3f);
+            if (!__m_pendingDeathRegistration) yield break;
+            __m_pendingDeathRegistration = false;
+            // Refresh score so the D event carries the post-death score.
+            CalculateCurrentScore(Player.m_localPlayer);
+            AddPlayerEvent(PlayerEventType.Misc, "PenaltyDeath", __m_pendingDeathPosition);
         }
 
         // Increase sailing speed
