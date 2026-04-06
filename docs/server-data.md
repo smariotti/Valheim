@@ -48,7 +48,7 @@ Fetches the current tournament standings. Called every **30 seconds**.
 
 ### POST `/api/track/log`
 
-Sends a single event. Used for game events as they happen, path updates, and player snapshots.
+All game events and player snapshots go through this single endpoint as batched `code` strings. Called at most every **30 seconds**; scoring events flush immediately.
 
 **JSON body (`TrackLogEntry`):**
 
@@ -56,116 +56,113 @@ Sends a single event. Used for game events as they happen, path updates, and pla
 |---------|--------|-----------------------------------------|
 | `id`    | string | Player's Discord ID                     |
 | `seed`  | string | World seed                              |
-| `score` | int    | Player's current score at time of event |
-| `code`  | string | Event payload (see event types below)   |
+| `score` | int    | Player's current score at time of batch |
+| `code`  | string | One or more events (see format below)   |
 
-#### `code` values
+#### Event format
 
-**Game events** — sent immediately when the event occurs. World position is embedded in `code` as a `@x,y,z` suffix (coordinates rounded to integer).
-
-| Event type | `code` value | Deduplication |
-|------------|--------------|---------------|
-| First real input after landing | `FirstInput` | Once per session |
-| Trophy picked up | Trophy prefab name (e.g. `TrophyBoar`) | First occurrence per unique trophy name |
-| Bonus event(s) | Pipe-delimited composite (see below) | One event per trophy pickup that triggers bonuses |
-| Penalty: logout | `PenaltyLogout` | Per unique position (within 5 units) |
-| Penalty: death | `PenaltyDeath` | Per unique position (within 5 units) |
-| Penalty: `/slashdie` | `PenaltySlashDie` | Per unique position (within 5 units) |
-| Portal used | `Portal` (unnamed) or `Portal:<tag>` | Per unique position (within 5 units) |
-
-`FirstInput` fires once after the fly-in cinematic ends and the player presses any key, moves, or clicks. It marks the moment the player actually took control and began their run. Position is the player's location at the standing stones.
-
-**Bonus event format** — all bonuses triggered by a single trophy pickup are combined into one `code` string, pipe-delimited:
-
-| Segment | When present | Example |
-|---------|-------------|---------|
-| `Bonus<Biome>` | The pickup completed a biome set | `BonusMeadows` |
-| `BonusAll` | The pickup completed every trophy | `BonusAll` |
-| `BonusTime:<score>` | Mode is TrophyBlitz or TrophyTrailblazer and BonusAll fired | `BonusTime:420` |
-
-Examples:
-- Biome complete only: `BonusMeadows`
-- Biome + all trophies (non-time-bonus mode): `BonusMeadows|BonusAll`
-- Biome + all trophies + time bonus: `BonusMeadows|BonusAll|BonusTime:420`
-- All trophies in Saga mode (no biome bonus tracked): `BonusAll`
-
-Whitelisted **items**: `RoundLog`, `Finewood`, `ElderBark`, `SpearFlint`/2/3/4, `ArmorTrollLeatherChest`/2/3, `ArmorRootChest`/2
-
-Whitelisted **builds**: `$piece_workbench`, `$piece_sapling_turnip`, `$piece_sapling_onion`, `$piece_bonfire`
-
-#### Examples
-
-Plain trophy pickup (no bonus triggered):
-```json
-{ "id": "185432167890123456", "seed": "Niffelheim", "score": 340, "code": "TrophyBoar@142,32,-87" }
-```
-
-Trophy that completes a biome (bonus combined into same event):
-```json
-{ "id": "185432167890123456", "seed": "Niffelheim", "score": 680, "code": "TrophyNeck|BonusMeadows@203,31,14" }
-```
-
-Final Trophy that completes everything early
-```json
-{ "id": "185432167890123456", "seed": "Niffelheim", "score": 5040, "code": "TrophyBonemaw|BonusAshlands|BonusAll|BonusTime:840@-1402,18,887" }
-```
-
-Death penalty:
-```json
-{ "id": "185432167890123456", "seed": "Niffelheim", "score": 290, "code": "PenaltyDeath@-312,45,201" }
-```
-
-Second death at a different location (both are logged):
-```json
-{ "id": "185432167890123456", "seed": "Niffelheim", "score": 240, "code": "PenaltyDeath@88,22,-540" }
-```
-
-Logout penalty:
-```json
-{ "id": "185432167890123456", "seed": "Niffelheim", "score": 240, "code": "PenaltyLogout@88,22,-540" }
-```
-
-Path update (points embedded in `code`, no position suffix):
-```json
-{ "id": "185432167890123456", "seed": "Niffelheim", "score": 340, "code": "Path=0:142,32,-87;8:155,32,-91;16:178,31,-104" }
-```
-
-Player snapshot (no position suffix):
-```json
-{ "id": "185432167890123456", "seed": "Niffelheim", "score": 680, "code": "Snap=h:87/90|s:150/150|f:SerpentStew,MisthareSupreme,MushroomOmelette|sk:Swords:42,Run:38,Jump:22,Sneak:11|eq:R=SwordBronze,L=ShieldBronze,H=HelmetTrollLeather,C=ArmorTrollLeatherChest,G=ArmorTrollLeatherLegs|kd:Boar:12/3,Neck:8/1,Greydwarf:5/2" }
-```
-
----
-
-**Path update** — sent every **30 seconds** (same cadence as standings), only when new points exist:
+Each event in the `code` string follows this pattern:
 
 ```
-Path=<t>:<x>,<y>,<z>;<t>:<x>,<y>,<z>;...
+<tag>=<secs>@<x>,<y>,<z>[|<extra>];
 ```
 
-- `t` — seconds elapsed since hunt start (integer)
-- `x`, `y`, `z` — player world position rounded to nearest integer
-- Points are sampled every **8 seconds**
-- Only unsent points are included (batched incrementally)
+- `tag` — single letter identifying the event type (see table below)
+- `secs` — seconds elapsed since tournament `startAt` (integer)
+- `x,y,z` — world position rounded to nearest integer
+- `extra` — optional, pipe-delimited payload specific to the event type
+- `;` — event separator; multiple events concatenated in one `code` string
 
----
+#### Tag reference
 
-**Player snapshot** — sent every **10 minutes**:
+| Tag | Event | `extra` | Flush |
+|-----|-------|---------|-------|
+| `F` | First real input after landing | *(none)* | No |
+| `W` | Waypoint (movement sample) | *(none)* | No |
+| `P` | Player snapshot | `h:cur/max\|s:cur/max[\|f:...]\|sk:...]\|eq:...]\|kd:...]` | No |
+| `J` | Path jump (portal or respawn) | `Portal`, `Portal=<name>`, or `Respawn` | No |
+| `T` | Trophy picked up | Mob name (Trophy prefix stripped) + optional bonuses, e.g. `Neck` or `Neck\|BonusMeadows` or `Fader\|BonusAshlands\|BonusAll\|BonusTime=840` | **Yes** |
+| `D` | Penalty: death | *(none)* | **Yes** |
+| `L` | Penalty: logout | *(none)* | **Yes** |
+| `S` | Penalty: `/slashdie` | *(none)* | **Yes** |
 
-```
-Snap=h:<cur>/<max>|s:<cur>/<max>[|f:<food1>,<food2>,...][|sk:<Skill>:<level>,...][|eq:<slot>=<item>,...][|kd:<enemy>:<kills>/<trophies>,...]
-```
+**Flush = Yes** means the batch is sent immediately when this event occurs rather than waiting for the 30-second cadence.
+
+#### `W` waypoint sampling
+
+A coroutine fires every **5 seconds** and records a `W` event if the player has moved at least **10 metres** from the most recently recorded position (any tag, not just `W`). This means trophy pickups, deaths, portal uses, and snapshots all satisfy the distance check — `W` events only fill in the gaps between those.
+
+The result is a continuous, dense position trace at roughly 10m resolution. All event tags share the same `__m_pendingEvents` list in chronological order, so the server sees a single interleaved stream.
+
+#### Why `J` events matter for reconstructing the path
+
+Without an explicit jump marker, a sudden position discontinuity in the `W` stream is ambiguous — it could be a portal, a death respawn, or simply a gap in recording. `J` events resolve this:
+
+- **Initial spawn** — the first `F` event records the landing position. There is no preceding `W` history, so no jump is implied; the path simply starts here.
+- **Portal use** — a `J|Portal` (or `J|Portal=<name>`) is inserted at the exit position *immediately* when the teleport fires, before the next `W` sample. The server can draw a line from the last pre-portal `W` to the portal entry, then restart the path at the `J` position.
+- **Death respawn** — a `J|Respawn` is inserted at the spawn point when `OnSpawned` fires and `__m_firstInputDetected` is already true (meaning this is not the initial spawn). The `D` event at the moment of death provides the position where the player died; the `J|Respawn` provides the position where they wake up. The gap between them represents the respawn teleport.
+
+Without `J`, the path would show a straight line jumping across the map between two `W` samples, making it impossible to distinguish legitimate fast travel from suspicious position changes.
+
+#### Deduplication (applied before recording)
+
+- `T`: first occurrence per unique trophy name only
+- `D`, `L`, `S`: per unique position (within 5 units) — prevents double-counting rapid re-fires
+- `J`: no deduplication — every portal use and respawn is always recorded
+- `F`: once per session
+- `W`: implicit deduplication via the 10m distance threshold
+
+#### `P` snapshot extra fields
 
 | Section | Format | Description |
 |---------|--------|-------------|
-| `h`     | `cur/max` | Current and max health (rounded) |
-| `s`     | `cur/max` | Current and max stamina (rounded) |
-| `f`     | `item,item,...` | Active food items by prefab name (omitted if none) |
-| `sk`    | `Skill:level,...` | All skills with level ≥ 1 |
+| `h`     | `cur/max` | Health (rounded) |
+| `s`     | `cur/max` | Stamina (rounded) |
+| `f`     | `item,item,...` | Active food items (omitted if none) |
+| `sk`    | `Skill:level,...` | Skills with level ≥ 1 |
 | `eq`    | `slot=item,...` | Equipped items by slot (omitted if empty) |
-| `kd`    | `enemy:kills/trophies,...` | Kill and trophy drop counts for all enemies with ≥ 1 kill; "Trophy" prefix stripped from enemy names |
+| `kd`    | `enemy:kills/trophies,...` | Kill/drop counts; "Trophy" prefix stripped |
 
 Equipment slot keys: `R` = right hand, `L` = left hand, `H` = helmet, `C` = chest, `G` = legs, `S` = shoulder, `U` = utility
+
+P snapshots are sent every **5 minutes** and at end-of-tournament.
+
+#### Examples
+
+Trophy pickup (immediate flush):
+```json
+{ "id": "185432167890123456", "seed": "Niffelheim", "score": 340, "code": "T=125@203,31,14|Boar;" }
+```
+
+Trophy completing a biome (immediate flush):
+```json
+{ "id": "185432167890123456", "seed": "Niffelheim", "score": 680, "code": "T=240@203,31,14|Neck|BonusMeadows;" }
+```
+
+Final trophy with all bonuses (immediate flush):
+```json
+{ "id": "185432167890123456", "seed": "Niffelheim", "score": 5040, "code": "T=840@-1402,18,887|Bonemaw|BonusAshlands|BonusAll|BonusTime=840;" }
+```
+
+Death penalty (immediate flush):
+```json
+{ "id": "185432167890123456", "seed": "Niffelheim", "score": 290, "code": "D=180@88,22,-540;" }
+```
+
+Portal use followed by respawn in a 30-second batch:
+```json
+{ "id": "185432167890123456", "seed": "Niffelheim", "score": 680, "code": "J=300@142,32,-87|Portal=base;J=420@-312,45,201|Respawn;" }
+```
+
+Periodic batch with FirstInput, waypoints, and a snapshot:
+```json
+{ "id": "185432167890123456", "seed": "Niffelheim", "score": 0, "code": "F=5@0,32,0;W=10@14,32,18;W=15@28,32,35;W=20@44,31,52;P=305@450,25,800|h:87/90|s:150/150|f:SerpentStew|sk:Swords:42,Run:38|eq:R=SwordBronze,L=ShieldBronze|kd:Boar:12/3,Neck:8/1;" }
+```
+
+Death followed by respawn jump:
+```json
+{ "id": "185432167890123456", "seed": "Niffelheim", "score": 240, "code": "W=310@88,22,-540;D=312@88,22,-540;J=340@0,32,0|Respawn;" }
+```
 
 ---
 

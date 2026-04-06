@@ -29,7 +29,7 @@ namespace TrophyHuntMod
         public const string PluginName = "TrophyHuntMod";
 
 
-        public const string PluginVersion = "0.10.22";
+        public const string PluginVersion = "0.10.24";
         private readonly Harmony harmony = new Harmony(PluginGUID);
 
         // Configuration variables
@@ -357,7 +357,7 @@ namespace TrophyHuntMod
         static long __m_internalTimerElapsedSeconds = 0;
 
         const long UPDATE_STANDINGS_INTERVAL = 30;   // Update standings every 30 seconds
-        const long SNAPSHOT_INTERVAL = 10 * 60;      // Post player snapshot every 10 minutes
+        const long SNAPSHOT_INTERVAL = 5 * 60;       // Add player snapshot event every 5 minutes
 
         static bool __m_mapFilesPosted = false;       // true once we've attempted the map upload this session
         static bool __m_sentFinalData = false;        // true once the end-of-tournament final flush has fired
@@ -377,14 +377,14 @@ namespace TrophyHuntMod
         static int __m_slashDieCount = 0;
         static int __m_logoutCount = 0;
 
-        // Player Path
+        // Player Path / Event Tracking
         static bool __m_pathAddedToMinimap = false;                                // are we showing the path on the minimap?
         static List<Minimap.PinData> __m_pathPins = new List<Minimap.PinData>();   // keep track of the special pins we add to the minimap so we can remove them
-        static List<PathPoint> __m_playerPathData = new List<PathPoint>();          // timestamped player positions during the session
-        static bool __m_collectingPlayerPath = false;                               // are we actively asynchronously collecting the player position?
-        static float __m_playerPathCollectionInterval = 5.0f;                       // seconds between path samples
-        static float __m_minPathPlayerMoveDistance = 10.0f;                        // minimum distance moved before adding a new path point
-        static int __m_lastSentPathIndex = 0;                                       // index into __m_playerPathData of the first unsent point
+        static List<TrackEvent> __m_pendingEvents = new List<TrackEvent>();         // pending events waiting to be sent
+        static int __m_lastSentEventIndex = 0;                                      // index of first unsent event in __m_pendingEvents
+        static bool __m_collectingPlayerPath = false;
+        static float __m_playerPathCollectionInterval = 5.0f;
+        static float __m_minPathPlayerMoveDistance = 10.0f;
 
         // Trophy Pins
         public class TrophyPin
@@ -601,7 +601,7 @@ namespace TrophyHuntMod
             public List<THMSaveDataDropInfo> m_playerTrophyDropInfos = null;
             public List<THMSaveDataDropInfo> m_allTrophyDropInfos = null;
 
-            public List<PathPoint> m_playerPathData = null;
+            public List<TrackEvent> m_pendingEvents = null;
 
             public List<TrophyPin> m_trophyPins;
 
@@ -633,14 +633,15 @@ namespace TrophyHuntMod
             public List<PlayerEventLog> m_playerEventLog = null;
         }
 
-        // Compact format: "t:x,y,z;t:x,y,z;..."  t = seconds since hunt start, coords rounded to int
+        // Format per event: "<tag>=<secs>@<x>,<y>,<z>|<extra>;"
+        // F=FirstInput  P=Snapshot  J=Jump(portal/respawn)  T=Trophy  D=Death  L=Logout  S=SlashDie
         [Serializable]
-        public class PathPoint
+        public class TrackEvent
         {
-            public int t;
-            public int x;
-            public int y;
-            public int z;
+            public string tag;   // single-letter code
+            public int secs;     // seconds since tournament start
+            public int x, y, z; // world position (rounded)
+            public string extra; // optional extra data after the first |
         }
 
         static string GetPersistentDataKey()
@@ -702,8 +703,7 @@ namespace TrophyHuntMod
                 }
             }
 
-            // The /showpath path
-            saveData.m_playerPathData = __m_playerPathData;
+            saveData.m_pendingEvents = __m_pendingEvents;
 
             saveData.m_trophyPins = __m_trophyPins;
 
@@ -780,11 +780,8 @@ namespace TrophyHuntMod
 
             THMSaveData saveData = xmlSerializer.Deserialize(stream) as THMSaveData;
 
-            // The /showpath path
-            if (__m_playerPathData != null && saveData.m_playerPathData != null && __m_playerPathData.Count < saveData.m_playerPathData.Count)
-            {
-                __m_playerPathData = saveData.m_playerPathData;
-            }
+            if (saveData.m_pendingEvents != null && saveData.m_pendingEvents.Count > __m_pendingEvents.Count)
+                __m_pendingEvents = saveData.m_pendingEvents;
 
             // The trophy map pins
             if (__m_trophyPins != null)
@@ -1321,17 +1318,14 @@ namespace TrophyHuntMod
             {
                 __m_pathPins.Clear();
 
-                // Thin the display: only pin a point if it is at least this far from the last pinned point.
-                // All points are still recorded and sent to the server — this only affects what is drawn.
+                // Show all recorded positions as path markers (waypoints, events, snapshots)
                 const float PATH_DISPLAY_MIN_DISTANCE = 50.0f;
-
                 Vector3 lastPinned = Vector3.positiveInfinity;
-                foreach (PathPoint p in __m_playerPathData)
+                foreach (TrackEvent e in __m_pendingEvents)
                 {
-                    Vector3 pos = new Vector3(p.x, p.y, p.z);
+                    Vector3 pos = new Vector3(e.x, e.y, e.z);
                     if (Vector3.Distance(pos, lastPinned) < PATH_DISPLAY_MIN_DISTANCE)
                         continue;
-
                     lastPinned = pos;
                     Minimap.PinData newPin = Minimap.instance.AddPin(pos, Minimap.PinType.Icon3, "", save: false, isChecked: false);
                     __m_pathPins.Add(newPin);
@@ -1432,10 +1426,10 @@ namespace TrophyHuntMod
                 // Do initial update of all UI elements to the current state of the game
                 UpdateModUI(Player.m_localPlayer);
 
-                // Start collecting player position map pin data
                 ShowPlayerPath(false);
-                StopCollectingPlayerPath();
-                StartCollectingPlayerPath();
+                // If the player has already made their first input this session, this is a respawn
+                if (__m_firstInputDetected)
+                    AddTrackEvent("J", Player.m_localPlayer.transform.position, "Respawn");
 
                 if (GetGameMode() == TrophyGameMode.TrophyFiesta)
                 {
@@ -1458,6 +1452,7 @@ namespace TrophyHuntMod
                 PostStandingsRequest();
 
                 StartPeriodicTimer();
+                StartCollectingPlayerPath();
 
                 if (IsPacifist())
                 {
@@ -1656,9 +1651,9 @@ namespace TrophyHuntMod
             // Reset whether we've shown enemy deaths
             __m_invalidForTournamentPlay = false;
 
-            // Clear the map screen pin player location data
-            __m_playerPathData.Clear();
-            __m_lastSentPathIndex = 0;
+            __m_pendingEvents.Clear();
+            __m_lastSentEventIndex = 0;
+            __m_collectingPlayerPath = false;
             __m_mapFilesPosted = false;
             __m_sentFinalData = false;
             __m_firstInputDetected = false;
@@ -2002,32 +1997,20 @@ namespace TrophyHuntMod
                     {
                         PostStandingsRequest();
 
-                        int pathCount = __m_playerPathData.Count;
-                        if (pathCount > __m_lastSentPathIndex && CanPostToTracker())
-                        {
-                            PostTrackLogEntry("Path=" + SerializePathPoints(__m_lastSentPathIndex, pathCount), __m_playerCurrentScore);
-                            __m_lastSentPathIndex = pathCount;
-                        }
+                        FlushEventBatch();
                     }
 
                     if (__m_internalTimerElapsedSeconds % SNAPSHOT_INTERVAL == 0 && __m_internalTimerElapsedSeconds > 0)
                     {
-                        PostPlayerSnapshot();
+                        AddSnapshotEvent();
                     }
 
-                    // Final flush at tournament end — snapshot, remaining path points, and full log
+                    // Final flush at tournament end
                     if (!__m_sentFinalData && __m_tournamentEndTime != default && DateTime.Now >= __m_tournamentEndTime && CanPostToTracker(force: true))
                     {
                         __m_sentFinalData = true;
-
-                        PostPlayerSnapshot(force: true);
-
-                        int pathCount = __m_playerPathData.Count;
-                        if (pathCount > __m_lastSentPathIndex)
-                        {
-                            PostTrackLogEntry("Path=" + SerializePathPoints(__m_lastSentPathIndex, pathCount), __m_playerCurrentScore, force: true);
-                            __m_lastSentPathIndex = pathCount;
-                        }
+                        AddSnapshotEvent(force: true);
+                        FlushEventBatch(force: true);
                     }
 
                     __m_gameTimerElapsedSeconds++;
@@ -3125,55 +3108,59 @@ namespace TrophyHuntMod
             }
         }
 
-        // Player Path Collection
-        #region Player Path Collection
+        // Track Event helpers
+        static public void AddTrackEvent(string tag, Vector3 pos, string extra = null)
+        {
+            __m_pendingEvents.Add(new TrackEvent
+            {
+                tag  = tag,
+                secs = (int)(DateTime.UtcNow - __m_tournamentStartTime).TotalSeconds,
+                x    = Mathf.RoundToInt(pos.x),
+                y    = Mathf.RoundToInt(pos.y),
+                z    = Mathf.RoundToInt(pos.z),
+                extra = extra
+            });
+        }
 
         public static void StartCollectingPlayerPath()
         {
-            if (!__m_collectingPlayerPath)
-            {
-                __m_collectingPlayerPath = true;
-                __m_trophyHuntMod.StartCoroutine(CollectPlayerPath());
-            }
+            StopCollectingPlayerPath();
+            __m_collectingPlayerPath = true;
+            __m_trophyHuntMod.StartCoroutine(CollectPlayerPath());
         }
 
         public static void StopCollectingPlayerPath()
         {
-            //                Debug.Log("Stopping Player Path collection");
-
-            if (__m_collectingPlayerPath)
-            {
-                __m_trophyHuntMod.StopCoroutine(CollectPlayerPath());
-
-                __m_collectingPlayerPath = false;
-            }
+            __m_collectingPlayerPath = false;
         }
 
-        public static IEnumerator CollectPlayerPath()
+        static public IEnumerator CollectPlayerPath()
         {
-            if (Player.m_localPlayer != null)
+            Vector3 lastPos = Vector3.positiveInfinity;
+            while (__m_collectingPlayerPath)
             {
-                Vector3 lastRecordedPos = Vector3.positiveInfinity;
-                while (__m_collectingPlayerPath && Player.m_localPlayer != null)
+                yield return new WaitForSeconds(__m_playerPathCollectionInterval);
+                if (!__m_collectingPlayerPath) yield break;
+                Player player = Player.m_localPlayer;
+                if (player == null) continue;
+                if (!__m_firstInputDetected) continue;
+                if (!CanPostToTracker()) continue;
+                Vector3 pos = player.transform.position;
+                // Only record if the player has moved far enough from last recorded point
+                // (also considers positions already recorded via events)
+                Vector3 lastEventPos = lastPos;
+                if (__m_pendingEvents.Count > 0)
                 {
-                    Vector3 pos = Player.m_localPlayer.transform.position;
-                    if (Vector3.Distance(pos, lastRecordedPos) >= __m_minPathPlayerMoveDistance)
-                    {
-                        lastRecordedPos = pos;
-                        __m_playerPathData.Add(new PathPoint
-                        {
-                            t = (int)(DateTime.UtcNow - __m_tournamentStartTime).TotalSeconds,
-                            x = Mathf.RoundToInt(pos.x),
-                            y = Mathf.RoundToInt(pos.y),
-                            z = Mathf.RoundToInt(pos.z)
-                        });
-                    }
-
-                    yield return new WaitForSeconds(__m_playerPathCollectionInterval);
+                    TrackEvent last = __m_pendingEvents[__m_pendingEvents.Count - 1];
+                    lastEventPos = new Vector3(last.x, last.y, last.z);
+                }
+                if (Vector3.Distance(pos, lastEventPos) >= __m_minPathPlayerMoveDistance)
+                {
+                    AddTrackEvent("W", pos);
+                    lastPos = pos;
                 }
             }
         }
-        #endregion
 
         public static void AddTrophyPin(Vector3 position, string trophyName, bool big = false)
         {
@@ -3226,6 +3213,7 @@ namespace TrophyHuntMod
         public static void StopPeriodicTimer()
         {
             __m_trophyHuntMod.StopCoroutine(PeriodicTimer());
+            StopCollectingPlayerPath();
         }
 
         public static IEnumerator PeriodicTimer()
@@ -6185,14 +6173,16 @@ namespace TrophyHuntMod
                 return;
             }
 
-            // Penalty (Misc) events: allow multiples but deduplicate by position
+            // Portal events: always record — same portal can be used many times
+            // Penalty (Misc) events: deduplicate by position to avoid rapid double-fires
             // All other events (trophies, items, builds): first occurrence per unique name only
-            if (eventType == PlayerEventType.Misc)
+            bool isPortal = eventName == "Portal" || eventName.StartsWith("Portal:");
+            if (eventType == PlayerEventType.Misc && !isPortal)
             {
                 if (IsAlreadyLoggedAtPosition(eventName, eventPos))
                     return;
             }
-            else
+            else if (eventType != PlayerEventType.Misc)
             {
                 if (IsAlreadyLogged(eventName))
                     return;
@@ -6200,12 +6190,50 @@ namespace TrophyHuntMod
 
 //            Debug.LogWarning($"AddPlayerEvent() Logging Event: {eventType.ToString()}, {eventName}, {eventPos}");
 
-            // Add the event to our internal tracking log (store clean name, without bonus suffix)
+            // Add to internal event log for deduplication and minimap path display
             __m_playerEventLog.Add(new PlayerEventLog(eventType, eventName, eventPos, DateTime.UtcNow));
 
-            string codeBase = bonusSuffix != null ? eventName + "|" + bonusSuffix : eventName;
-            string code = codeBase + "@" + Mathf.RoundToInt(eventPos.x) + "," + Mathf.RoundToInt(eventPos.y) + "," + Mathf.RoundToInt(eventPos.z);
-            PostTrackLogEntry(code, __m_playerCurrentScore);
+            // Map to track event tag and extra
+            string tag;
+            string extra = null;
+
+            if (eventType == PlayerEventType.Trophy)
+            {
+                tag = "T";
+                // Strip "Trophy" prefix for the mob name; append bonuses pipe-delimited
+                string mobName = eventName.StartsWith("Trophy") ? eventName.Substring(6) : eventName;
+                extra = bonusSuffix != null ? mobName + "|" + bonusSuffix : mobName;
+            }
+            else
+            {
+                switch (eventName)
+                {
+                    case "FirstInput":     tag = "F"; break;
+                    case "PenaltyDeath":   tag = "D"; break;
+                    case "PenaltyLogout":  tag = "L"; break;
+                    case "PenaltySlashDie": tag = "S"; break;
+                    default:
+                        if (eventName == "Portal")
+                        {
+                            tag = "J"; extra = "Portal";
+                        }
+                        else if (eventName.StartsWith("Portal:"))
+                        {
+                            tag = "J"; extra = "Portal=" + eventName.Substring(7);
+                        }
+                        else
+                        {
+                            tag = "J"; extra = eventName;
+                        }
+                        break;
+                }
+            }
+
+            AddTrackEvent(tag, eventPos, extra);
+
+            // Scoring events flush immediately so the server gets the new score right away
+            if (tag == "T" || tag == "D" || tag == "L" || tag == "S")
+                FlushEventBatch();
         }
 
         static public bool CanPostToTracker(bool force = false)
@@ -6301,11 +6329,10 @@ namespace TrophyHuntMod
         }
 
         // Tracker Snapshot
-
-        // Format: Snap=h:cur/max|s:cur/max|f:Food1,Food2|sk:Swords:45,Run:55|eq:R=SwordBronze,L=ShieldBronze,...|kd:Boar:5/1,Neck:8/2,...
+        // Extra data for P events: h:cur/max|s:cur/max[|f:...][|sk:...][|eq:...][|kd:...]
         static private string SerializePlayerSnapshot(Player player)
         {
-            var sb = new System.Text.StringBuilder("Snap=");
+            var sb = new System.Text.StringBuilder();
 
             // Health
             sb.Append("h:").Append(Mathf.RoundToInt(player.GetHealth()))
@@ -6378,31 +6405,39 @@ namespace TrophyHuntMod
             return sb.ToString();
         }
 
-        public static void PostPlayerSnapshot(bool force = false)
+        public static void FlushEventBatch(bool force = false)
         {
-            if (!CanPostToTracker(force))
-                return;
-
-            Player player = Player.m_localPlayer;
-            if (player == null)
-                return;
-
-            PostTrackLogEntry(SerializePlayerSnapshot(player), __m_playerCurrentScore, force);
+            int count = __m_pendingEvents.Count;
+            if (count > __m_lastSentEventIndex && CanPostToTracker(force))
+            {
+                PostTrackLogEntry(SerializeEvents(__m_lastSentEventIndex, count), __m_playerCurrentScore, force);
+                __m_lastSentEventIndex = count;
+            }
         }
 
-        // Tracker Path
+        // Add a P (snapshot) event for the current player state and optionally flush
+        public static void AddSnapshotEvent(bool force = false)
+        {
+            Player player = Player.m_localPlayer;
+            if (player == null) return;
+            if (!CanPostToTracker(force)) return;
 
-        static private string SerializePathPoints(int fromIndex, int toIndex)
+            AddTrackEvent("P", player.transform.position, SerializePlayerSnapshot(player));
+        }
+
+        // Serialise a range of pending events into the code string
+        // Format per event: "<tag>=<secs>@<x>,<y>,<z>[|<extra>];"
+        static private string SerializeEvents(int fromIndex, int toIndex)
         {
             var sb = new System.Text.StringBuilder();
             for (int i = fromIndex; i < toIndex; i++)
             {
-                PathPoint p = __m_playerPathData[i];
-                if (sb.Length > 0) sb.Append(';');
-                sb.Append(p.t).Append(':')
-                  .Append(p.x).Append(',')
-                  .Append(p.y).Append(',')
-                  .Append(p.z);
+                TrackEvent e = __m_pendingEvents[i];
+                sb.Append(e.tag).Append('=').Append(e.secs)
+                  .Append('@').Append(e.x).Append(',').Append(e.y).Append(',').Append(e.z);
+                if (e.extra != null)
+                    sb.Append('|').Append(e.extra);
+                sb.Append(';');
             }
             return sb.ToString();
         }
@@ -7679,8 +7714,8 @@ namespace TrophyHuntMod
                 if (!CanPostToTracker())
                     return;
 
-                string tag = __instance.GetText();
-                string eventName = string.IsNullOrWhiteSpace(tag) ? "Portal" : "Portal:" + tag;
+                string portalTag = __instance.GetText();
+                string eventName = string.IsNullOrWhiteSpace(portalTag) ? "Portal" : "Portal:" + portalTag;
                 AddPlayerEvent(PlayerEventType.Misc, eventName, player.transform.position);
             }
         }
