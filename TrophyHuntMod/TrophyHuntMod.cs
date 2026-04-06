@@ -29,7 +29,7 @@ namespace TrophyHuntMod
         public const string PluginName = "TrophyHuntMod";
 
 
-        public const string PluginVersion = "0.10.24";
+        public const string PluginVersion = "0.10.25";
         private readonly Harmony harmony = new Harmony(PluginGUID);
 
         // Configuration variables
@@ -6155,17 +6155,6 @@ namespace TrophyHuntMod
             return trackedEvents.Contains(eventName);
         }
 
-        public static bool IsAlreadyLogged(string eventName)
-        {
-            return __m_playerEventLog.Find(x => x.eventName == eventName) != null;
-        }
-
-        // For penalty events: same event at the same position counts as a duplicate
-        public static bool IsAlreadyLoggedAtPosition(string eventName, Vector3 pos)
-        {
-            return __m_playerEventLog.Find(x => x.eventName == eventName && Vector3.Distance(x.eventPos, pos) < 5.0f) != null;
-        }
-
         public static void AddPlayerEvent(PlayerEventType eventType, string eventName, Vector3 eventPos, string bonusSuffix = null)
         {
             if (!IsLoggableEvent(eventType, eventName))
@@ -6173,24 +6162,15 @@ namespace TrophyHuntMod
                 return;
             }
 
-            // Portal events: always record — same portal can be used many times
-            // Penalty (Misc) events: deduplicate by position to avoid rapid double-fires
-            // All other events (trophies, items, builds): first occurrence per unique name only
-            bool isPortal = eventName == "Portal" || eventName.StartsWith("Portal:");
-            if (eventType == PlayerEventType.Misc && !isPortal)
+            // Trophies: only the first pickup counts toward score, skip duplicates
+            if (eventType == PlayerEventType.Trophy)
             {
-                if (IsAlreadyLoggedAtPosition(eventName, eventPos))
-                    return;
-            }
-            else if (eventType != PlayerEventType.Misc)
-            {
-                if (IsAlreadyLogged(eventName))
+                if (__m_playerEventLog.Find(x => x.eventName == eventName) != null)
                     return;
             }
 
 //            Debug.LogWarning($"AddPlayerEvent() Logging Event: {eventType.ToString()}, {eventName}, {eventPos}");
 
-            // Add to internal event log for deduplication and minimap path display
             __m_playerEventLog.Add(new PlayerEventLog(eventType, eventName, eventPos, DateTime.UtcNow));
 
             // Map to track event tag and extra

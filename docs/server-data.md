@@ -104,13 +104,11 @@ Without an explicit jump marker, a sudden position discontinuity in the `W` stre
 
 Without `J`, the path would show a straight line jumping across the map between two `W` samples, making it impossible to distinguish legitimate fast travel from suspicious position changes.
 
-#### Deduplication (applied before recording)
+#### Deduplication
 
-- `T`: first occurrence per unique trophy name only
-- `D`, `L`, `S`: per unique position (within 5 units) — prevents double-counting rapid re-fires
-- `J`: no deduplication — every portal use and respawn is always recorded
-- `F`: once per session
-- `W`: implicit deduplication via the 10m distance threshold
+- `T`: first occurrence per unique trophy name only — subsequent pickups of the same trophy are ignored because only the first counts toward score
+- All other events: no deduplication, every occurrence is recorded
+- `W`: implicit distance threshold (10m) suppresses redundant position noise
 
 #### `P` snapshot extra fields
 
