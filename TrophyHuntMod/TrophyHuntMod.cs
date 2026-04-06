@@ -29,7 +29,7 @@ namespace TrophyHuntMod
         public const string PluginName = "TrophyHuntMod";
 
 
-        public const string PluginVersion = "0.10.26";
+        public const string PluginVersion = "0.10.29";
         private readonly Harmony harmony = new Harmony(PluginGUID);
 
         // Configuration variables
@@ -1429,7 +1429,16 @@ namespace TrophyHuntMod
                 UpdateModUI(Player.m_localPlayer);
 
                 ShowPlayerPath(false);
-                // If the player has already made their first input this session, this is a respawn
+
+                // Commit any pending death — player chose to continue playing.
+                if (__m_pendingDeathRegistration)
+                {
+                    __m_pendingDeathRegistration = false;
+                    CalculateCurrentScore(Player.m_localPlayer);
+                    AddPlayerEvent(PlayerEventType.Misc, "PenaltyDeath", __m_pendingDeathPosition);
+                }
+
+                // Record respawn jump (skip on initial spawn before any input)
                 if (__m_firstInputDetected)
                     AddTrackEvent("J", Player.m_localPlayer.transform.position, "Respawn");
 
@@ -3251,13 +3260,10 @@ namespace TrophyHuntMod
                 float onFootDistance = GetTotalOnFootDistance(__instance);
                 //                    Debug.LogError($"Total on-foot distance moved: {onFootDistance}");
 
-                // CheatDeath: player quit within 3 seconds of dying (while paused or very quickly).
-                // Cancel the pending death and forgive the logout — this was a cheat-death escape, not a tactical logout.
-                if (__m_pendingDeathRegistration)
-                {
-                    __m_pendingDeathRegistration = false;
-                    return;
-                }
+                // If the player quits while on the death screen (before respawning), the death
+                // is forgiven — it only counts when they return and respawn. Normal logout
+                // penalty rules still apply.
+                __m_pendingDeathRegistration = false;
 
                 // If you've never logged out, and your total run/walk distance is less than the max grace distance, no penalty
                 if (__m_logoutCount < 1 && onFootDistance < LOGOUT_PENALTY_GRACE_DISTANCE)
@@ -6966,26 +6972,13 @@ namespace TrophyHuntMod
             static void Prefix(Player __instance)
             {
                 if (__instance == null) return;
-                // Record position now (transform will be gone after death), then start the
-                // CheatDeath window. WaitForSeconds uses scaled time, so the countdown
-                // freezes while the game is paused — quitting while paused cancels the death.
+                // Store the death position and set the pending flag.
+                // The D event fires on the next respawn — not here. If the player stays
+                // on the death screen indefinitely (paused or otherwise) and never respawns,
+                // the death never registers.
                 __m_pendingDeathPosition = __instance.transform.position;
                 __m_pendingDeathRegistration = true;
-                __m_trophyHuntMod.StartCoroutine(RegisterDeathAfterDelay());
             }
-        }
-
-        static IEnumerator RegisterDeathAfterDelay()
-        {
-            // Scaled time: countdown pauses when the game is paused (single-player).
-            // If the player quits within this window, Game_Logout_Patch clears the flag
-            // and forgives both the death and the logout (CheatDeath).
-            yield return new WaitForSeconds(3f);
-            if (!__m_pendingDeathRegistration) yield break;
-            __m_pendingDeathRegistration = false;
-            // Refresh score so the D event carries the post-death score.
-            CalculateCurrentScore(Player.m_localPlayer);
-            AddPlayerEvent(PlayerEventType.Misc, "PenaltyDeath", __m_pendingDeathPosition);
         }
 
         // Increase sailing speed
