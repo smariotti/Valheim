@@ -29,9 +29,7 @@ namespace TrophyHuntMod
         public const string PluginName = "TrophyHuntMod";
 
 
-        private const Boolean UPDATE_LEADERBOARD = false; // SET TO TRUE WHEN PTB IS LIVE
-
-        public const string PluginVersion = "0.10.19";
+        public const string PluginVersion = "0.10.29";
         private readonly Harmony harmony = new Harmony(PluginGUID);
 
         // Configuration variables
@@ -189,8 +187,6 @@ namespace TrophyHuntMod
             "the attlefieldsbay orfay ethay eatestgray ofyay eirthay arriorsway. Eadday to\n\n" +
             "the orldway, eythay ouldway ebay ornbay againyay...\n\n" +
             "... inyay Alheimvay.";
-
-        const string LEADERBOARD_URL = "https://valheim.help/api/trackhunt";
 
         const float LOGOUT_PENALTY_GRACE_DISTANCE = 50.0f;  // total distance you're allowed to walk/run from initial spawn and get a free logout to clear wet debuff
 
@@ -360,7 +356,12 @@ namespace TrophyHuntMod
         static bool __m_gameTimerCountdown = true;
         static long __m_internalTimerElapsedSeconds = 0;
 
-        const long UPDATE_STANDINGS_INTERVAL = 30;  // Update standings every 30 seconds
+        const long UPDATE_STANDINGS_INTERVAL = 30;   // Update standings every 30 seconds
+        const long SNAPSHOT_INTERVAL = 5 * 60;       // Add player snapshot event every 5 minutes
+
+        static bool __m_mapFilesPosted = false;       // true once we've attempted the map upload this session
+        static bool __m_sentFinalData = false;        // true once the end-of-tournament final flush has fired
+        static bool __m_firstInputDetected = false;   // true once the first real player input after landing is recorded
 
         // Trophy Display Settings
         static float __m_baseTrophyScale = 1.4f;
@@ -376,14 +377,16 @@ namespace TrophyHuntMod
         static int __m_slashDieCount = 0;
         static int __m_logoutCount = 0;
 
-        // Player Path
-        static bool __m_pathAddedToMinimap = false;                                // are we showing the path on the minimap? 
+        // Player Path / Event Tracking
+        static bool __m_pathAddedToMinimap = false;                                // are we showing the path on the minimap?
         static List<Minimap.PinData> __m_pathPins = new List<Minimap.PinData>();   // keep track of the special pins we add to the minimap so we can remove them
-        static List<Vector3> __m_playerPathData = new List<Vector3>();   // list of player positions during the session
-        static bool __m_collectingPlayerPath = false;                           // are we actively asynchronously collecting the player position?
-        static float __m_playerPathCollectionInterval = 8.0f;                   // seconds between checks to see if we can store the current player position
-        static float __m_minPathPlayerMoveDistance = 30.0f;                     // the min distance the player has to have moved to consider storing the new path position
-        static Vector3 __m_previousPlayerPos;                                   // last player position stored
+        static List<TrackEvent> __m_pendingEvents = new List<TrackEvent>();         // pending events waiting to be sent
+        static int __m_lastSentEventIndex = 0;                                      // index of first unsent event in __m_pendingEvents
+        static bool __m_collectingPlayerPath = false;
+        static float __m_playerPathCollectionInterval = 5.0f;
+        static float __m_minPathPlayerMoveDistance = 10.0f;
+        static bool __m_pendingDeathRegistration = false;
+        static Vector3 __m_pendingDeathPosition = Vector3.zero;
 
         // Trophy Pins
         public class TrophyPin
@@ -600,7 +603,7 @@ namespace TrophyHuntMod
             public List<THMSaveDataDropInfo> m_playerTrophyDropInfos = null;
             public List<THMSaveDataDropInfo> m_allTrophyDropInfos = null;
 
-            public List<Vector3> m_playerPathData = null;
+            public List<TrackEvent> m_pendingEvents = null;
 
             public List<TrophyPin> m_trophyPins;
 
@@ -630,6 +633,17 @@ namespace TrophyHuntMod
             public List<string> m_cookedFoods = null;
 
             public List<PlayerEventLog> m_playerEventLog = null;
+        }
+
+        // Format per event: "<tag>=<secs>@<x>,<y>,<z>|<extra>;"
+        // F=FirstInput  P=Snapshot  J=Jump(portal/respawn)  T=Trophy  D=Death  L=Logout  S=SlashDie
+        [Serializable]
+        public class TrackEvent
+        {
+            public string tag;   // single-letter code
+            public int secs;     // seconds since tournament start
+            public int x, y, z; // world position (rounded)
+            public string extra; // optional extra data after the first |
         }
 
         static string GetPersistentDataKey()
@@ -691,8 +705,7 @@ namespace TrophyHuntMod
                 }
             }
 
-            // The /showpath path
-            saveData.m_playerPathData = __m_playerPathData;
+            saveData.m_pendingEvents = __m_pendingEvents;
 
             saveData.m_trophyPins = __m_trophyPins;
 
@@ -769,11 +782,8 @@ namespace TrophyHuntMod
 
             THMSaveData saveData = xmlSerializer.Deserialize(stream) as THMSaveData;
 
-            // The /showpath path
-            if (__m_playerPathData != null && saveData.m_playerPathData != null && __m_playerPathData.Count < saveData.m_playerPathData.Count)
-            {
-                __m_playerPathData = saveData.m_playerPathData;
-            }
+            if (saveData.m_pendingEvents != null && saveData.m_pendingEvents.Count > __m_pendingEvents.Count)
+                __m_pendingEvents = saveData.m_pendingEvents;
 
             // The trophy map pins
             if (__m_trophyPins != null)
@@ -1310,11 +1320,16 @@ namespace TrophyHuntMod
             {
                 __m_pathPins.Clear();
 
-                foreach (Vector3 pathPos in __m_playerPathData)
+                // Show all recorded positions as path markers (waypoints, events, snapshots)
+                const float PATH_DISPLAY_MIN_DISTANCE = 50.0f;
+                Vector3 lastPinned = Vector3.positiveInfinity;
+                foreach (TrackEvent e in __m_pendingEvents)
                 {
-                    Minimap.PinType pinType = Minimap.PinType.Icon3;
-                    Minimap.PinData newPin = Minimap.instance.AddPin(pathPos, pinType, "", save: false, isChecked: false);
-
+                    Vector3 pos = new Vector3(e.x, e.y, e.z);
+                    if (Vector3.Distance(pos, lastPinned) < PATH_DISPLAY_MIN_DISTANCE)
+                        continue;
+                    lastPinned = pos;
+                    Minimap.PinData newPin = Minimap.instance.AddPin(pos, Minimap.PinType.Icon3, "", save: false, isChecked: false);
                     __m_pathPins.Add(newPin);
                 }
 
@@ -1413,10 +1428,19 @@ namespace TrophyHuntMod
                 // Do initial update of all UI elements to the current state of the game
                 UpdateModUI(Player.m_localPlayer);
 
-                // Start collecting player position map pin data
                 ShowPlayerPath(false);
-                StopCollectingPlayerPath();
-                StartCollectingPlayerPath();
+
+                // Commit any pending death — player chose to continue playing.
+                if (__m_pendingDeathRegistration)
+                {
+                    __m_pendingDeathRegistration = false;
+                    CalculateCurrentScore(Player.m_localPlayer);
+                    AddPlayerEvent(PlayerEventType.Misc, "PenaltyDeath", __m_pendingDeathPosition);
+                }
+
+                // Record respawn jump (skip on initial spawn before any input)
+                if (__m_firstInputDetected)
+                    AddTrackEvent("J", Player.m_localPlayer.transform.position, "Respawn");
 
                 if (GetGameMode() == TrophyGameMode.TrophyFiesta)
                 {
@@ -1439,6 +1463,7 @@ namespace TrophyHuntMod
                 PostStandingsRequest();
 
                 StartPeriodicTimer();
+                StartCollectingPlayerPath();
 
                 if (IsPacifist())
                 {
@@ -1481,6 +1506,32 @@ namespace TrophyHuntMod
                 {
                     player.UpdateKnownRecipesList();
                 }
+
+                if (!__m_firstInputDetected)
+                {
+                    __m_trophyHuntMod.StartCoroutine(WaitForFirstInput());
+                }
+            }
+        }
+
+        static public IEnumerator WaitForFirstInput()
+        {
+            Player player = Player.m_localPlayer;
+            if (player == null)
+                yield break;
+
+            // Wait until the fly-in intro is finished
+            while (player.m_intro)
+                yield return null;
+
+            // Now wait for the first real key/button/mouse input
+            while (!Input.anyKeyDown && player.GetMoveDir() == Vector3.zero)
+                yield return null;
+
+            if (!__m_firstInputDetected)
+            {
+                __m_firstInputDetected = true;
+                AddPlayerEvent(PlayerEventType.Misc, "FirstInput", player.transform.position);
             }
         }
 
@@ -1611,8 +1662,13 @@ namespace TrophyHuntMod
             // Reset whether we've shown enemy deaths
             __m_invalidForTournamentPlay = false;
 
-            // Clear the map screen pin player location data
-            __m_playerPathData.Clear();
+            __m_pendingEvents.Clear();
+            __m_lastSentEventIndex = 0;
+            __m_collectingPlayerPath = false;
+            __m_pendingDeathRegistration = false;
+            __m_mapFilesPosted = false;
+            __m_sentFinalData = false;
+            __m_firstInputDetected = false;
 
             // Clear the dropped trophies tracking data
             InitializeTrophyDropInfo();
@@ -1761,8 +1817,9 @@ namespace TrophyHuntMod
             // Called at the time when the trophies are all collected
             if (__m_tournamentStatus == TournamentStatus.Live)
             {
-                int minutesToHour = 60 - DateTime.Now.Minute;
-                __m_extraTimeScore = EXTRA_MINUTE_SCORE_VALUE * minutesToHour;// minutes until top of the hour
+                TimeSpan remaining = __m_tournamentEndTime - DateTime.Now;
+                int minutesRemaining = (int)remaining.TotalMinutes;
+                __m_extraTimeScore = minutesRemaining > 0 ? EXTRA_MINUTE_SCORE_VALUE * minutesRemaining : 0;
             }
             else
             {
@@ -1770,7 +1827,6 @@ namespace TrophyHuntMod
                 int minutesRemaining = totalMinutes - (int)__m_internalTimerElapsedSeconds / 60;
                 __m_extraTimeScore = EXTRA_MINUTE_SCORE_VALUE * minutesRemaining;
             }
-
         }
 
         static void BuildUIElements()
@@ -1952,6 +2008,21 @@ namespace TrophyHuntMod
                     if (__m_internalTimerElapsedSeconds % UPDATE_STANDINGS_INTERVAL == 0)
                     {
                         PostStandingsRequest();
+
+                        FlushEventBatch();
+                    }
+
+                    if (__m_internalTimerElapsedSeconds % SNAPSHOT_INTERVAL == 0 && __m_internalTimerElapsedSeconds > 0)
+                    {
+                        AddSnapshotEvent();
+                    }
+
+                    // Final flush at tournament end
+                    if (!__m_sentFinalData && __m_tournamentEndTime != default && DateTime.Now >= __m_tournamentEndTime && CanPostToTracker(force: true))
+                    {
+                        __m_sentFinalData = true;
+                        AddSnapshotEvent(force: true);
+                        FlushEventBatch(force: true);
                     }
 
                     __m_gameTimerElapsedSeconds++;
@@ -2575,6 +2646,38 @@ namespace TrophyHuntMod
             }
         }
 
+        // Calculates the player's current score and updates __m_deaths and __m_playerCurrentScore.
+        // Call this anywhere score is needed without triggering a full UI refresh.
+        public static int CalculateCurrentScore(Player player)
+        {
+            if (player == null) return __m_playerCurrentScore;
+
+            int score = 0;
+            if (GetGameMode() == TrophyGameMode.CulinarySaga)
+                score = CalculateCookingScore(player);
+            else if (GetGameMode() != TrophyGameMode.CasualSaga)
+                score = CalculateTrophyScore(player);
+
+            PlayerProfile profile = Game.instance?.GetPlayerProfile();
+            if (profile?.m_playerStats != null)
+            {
+                __m_deaths = (int)profile.m_playerStats[PlayerStatType.Deaths];
+                score += CalculateDeathPenalty();
+            }
+
+            if (!__m_ignoreLogouts)
+                score += CalculateLogoutPenalty();
+
+            if (GetGameMode() == TrophyGameMode.TrophyRush || GetGameMode() == TrophyGameMode.TrophyBlitz ||
+                GetGameMode() == TrophyGameMode.TrophyTrailblazer || GetGameMode() == TrophyGameMode.TrophyPacifist)
+                score += CalculateBiomeBonusScore(player);
+
+            score += __m_extraTimeScore;
+
+            __m_playerCurrentScore = score;
+            return score;
+        }
+
         public static void UpdateModUI(Player player)
         {
             // If there's no Hud yet, don't do anything here
@@ -2603,104 +2706,44 @@ namespace TrophyHuntMod
                 return;
             }
 
-            int score = 0;
+            // Enable trophy/cooking icons (UI only)
             if (GetGameMode() == TrophyGameMode.CulinarySaga)
-            {
                 EnableCookingIcons(player);
-
-                score = CalculateCookingScore(player);
-            }
             else if (GetGameMode() != TrophyGameMode.CasualSaga)
             {
                 EnableTrophyHuntIcons(player);
-
                 EnableBiomes(player);
-
-                score = CalculateTrophyScore(player);
             }
 
-            // Update the deaths text and subtract deaths from score
-            //
-            PlayerProfile profile = Game.instance.GetPlayerProfile();
-            if (profile != null)
+            int score = CalculateCurrentScore(player);
+
+            // Update deaths counter UI
+            if (__m_deathsTextElement)
             {
-                PlayerProfile.PlayerStats stats = profile.m_playerStats;
-                if (stats != null)
-                {
-                    __m_deaths = (int)stats[PlayerStatType.Deaths];
-
-                    //                        Debug.LogWarning($"Subtracting score for {__m_deaths} deaths.");
-
-                    score += CalculateDeathPenalty();
-
-                    if (__m_deathsTextElement)
-                    {
-                        // Update the UI element
-                        TMPro.TextMeshProUGUI deathsText = __m_deathsTextElement.GetComponent<TMPro.TextMeshProUGUI>();
-                        if (deathsText != null)
-                        {
-                            deathsText.SetText(__m_deaths.ToString());
-                        }
-                    }
-                }
+                TMPro.TextMeshProUGUI deathsText = __m_deathsTextElement.GetComponent<TMPro.TextMeshProUGUI>();
+                if (deathsText != null)
+                    deathsText.SetText(__m_deaths.ToString());
             }
 
-            // Subtract points for logouts
-            //                Debug.LogWarning($"Subtracting score for {__m_logoutCount} logouts.");
-            if (!__m_ignoreLogouts)
-            {
-                score += CalculateLogoutPenalty();
-            }
-
-            if (GetGameMode() == TrophyGameMode.TrophyRush || GetGameMode() == TrophyGameMode.TrophyBlitz || GetGameMode() == TrophyGameMode.TrophyTrailblazer || GetGameMode() == TrophyGameMode.TrophyPacifist)
-            {
-                score += CalculateBiomeBonusScore(player);
-            }
-
-            score += __m_extraTimeScore;
-
-
-            // Update the Score string
+            // Update score UI
             if (__m_scoreTextElement)
             {
                 if (GetGameMode() == TrophyGameMode.CasualSaga)
-                {
                     __m_scoreTextElement.GetComponent<TMPro.TextMeshProUGUI>().text = "Saga";
-                }
                 else
-                {
                     __m_scoreTextElement.GetComponent<TMPro.TextMeshProUGUI>().text = score.ToString();
-                }
             }
 
-            // Update the Logouts string
+            // Update logouts UI
             if (__m_relogsTextElement)
-            {
                 __m_relogsTextElement.GetComponent<TMPro.TextMeshProUGUI>().text = __m_logoutCount.ToString();
-            }
 
             if (IsPacifist())
             {
                 if (__m_allCharmedCharacters != null && __m_allCharmedCharacters.Count > 0)
-                {
                     ShowThrallsWindow(__m_thrallsWindowObject);
-                }
                 else
-                {
                     HideThrallsWindow();
-                }
-            }
-
-            __m_playerCurrentScore = score;
-
-            if (UPDATE_LEADERBOARD)
-            {
-                // Send the score to the web page
-                if (GetGameMode() != TrophyGameMode.CasualSaga)
-                {
-                    //SendScoreToLeaderboard(score);
-                    PostTrackHunt();
-                }
             }
         }
 
@@ -3002,24 +3045,20 @@ namespace TrophyHuntMod
 
                         UpdateModUI(player);
 
-                        AddPlayerEvent(PlayerEventType.Trophy, name, player.transform.position);
-
-                        AddTrophyPin(player.transform.position, name);
+                        // Detect any bonuses triggered by this trophy before logging, so they combine into one event
+                        string compositeBonusCode = null;
 
                         if (GetGameMode() == TrophyGameMode.TrophyRush || GetGameMode() == TrophyGameMode.TrophyBlitz || GetGameMode() == TrophyGameMode.TrophyTrailblazer || GetGameMode() == TrophyGameMode.TrophyPacifist)
                         {
-                            // Did we complete a biome bonus with this trophy?
                             Biome biome = Biome.Meadows;
                             if (UpdateBiomeBonusTrophies(name, ref biome))
                             {
                                 MessageHud.instance.ShowBiomeFoundMsg("Biome Bonus", playStinger: true);
-
-                                string bonusString = "Bonus" + biome.ToString();
                                 UpdateModUI(Player.m_localPlayer);
-                                AddPlayerEvent(PlayerEventType.Misc, bonusString, __instance.transform.position);
-                                Debug.LogError("BIOME BONUS: " + bonusString);
+                                Debug.LogError("BIOME BONUS: Bonus" + biome.ToString());
                                 player.Message(MessageHud.MessageType.TopLeft, "Biome Bonus: " + biome.ToString());
                                 FlashBiomeTrophies(name);
+                                compositeBonusCode = "Bonus" + biome.ToString();
                             }
                         }
 
@@ -3028,16 +3067,26 @@ namespace TrophyHuntMod
                             if (__m_trophyCache.Count == __m_trophyHuntData.Length && !__m_completedAllBiomeBonuses)
                             {
                                 MessageHud.instance.ShowBiomeFoundMsg("Odin is Pleased", playStinger: true);
-                                string bonusString = "BonusAll";
                                 if (GetGameMode() == TrophyGameMode.TrophyBlitz || GetGameMode() == TrophyGameMode.TrophyTrailblazer)
                                 {
                                     CalculateExtraTimeScore();
                                 }
                                 __m_completedAllBiomeBonuses = true;
                                 UpdateModUI(Player.m_localPlayer);
-                                AddPlayerEvent(PlayerEventType.Misc, bonusString, __instance.transform.position);
+
+                                string bonusAllPart = "BonusAll";
+                                if (GetGameMode() == TrophyGameMode.TrophyBlitz || GetGameMode() == TrophyGameMode.TrophyTrailblazer)
+                                    bonusAllPart += "|BonusTime:" + __m_extraTimeScore;
+
+                                compositeBonusCode = compositeBonusCode != null
+                                    ? compositeBonusCode + "|" + bonusAllPart
+                                    : bonusAllPart;
                             }
                         }
+
+                        AddPlayerEvent(PlayerEventType.Trophy, name, player.transform.position, compositeBonusCode);
+
+                        AddTrophyPin(player.transform.position, name);
 
                         if (MessageHud.instance)
                         {
@@ -3053,57 +3102,59 @@ namespace TrophyHuntMod
             }
         }
 
-        // Player Path Collection
-        #region Player Path Collection
+        // Track Event helpers
+        static public void AddTrackEvent(string tag, Vector3 pos, string extra = null)
+        {
+            __m_pendingEvents.Add(new TrackEvent
+            {
+                tag  = tag,
+                secs = (int)(DateTime.UtcNow - __m_tournamentStartTime).TotalSeconds,
+                x    = Mathf.RoundToInt(pos.x),
+                y    = Mathf.RoundToInt(pos.y),
+                z    = Mathf.RoundToInt(pos.z),
+                extra = extra
+            });
+        }
 
         public static void StartCollectingPlayerPath()
         {
-            if (!__m_collectingPlayerPath)
-            {
-                //                                    Debug.LogError("Starting Player Path collection");
-
-                //                   AddPlayerPathUI();
-
-                __m_previousPlayerPos = Player.m_localPlayer.transform.position;
-
-                __m_collectingPlayerPath = true;
-
-                __m_trophyHuntMod.StartCoroutine(CollectPlayerPath());
-            }
+            StopCollectingPlayerPath();
+            __m_collectingPlayerPath = true;
+            __m_trophyHuntMod.StartCoroutine(CollectPlayerPath());
         }
 
         public static void StopCollectingPlayerPath()
         {
-            //                Debug.Log("Stopping Player Path collection");
-
-            if (__m_collectingPlayerPath)
-            {
-                __m_trophyHuntMod.StopCoroutine(CollectPlayerPath());
-
-                __m_collectingPlayerPath = false;
-            }
+            __m_collectingPlayerPath = false;
         }
 
-        public static IEnumerator CollectPlayerPath()
+        static public IEnumerator CollectPlayerPath()
         {
-            if (Player.m_localPlayer != null)
+            Vector3 lastPos = Vector3.positiveInfinity;
+            while (__m_collectingPlayerPath)
             {
-                while (__m_collectingPlayerPath && Player.m_localPlayer != null)
+                yield return new WaitForSeconds(__m_playerPathCollectionInterval);
+                if (!__m_collectingPlayerPath) yield break;
+                Player player = Player.m_localPlayer;
+                if (player == null) continue;
+                if (!__m_firstInputDetected) continue;
+                if (!CanPostToTracker()) continue;
+                Vector3 pos = player.transform.position;
+                // Only record if the player has moved far enough from last recorded point
+                // (also considers positions already recorded via events)
+                Vector3 lastEventPos = lastPos;
+                if (__m_pendingEvents.Count > 0)
                 {
-                    Vector3 curPlayerPos = Player.m_localPlayer.transform.position;
-                    if (Vector3.Distance(curPlayerPos, __m_previousPlayerPos) > __m_minPathPlayerMoveDistance)
-                    {
-                        __m_playerPathData.Add(curPlayerPos);
-                        __m_previousPlayerPos = curPlayerPos;
-
-                        Debug.Log($"Collected player position at {curPlayerPos.ToString()}");
-                    }
-
-                    yield return new WaitForSeconds(__m_playerPathCollectionInterval);
+                    TrackEvent last = __m_pendingEvents[__m_pendingEvents.Count - 1];
+                    lastEventPos = new Vector3(last.x, last.y, last.z);
+                }
+                if (Vector3.Distance(pos, lastEventPos) >= __m_minPathPlayerMoveDistance)
+                {
+                    AddTrackEvent("W", pos);
+                    lastPos = pos;
                 }
             }
         }
-        #endregion
 
         public static void AddTrophyPin(Vector3 position, string trophyName, bool big = false)
         {
@@ -3156,124 +3207,17 @@ namespace TrophyHuntMod
         public static void StopPeriodicTimer()
         {
             __m_trophyHuntMod.StopCoroutine(PeriodicTimer());
+            StopCollectingPlayerPath();
         }
 
         public static IEnumerator PeriodicTimer()
         {
             if (Player.m_localPlayer != null)
             {
-                PostTrackLogs();
                 yield return new WaitForSeconds(UPDATE_STANDINGS_INTERVAL);
             }
         }
         #endregion
-
-        // Leaderboard
-        #region Leaderboard
-
-        [System.Serializable]
-        public class LeaderboardDataEx
-        {
-            public string event_name;
-            public string event_data;
-        }
-
-        [System.Serializable]
-        public class LeaderboardData
-        {
-            public string player_name;
-            //                public string player_id;
-            public int current_score;
-            public string session_id;
-            public string player_location;
-            public string trophies;
-            public int deaths;
-            public int logouts;
-            public string gamemode;
-            //                public LeaderboardDataEx[] extra = new LeaderboardDataEx[] { };
-        }
-
-        private static void SendScoreToLeaderboard(int score)
-        {
-            if (!__m_loggedInWithDiscord)
-            {
-                return;
-            }
-
-            if (__m_invalidForTournamentPlay)
-            {
-                Debug.Log("Invalid for Tournament Play, not sending score to Tracker.");
-
-                return;
-            }
-
-            string discordUser = __m_configDiscordUser.Value;
-            string discordId = __m_configDiscordId.Value;
-
-            string seed = WorldGenerator.instance.m_world.m_seedName;
-            string sessionId = seed.ToString();
-            string playerPos = Player.m_localPlayer.transform.position.ToString();
-            string trophyList = string.Join(", ", __m_trophyCache);
-
-            // Example data to send to the leaderboard
-            var leaderboardData = new LeaderboardData
-            {
-                player_name = discordId,
-                //                    player_id = discordId,
-                current_score = score,
-                session_id = sessionId,
-                player_location = playerPos,
-                trophies = trophyList,
-                deaths = __m_deaths,
-                logouts = __m_logoutCount,
-                gamemode = GetGameMode().ToString(),
-                //                    extra = new LeaderboardDataEx()
-            };
-            //LeaderboardDataEx extra = new LeaderboardDataEx();
-
-            //extra.event_name = "trophy_get";
-            //extra.event_data = "TrophyBoar";
-
-            //                leaderboardData.extra.AddItem(extra);
-
-            // Start the coroutine to post the data
-            __m_trophyHuntMod.StartCoroutine(PostLeaderboardDataCoroutine(LEADERBOARD_URL, leaderboardData));
-        }
-
-        private static IEnumerator PostLeaderboardDataCoroutine(string url, LeaderboardData data)
-        {
-            // Convert the data to JSON
-            string jsonData = JsonUtility.ToJson(data);
-
-            //                Debug.Log(jsonData);
-
-            // Create a UnityWebRequest for the POST operation
-            var request = new UnityWebRequest(url, "POST");
-            byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(jsonData);
-            request.uploadHandler = new UploadHandlerRaw(bodyRaw);
-            request.downloadHandler = new DownloadHandlerBuffer();
-            request.SetRequestHeader("Content-Type", "application/json");
-
-            //request.certificateHandler = new BypassCertificateHandler();
-
-            // Send the request and wait for a response
-            yield return request.SendWebRequest();
-
-            // Handle the response
-            if (request.result == UnityWebRequest.Result.Success)
-            {
-                //                    Debug.Log("Leaderboard POST successful! Response: " + request.downloadHandler.text);
-            }
-            else
-            {
-                Debug.LogError("Leaderboard POST failed: " + request.error);
-            }
-
-            //                Debug.Log("Leaderboard Response: " + request.error);
-            //                Debug.Log(request.downloadHandler.text);
-        }
-
-        #endregion Leaderboard
 
         // Logout Tracking
         #region Logout Handling
@@ -3315,6 +3259,11 @@ namespace TrophyHuntMod
 
                 float onFootDistance = GetTotalOnFootDistance(__instance);
                 //                    Debug.LogError($"Total on-foot distance moved: {onFootDistance}");
+
+                // If the player quits while on the death screen (before respawning), the death
+                // is forgiven — it only counts when they return and respawn. Normal logout
+                // penalty rules still apply.
+                __m_pendingDeathRegistration = false;
 
                 // If you've never logged out, and your total run/walk distance is less than the max grace distance, no penalty
                 if (__m_logoutCount < 1 && onFootDistance < LOGOUT_PENALTY_GRACE_DISTANCE)
@@ -5076,7 +5025,6 @@ namespace TrophyHuntMod
                         itemName += item.m_quality.ToString();
                     }
 
-                    AddPlayerEvent(PlayerEventType.Item, itemName, Player.m_localPlayer.transform.position);
                 }
             }
 
@@ -5231,7 +5179,6 @@ namespace TrophyHuntMod
                         itemName += quality.ToString();
                     }
 
-                    AddPlayerEvent(PlayerEventType.Item, itemName, Player.m_localPlayer.transform.position);
                 }
             }
         }
@@ -5410,7 +5357,7 @@ namespace TrophyHuntMod
                 {
                     //                        Debug.Log($"Player {__instance.GetPlayerName()} placed a building: {piece.m_name}");
 
-                    AddPlayerEvent(PlayerEventType.Build, piece.m_name, __instance.transform.position);
+                    //AddPlayerEvent(PlayerEventType.Build, piece.m_name, __instance.transform.position);
                 }
 
             }
@@ -6192,42 +6139,6 @@ namespace TrophyHuntMod
                     PlayerEventType.Trophy, null    // pass all trophy events (no whitelist)
                 },
                 {
-                    PlayerEventType.Build, new List<string>
-                    { 
-                        // Base pieces
-                        "$piece_workbench",
-                        
-                        // Plantables
-                        "$piece_sapling_turnip",
-                        "$piece_sapling_onion",
-
-                        // Misc
-                        "$piece_bonfire"
-                    }
-                },
-                {
-                    PlayerEventType.Item, new List<string>
-                    {
-                        // Wood types
-                        "RoundLog",
-                        "Finewood",
-                        "ElderBark",
-
-                        // Weapon types
-                        "SpearFlint",
-                        "SpearFlint2",
-                        "SpearFlint3",
-                        "SpearFlint4",
-
-                        // Armor types
-                        "ArmorTrollLeatherChest",
-                        "ArmorTrollLeatherChest2",
-                        "ArmorTrollLeatherChest3",
-                        "ArmorRootChest",
-                        "ArmorRootChest2",
-                    }
-                },
-                {
                     PlayerEventType.Misc, null      // pass all misc events, no whitelist
                 },
             };
@@ -6243,40 +6154,65 @@ namespace TrophyHuntMod
             return trackedEvents.Contains(eventName);
         }
 
-        public static bool IsAlreadyLogged(PlayerEventType eventType, string eventName)
+        public static void AddPlayerEvent(PlayerEventType eventType, string eventName, Vector3 eventPos, string bonusSuffix = null)
         {
-            PlayerEventLog existingEntry = __m_playerEventLog.Find(x => x.eventName == eventName);
-            if (existingEntry != null)
-            {
-                return true;
-            }
-
-            return false;
-        }
-
-        public static void AddPlayerEvent(PlayerEventType eventType, string eventName, Vector3 eventPos)
-        {
-
             if (!IsLoggableEvent(eventType, eventName))
             {
                 return;
             }
 
-            // Some events we only want to log the first time they occur
-            if (eventType != PlayerEventType.Trophy)
+            // Trophies: only the first pickup counts toward score, skip duplicates
+            if (eventType == PlayerEventType.Trophy)
             {
-                if (IsAlreadyLogged(eventType, eventName))
-                {
+                if (__m_playerEventLog.Find(x => x.eventName == eventName) != null)
                     return;
-                }
             }
 
 //            Debug.LogWarning($"AddPlayerEvent() Logging Event: {eventType.ToString()}, {eventName}, {eventPos}");
 
-            // Add the event to our internal tracking log
             __m_playerEventLog.Add(new PlayerEventLog(eventType, eventName, eventPos, DateTime.UtcNow));
 
-            PostTrackLogEntry(eventName, __m_playerCurrentScore);
+            // Map to track event tag and extra
+            string tag;
+            string extra = null;
+
+            if (eventType == PlayerEventType.Trophy)
+            {
+                tag = "T";
+                // Strip "Trophy" prefix for the mob name; append bonuses pipe-delimited
+                string mobName = eventName.StartsWith("Trophy") ? eventName.Substring(6) : eventName;
+                extra = bonusSuffix != null ? mobName + "|" + bonusSuffix : mobName;
+            }
+            else
+            {
+                switch (eventName)
+                {
+                    case "FirstInput":     tag = "F"; break;
+                    case "PenaltyDeath":   tag = "D"; break;
+                    case "PenaltyLogout":  tag = "L"; break;
+                    case "PenaltySlashDie": tag = "S"; break;
+                    default:
+                        if (eventName == "Portal")
+                        {
+                            tag = "J"; extra = "Portal";
+                        }
+                        else if (eventName.StartsWith("Portal:"))
+                        {
+                            tag = "J"; extra = "Portal=" + eventName.Substring(7);
+                        }
+                        else
+                        {
+                            tag = "J"; extra = eventName;
+                        }
+                        break;
+                }
+            }
+
+            AddTrackEvent(tag, eventPos, extra);
+
+            // Scoring events flush immediately so the server gets the new score right away
+            if (tag == "T" || tag == "D" || tag == "L" || tag == "S")
+                FlushEventBatch();
         }
 
         static public bool CanPostToTracker(bool force = false)
@@ -6325,43 +6261,7 @@ namespace TrophyHuntMod
             public string id;       // discord id
             public string seed;     // game seed
             public int score;       // Current score
-            public string code;     // event name
-                                    //                public string at;       // UTC time
-        }
-
-        // List of Logs update
-        [Serializable]
-        public class TrackLogs
-        {
-            public string id;
-            public string user;
-            public string seed;
-            public string mode;
-            public int score;
-            public List<TrackLogsElement> logs;
-        }
-
-        [Serializable]
-        public class TrackLogsElement
-        {
-            public string code;     // event name
-            public string at;
-        }
-
-
-        [Serializable]
-        public class TrackHunt
-        {
-            // List of Logs update
-            public string id;
-            public string user;
-            public string seed;
-            public string mode;
-            public int score;
-            public int deaths;
-            public int relogs;
-            public int slashdies;
-            public List<string> trophies;
+            public string code;     // event name (positional events append @x,y,z)
         }
 
         static public IEnumerator UnityPostRequest(string url, string json)
@@ -6384,44 +6284,9 @@ namespace TrophyHuntMod
 
         }
 
-        public static void PostTrackLogs(bool force = false)
+        public static void PostTrackLogEntry(string eventName, int score, bool force = false)
         {
             if (!CanPostToTracker(force))
-            {
-                return;
-            }
-
-            //            Debug.LogWarning($"PostTrackLogs(): { force }");
-
-            TrackLogs trackLogs = new TrackLogs();
-
-            trackLogs.id = __m_configDiscordId.Value;
-            trackLogs.user = __m_configDiscordUser.Value;
-            trackLogs.seed = __m_storedWorldSeed;
-            trackLogs.mode = GetGameMode().ToString();
-            trackLogs.score = __m_playerCurrentScore;
-            trackLogs.logs = new List<TrackLogsElement>();
-
-            foreach (PlayerEventLog logEntry in __m_playerEventLog)
-            {
-                TrackLogsElement elem = new TrackLogsElement();
-                elem.code = logEntry.eventName;
-                elem.at = logEntry.eventTime.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
-                trackLogs.logs.Add(elem);
-            }
-
-            string json = JsonConvert.SerializeObject(trackLogs);
-
-            //                            Debug.LogWarning(json);
-
-            string url = "https://valheim.help/api/track/logs";
-
-            __m_trophyHuntMod.StartCoroutine(UnityPostRequest(url, json));
-        }
-
-        public static void PostTrackLogEntry(string eventName, int score)
-        {
-            if (!CanPostToTracker())
                 return;
 
             //            Debug.LogWarning($"PostTrackLogEntry(): {eventName}, {score}");
@@ -6442,51 +6307,125 @@ namespace TrophyHuntMod
             __m_trophyHuntMod.StartCoroutine(UnityPostRequest(url, json));
         }
 
-        public static void PostTrackHunt()
+        // Tracker Snapshot
+        // Extra data for P events: h:cur/max|s:cur/max[|f:...][|sk:...][|eq:...][|kd:...]
+        static private string SerializePlayerSnapshot(Player player)
         {
-            if (__m_invalidForTournamentPlay)
+            var sb = new System.Text.StringBuilder();
+
+            // Health
+            sb.Append("h:").Append(Mathf.RoundToInt(player.GetHealth()))
+              .Append('/').Append(Mathf.RoundToInt(player.GetMaxHealth()));
+
+            // Stamina
+            sb.Append("|s:").Append(Mathf.RoundToInt(player.GetStamina()))
+              .Append('/').Append(Mathf.RoundToInt(player.GetMaxStamina()));
+
+            // Food (active items only)
+            if (player.m_foods != null && player.m_foods.Count > 0)
             {
-                return;
+                sb.Append("|f:");
+                bool first = true;
+                foreach (Player.Food food in player.m_foods)
+                {
+                    if (food?.m_item == null) continue;
+                    if (!first) sb.Append(',');
+                    sb.Append(food.m_item.m_dropPrefab?.name ?? food.m_item.m_shared?.m_name ?? "?");
+                    first = false;
+                }
             }
 
-            if (!__m_loggedInWithDiscord)
+            // Skills (non-zero only)
+            var skillData = player.GetSkills()?.m_skillData;
+            if (skillData != null)
             {
-                return;
+                bool first = true;
+                foreach (var kvp in skillData)
+                {
+                    int level = Mathf.RoundToInt(kvp.Value.m_level);
+                    if (level < 1) continue;
+                    if (first) { sb.Append("|sk:"); first = false; }
+                    else sb.Append(',');
+                    sb.Append(kvp.Key.ToString()).Append(':').Append(level);
+                }
             }
 
-            if (__m_tournamentStatus != TournamentStatus.Live)
+            // Equipment (non-empty slots only)
+            var slots = new (string key, ItemDrop.ItemData item)[]
             {
-                return;
+                ("R", player.m_rightItem),
+                ("L", player.m_leftItem),
+                ("H", player.m_helmetItem),
+                ("C", player.m_chestItem),
+                ("G", player.m_legItem),
+                ("S", player.m_shoulderItem),
+                ("U", player.m_utilityItem),
+            };
+            bool firstSlot = true;
+            foreach (var (key, item) in slots)
+            {
+                if (item == null) continue;
+                if (firstSlot) { sb.Append("|eq:"); firstSlot = false; }
+                else sb.Append(',');
+                sb.Append(key).Append('=').Append(item.m_dropPrefab?.name ?? item.m_shared?.m_name ?? "?");
             }
 
-            if (DateTime.Now > __m_tournamentEndTime)
+            // Kill/drop stats (non-zero kills, Trophy prefix stripped)
+            bool firstKd = true;
+            foreach (var kvp in __m_allTrophyDropInfo)
             {
-                return;
+                if (kvp.Value.m_numKilled == 0) continue;
+                if (firstKd) { sb.Append("|kd:"); firstKd = false; }
+                else sb.Append(',');
+                string name = kvp.Key.StartsWith("Trophy") ? kvp.Key.Substring(6) : kvp.Key;
+                sb.Append(name).Append(':').Append(kvp.Value.m_numKilled).Append('/').Append(kvp.Value.m_trophies);
             }
 
-            TrackHunt trackHunt = new TrackHunt();
+            return sb.ToString();
+        }
 
-            trackHunt.id = __m_configDiscordId.Value;
-            trackHunt.user = __m_configDiscordUser.Value;
-            trackHunt.seed = __m_storedWorldSeed;
-            trackHunt.mode = GetGameMode().ToString();
-            trackHunt.score = __m_playerCurrentScore;
-            trackHunt.trophies = __m_trophyCache.ToList();
-            trackHunt.deaths = __m_deaths;
-            trackHunt.slashdies = __m_slashDieCount;
-            trackHunt.relogs = __m_logoutCount;
+        public static void FlushEventBatch(bool force = false)
+        {
+            int count = __m_pendingEvents.Count;
+            if (count > __m_lastSentEventIndex && CanPostToTracker(force))
+            {
+                PostTrackLogEntry(SerializeEvents(__m_lastSentEventIndex, count), __m_playerCurrentScore, force);
+                __m_lastSentEventIndex = count;
+            }
+        }
 
-            string json = JsonConvert.SerializeObject(trackHunt);
+        // Add a P (snapshot) event for the current player state and optionally flush
+        public static void AddSnapshotEvent(bool force = false)
+        {
+            Player player = Player.m_localPlayer;
+            if (player == null) return;
+            if (!CanPostToTracker(force)) return;
 
-            string url = "https://valheim.help/api/track/hunt";
+            AddTrackEvent("P", player.transform.position, SerializePlayerSnapshot(player));
+        }
 
-            __m_trophyHuntMod.StartCoroutine(UnityPostRequest(url, json));
+        // Serialise a range of pending events into the code string
+        // Format per event: "<tag>=<secs>@<x>,<y>,<z>[|<extra>];"
+        static private string SerializeEvents(int fromIndex, int toIndex)
+        {
+            var sb = new System.Text.StringBuilder();
+            for (int i = fromIndex; i < toIndex; i++)
+            {
+                TrackEvent e = __m_pendingEvents[i];
+                sb.Append(e.tag).Append('=').Append(e.secs)
+                  .Append('@').Append(e.x).Append(',').Append(e.y).Append(',').Append(e.z);
+                if (e.extra != null)
+                    sb.Append('|').Append(e.extra);
+                sb.Append(';');
+            }
+            return sb.ToString();
         }
 
         // Tracker Standings
         static public TournamentStatus __m_tournamentStatus = TournamentStatus.NotRunning;
         static public string __m_tournamentName = "";
         static public string __m_tournamentMode = "";
+        static public DateTime __m_tournamentStartTime;
         static public DateTime __m_tournamentEndTime;
 
         public enum TournamentStatus
@@ -6528,8 +6467,8 @@ namespace TrophyHuntMod
             public string startAt = ""; // start time in UTC
             public string endAt = ""; // end time in UTC
             public int status = 0;
+            public bool mapLoaded = true; // false = no client has uploaded map tex caches yet
             public List<TrackStandingsPlayer> players = new List<TrackStandingsPlayer>();
-
         }
 
         public static IEnumerator UnityGetStandingsRequest(string uri)
@@ -6552,6 +6491,12 @@ namespace TrophyHuntMod
                     __m_tournamentMode = standings.mode;
 
                     __m_standingsElement.SetActive(__m_tournamentStatus != TournamentStatus.NotRunning);
+
+                    DateTime startTime;
+                    if (DateTime.TryParse(standings.startAt, out startTime))
+                    {
+                        __m_tournamentStartTime = startTime.ToUniversalTime();
+                    }
 
                     DateTime endTime;
                     if (DateTime.TryParse(standings.endAt, out endTime))
@@ -6578,9 +6523,13 @@ namespace TrophyHuntMod
                     //    Debug.LogWarning($" - {pi.score} - {pi.name}");
                     //}
 
+                    if (!standings.mapLoaded && !__m_mapFilesPosted)
+                    {
+                        __m_trophyHuntMod.StartCoroutine(PostMapFiles());
+                    }
+
                     if (__m_refreshLogsAndStandings)
                     {
-                        PostTrackLogs();
                         if (Player.m_localPlayer != null)
                         {
                             UpdateModUI(Player.m_localPlayer);
@@ -6619,7 +6568,7 @@ namespace TrophyHuntMod
                 return;
             }
 
-            string standingsUrl = "https://valhelp.azurewebsites.net/api/track/standings";
+            string standingsUrl = "https://valheim.help/api/track/standings";
 
             string seed = __m_storedWorldSeed;
             string mode = GetGameMode().ToString();
@@ -6628,6 +6577,112 @@ namespace TrophyHuntMod
             __m_trophyHuntMod.StartCoroutine(UnityGetStandingsRequest(url));
         }
 
+
+        // Map Tex Cache Upload
+
+        static public IEnumerator PostMapFiles()
+        {
+            __m_mapFilesPosted = true; // prevent concurrent attempts
+
+            if (!CanPostToTracker())
+                yield break;
+
+            // Derive the 3 tex cache paths from the world .db path.
+            // For local saves the files sit next to the .db in worlds_local/.
+            // For cloud saves GetDBPath() may point elsewhere; if the files aren't
+            // there we also check worlds/ and worlds_local/ under persistentDataPath.
+            string worldFileName = WorldGenerator.instance.m_world.m_fileName;
+            string dbPath = WorldGenerator.instance.m_world.GetDBPath();
+
+            string FindWorldBase()
+            {
+                // Candidate directories in priority order
+                string[] candidates = new string[]
+                {
+                    // 1. Wherever GetDBPath() points (handles local saves and most cases)
+                    System.IO.Path.GetDirectoryName(dbPath),
+                    // 2. worlds/ under persistentDataPath (cloud save local cache)
+                    System.IO.Path.Combine(Application.persistentDataPath, "worlds"),
+                    // 3. worlds_local/ under persistentDataPath (explicit local fallback)
+                    System.IO.Path.Combine(Application.persistentDataPath, "worlds_local"),
+                };
+
+                foreach (string dir in candidates)
+                {
+                    string candidate = System.IO.Path.Combine(dir, worldFileName);
+                    if (System.IO.File.Exists(candidate + "_heightTexCache") &&
+                        System.IO.File.Exists(candidate + "_mapTexCache") &&
+                        System.IO.File.Exists(candidate + "_forestMaskTexCache"))
+                    {
+                        return candidate;
+                    }
+                }
+                return null;
+            }
+
+            string worldBase = FindWorldBase();
+            if (worldBase == null)
+            {
+                Debug.LogError("TrophyHuntMod: Map tex cache files not found in any known location, skipping map upload.");
+                __m_mapFilesPosted = false; // allow retry next standings poll
+                yield break;
+            }
+
+            string heightPath = worldBase + "_heightTexCache";
+            string mapPath    = worldBase + "_mapTexCache";
+            string forestPath = worldBase + "_forestMaskTexCache";
+
+            byte[] heightBytes = System.IO.File.ReadAllBytes(heightPath);
+            byte[] mapBytes    = System.IO.File.ReadAllBytes(mapPath);
+            byte[] forestBytes = System.IO.File.ReadAllBytes(forestPath);
+
+            // Re-check standings immediately before uploading — first client to confirm mapLoaded=false wins
+            string standingsUrl = $"https://valheim.help/api/track/standings?seed={__m_storedWorldSeed}&mode={GetGameMode()}";
+            using (UnityWebRequest confirmRequest = UnityWebRequest.Get(standingsUrl))
+            {
+                yield return confirmRequest.SendWebRequest();
+
+                if (confirmRequest.result != UnityWebRequest.Result.Success)
+                {
+                    Debug.LogError("TrophyHuntMod: Map upload pre-check failed: " + confirmRequest.error);
+                    __m_mapFilesPosted = false;
+                    yield break;
+                }
+
+                TrackStandings latest = JsonConvert.DeserializeObject<TrackStandings>(confirmRequest.downloadHandler.text);
+                if (latest.mapLoaded)
+                {
+                    // Another client already uploaded while we were preparing — skip
+                    yield break;
+                }
+            }
+
+            // POST all 3 files as a single atomic multipart request
+            var form = new List<IMultipartFormSection>
+            {
+                new MultipartFormDataSection("id",   __m_configDiscordId.Value),
+                new MultipartFormDataSection("seed", __m_storedWorldSeed),
+                new MultipartFormDataSection("mode", GetGameMode().ToString()),
+                new MultipartFormFileSection("heightTex", heightBytes, "heightTexCache",     "application/octet-stream"),
+                new MultipartFormFileSection("mapTex",    mapBytes,    "mapTexCache",        "application/octet-stream"),
+                new MultipartFormFileSection("forestTex", forestBytes, "forestMaskTexCache", "application/octet-stream"),
+            };
+
+            using (UnityWebRequest uploadRequest = UnityWebRequest.Post("https://valheim.help/api/track/map", form))
+            {
+                yield return uploadRequest.SendWebRequest();
+
+                if (uploadRequest.result != UnityWebRequest.Result.Success)
+                {
+                    Debug.LogError("TrophyHuntMod: Map upload failed: " + uploadRequest.error);
+                    __m_mapFilesPosted = false; // allow retry
+                }
+                else
+                {
+                    Debug.Log("TrophyHuntMod: Map upload complete.");
+                }
+            }
+        }
 
         /* ------------------------------------------ */
 
@@ -6916,10 +6971,13 @@ namespace TrophyHuntMod
         {
             static void Prefix(Player __instance)
             {
-                if (__instance != null)
-                {
-                    AddPlayerEvent(PlayerEventType.Misc, "PenaltyDeath", __instance.transform.position);
-                }
+                if (__instance == null) return;
+                // Store the death position and set the pending flag.
+                // The D event fires on the next respawn — not here. If the player stays
+                // on the death screen indefinitely (paused or otherwise) and never respawns,
+                // the death never registers.
+                __m_pendingDeathPosition = __instance.transform.position;
+                __m_pendingDeathRegistration = true;
             }
         }
 
@@ -7624,6 +7682,23 @@ namespace TrophyHuntMod
                     //                    Debug.LogWarning($"Piece.DropResources(): name: {__instance.name} Pos: {pos}");
                     RemovePortalPin(pos);
                 }
+            }
+        }
+
+        [HarmonyPatch(typeof(TeleportWorld), nameof(TeleportWorld.Teleport))]
+        public static class TeleportWorld_Teleport_Patch
+        {
+            public static void Prefix(TeleportWorld __instance, Player player)
+            {
+                if (player != Player.m_localPlayer)
+                    return;
+
+                if (!CanPostToTracker())
+                    return;
+
+                string portalTag = __instance.GetText();
+                string eventName = string.IsNullOrWhiteSpace(portalTag) ? "Portal" : "Portal:" + portalTag;
+                AddPlayerEvent(PlayerEventType.Misc, eventName, player.transform.position);
             }
         }
 

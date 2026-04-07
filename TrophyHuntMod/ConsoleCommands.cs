@@ -149,7 +149,7 @@ namespace TrophyHuntMod
                     PrintToConsole("'showpath' console command can only be used in-game.");
                 }
 
-                ShowPlayerPath(Player.m_localPlayer);
+                ShowPlayerPath(true);
             });
 
             ConsoleCommand showBossesCommand = new ConsoleCommand("showbosses", "Show all potential boss locations", delegate (ConsoleEventArgs args)
