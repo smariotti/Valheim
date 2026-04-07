@@ -1,4 +1,4 @@
-# TrophyHuntMod
+﻿# TrophyHuntMod
 
 This is a BepInEx mod for Valheim for the Valheim Trophy Hunt that displays discovered/undiscovered trophies at the bottom edge of the screen along with a computed score for the Trophy Hunt based on current scoring rules. 
 
@@ -273,7 +273,24 @@ You can learn more on the Valheim Speedrun Discord channel here: https://discord
 You can find the github at: https://github.com/smariotti/Valheim/tree/master/TrophyHuntMod
 
 
+
 ## Change Log
+
+v0.10.19
+- New tracking endpoint — replaces bulk `/api/track/logs` with per-event `POST /api/track/log`; world position embedded as `@x,y,z` suffix in the `code` field
+- Bonus events combined — `BonusBiome`, `BonusAll`, and `BonusTime` are pipe-delimited into a single event on the triggering trophy (e.g. `TrophyNeck|BonusMeadows@203,31,14`)
+- FirstInput event — fires once after the fly-in cinematic ends on first key/move input
+- Portal events — `Portal` or `Portal:`, deduplicated by position (5 m radius)
+- Map upload — `POST /api/track/map` sends 3 terrain tex cache files atomically; first-client-wins race guard; fallback path search covers cloud saves
+- Player snapshots — `Snap=` payload sent every 10 min
+- Path batching — `Path=` timestamped points (seconds since tournament start) sent every 30 s
+- Final flush fix — `force=true` threads through `PostPlayerSnapshot` and `PostTrackLogEntry` so end-of-tournament snapshot sends even if player is dead at `endAt`
+- Path collection — interval 8 s → 5 s; distance threshold restored at 10 m
+- Path display — pins thinned to 50 m spacing to reduce minimap clutter
+- CalculateExtraTimeScore — fixed to use `tournamentEndTime` instead of minutes-to-top-of-hour
+- Cleanup — removed Item/Build events, old leaderboard code, and `/api/track/logs` endpoint
+- Docs — added `docs/server-data.md` (full API reference) and `docs/showalltrophystats.md`
+
 v0.10.18
 - Trophy Pacifist
   - Adjusted world generation location placement to be slightly less dense
