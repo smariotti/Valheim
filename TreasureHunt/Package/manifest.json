@@ -1,0 +1,9 @@
+﻿{
+    "name": "SeasonheimMod",
+    "description": "BepInEx mod that implements Emma The Potato's Treasure Hunt scoring.",
+    "version_number": "0.1.0",
+    "website_url": "https://github.com/smariotti/Valheim",
+    "dependencies": [
+        "denikson-BepInExPack_Valheim-5.4.2202"
+    ]
+}

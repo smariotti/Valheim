@@ -38,6 +38,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ValheimSpoutCamera", "Spout
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RafTris", "RafTris\RafTris.csproj", "{7C5516AD-CD95-491D-8C48-A6EE09938F63}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TreasureHunt", "TreasureHunt\TreasureHunt.csproj", "{6FA0DF2A-9B85-4939-B75F-BAE77F59B517}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -96,6 +98,10 @@ Global
 		{7C5516AD-CD95-491D-8C48-A6EE09938F63}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{7C5516AD-CD95-491D-8C48-A6EE09938F63}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{7C5516AD-CD95-491D-8C48-A6EE09938F63}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6FA0DF2A-9B85-4939-B75F-BAE77F59B517}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6FA0DF2A-9B85-4939-B75F-BAE77F59B517}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6FA0DF2A-9B85-4939-B75F-BAE77F59B517}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6FA0DF2A-9B85-4939-B75F-BAE77F59B517}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
