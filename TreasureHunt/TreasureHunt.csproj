@@ -109,12 +109,13 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="Package\icon.png" />
-    <Content Include="Package\plugins\Newtonsoft.Json.dll" />
-    <Content Include="Package\plugins\TrophyHuntMod.dll" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Package\manifest.json" />
     <None Include="Package\README.md" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Package\plugins\" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>

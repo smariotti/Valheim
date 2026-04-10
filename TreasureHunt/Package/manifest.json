@@ -1,7 +1,7 @@
 ﻿{
     "name": "SeasonheimMod",
-    "description": "BepInEx mod that implements Emma The Potato's Treasure Hunt scoring.",
-    "version_number": "0.1.0",
+    "description": "Collect trophies, 5 points each. Trophies display at the bottom of the screen with the score just above the health bars..",
+    "version_number": "0.1.2",
     "website_url": "https://github.com/smariotti/Valheim",
     "dependencies": [
         "denikson-BepInExPack_Valheim-5.4.2202"

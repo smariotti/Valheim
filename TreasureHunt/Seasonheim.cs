@@ -28,7 +28,7 @@ namespace SeasonheimMod
         public const string PluginName = "SeasonheimMod";
 
 
-        public const string PluginVersion = "0.1.0";
+        public const string PluginVersion = "0.1.2";
         private readonly Harmony harmony = new Harmony(PluginGUID);
 
         // Configuration variables
@@ -166,9 +166,9 @@ namespace SeasonheimMod
 
         // Trophy Display Settings
         static float __m_baseTrophyScale = 1.4f;
-        static float __m_userIconScale = 1.0f;
+        static float __m_userIconScale = 1.2f;
         static float __m_userTextScale = 1.0f;
-        static float __m_userTrophySpacing = 0.0f;
+        static float __m_userTrophySpacing = 1.0f;
 
         // Cache for detecting newly arrived trophies and flashing the new ones
         static List<string> __m_trophyCache = new List<string>();
@@ -208,7 +208,7 @@ namespace SeasonheimMod
             string modeString = "Unknown";
             switch (mode)
             {
-                case TrophyGameMode.Seasonheim2026: modeString = "<color=yellow>Seasonheim 2026</color>"; break;
+                case TrophyGameMode.Seasonheim2026: modeString = "<color=orange>Seasonheim 2026</color>"; break;
                 default:
                     return "Unknown";
             }
@@ -550,7 +550,7 @@ namespace SeasonheimMod
             __m_scoreBGElement = new GameObject("ScoreBG");
             __m_scoreBGElement.transform.SetParent(parentTransform);
 
-            Vector2 scorePos = new Vector2(50, 90);
+            Vector2 scorePos = new Vector2(100, 90);
             Vector2 scoreSize = new Vector2(300, 42);
 
             RectTransform bgTransform = __m_scoreBGElement.AddComponent<RectTransform>();
@@ -592,7 +592,7 @@ namespace SeasonheimMod
             tmText.raycastTarget = true;
             tmText.fontMaterial.EnableKeyword("OUTLINE_ON");
             tmText.outlineColor = Color.black;
-            tmText.outlineWidth = 0.165f; // Adjust the thickness
+            tmText.outlineWidth = 0.12f; // Adjust the thickness
                                           //               text.enableAutoSizing = true;
             AddTooltipTriggersToScoreObject(scoreTextElement);
 
@@ -638,7 +638,7 @@ namespace SeasonheimMod
             // Add an Image component for Sprite
             UnityEngine.UI.Image iconImage = iconElement.AddComponent<UnityEngine.UI.Image>();
             iconImage.sprite = iconSprite;
-            iconImage.color = new Color(0.0f, 0.2f, 0.1f, 0.95f);
+            iconImage.color = new Color(0.1f, 0.1f, 0.1f, 0.95f);
             iconImage.raycastTarget = true;
 
             AddTooltipTriggersToTrophyIcon(iconElement);
@@ -877,7 +877,7 @@ namespace SeasonheimMod
                     curVelocity = curVelocity + curAccel * dt;
                     curPosition = curPosition + curVelocity * dt;
 
-                    float flashScale = 1 + (timeElapsed / flashDuration);
+                    float flashScale = 2 + (timeElapsed / flashDuration);
 
                     imageRect.localScale = new Vector3(__m_baseTrophyScale, __m_baseTrophyScale, __m_baseTrophyScale) * flashScale * __m_userIconScale;
                     imageRect.anchoredPosition = originalAnchoredPosition + (new Vector2(0, 200.0f) * curPosition);
@@ -1090,12 +1090,12 @@ namespace SeasonheimMod
         static GameObject __m_scoreTooltipObject = null;
         static GameObject __m_scoreTooltipBackground = null;
         static TextMeshProUGUI __m_scoreTooltipText;
-        static Vector2 __m_trophyHuntScoreTooltipWindowSize = new Vector2(240, 215);
+        static Vector2 __m_trophyHuntScoreTooltipWindowSize = new Vector2(240, 105);
         static Vector2 __m_scoreTooltipTextOffset = new Vector2(5, 2);
 
         static Dictionary<TrophyGameMode, Vector2> __toolTipSizes = new Dictionary<TrophyGameMode, Vector2>()
             {
-                { TrophyGameMode.Seasonheim2026, new Vector2(240, 215) },
+                { TrophyGameMode.Seasonheim2026, new Vector2(240, 105) },
             };
 
         public static void CreateScoreTooltip()
@@ -1236,9 +1236,8 @@ namespace SeasonheimMod
         static GameObject __m_trophyTooltipObject = null;
         static GameObject __m_trophyTooltipBackground = null;
         static TextMeshProUGUI __m_trophyTooltip;
-        static Vector2 __m_trophyTooltipWindowSize = new Vector2(240, 125);
+        static Vector2 __m_trophyTooltipWindowSize = new Vector2(240, 60);
         static Vector2 __m_trophyTooltipTextOffset = new Vector2(5, 2);
-        static Vector2 __m_trophyTooltipAllTrophyStatsWindowSize = new Vector2(240, 195);
 
         public static void CreateTrophyTooltip()
         {
@@ -1461,7 +1460,7 @@ namespace SeasonheimMod
 
                     foreach (var bundle in loadedBundles)
                     {
-                        string assetName = "Assets/UI/textures/small/trophies.png";
+                        string assetName = "Assets/UI/textures/small/texts_button.png"; // rotating crow
                         if (bundle.Contains(assetName))
                         {
                             var asset = bundle.LoadAsset(assetName);
