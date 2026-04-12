@@ -19,7 +19,7 @@ namespace DroneCam
     {
         public const string PluginGUID = "com.oathorse.xdc";
         public const string PluginName = "Xpert's Drone Cam";
-        public const string PluginVersion = "0.1.28";
+        public const string PluginVersion = "0.2.0";
 
         internal static ManualLogSource Log;
 
@@ -29,6 +29,8 @@ namespace DroneCam
         public static ConfigEntry<float> SmoothTime;
         public static ConfigEntry<float> TeleportDetectionDistance;
         public static ConfigEntry<float> ScrollSensitivity;
+        public static ConfigEntry<float> SelectPlayerConeAngle;
+        public static ConfigEntry<float> SelectEnemyConeAngle;
 
         private readonly Harmony _harmony = new Harmony(PluginGUID);
 
@@ -40,8 +42,10 @@ namespace DroneCam
             FlySpeedFast = Config.Bind("Camera", "FlySpeedFast", 40f, "Fast fly speed (units/sec).");
             RotationSpeed = Config.Bind("Camera", "RotationSpeed", 90f, "Keyboard rotation speed (degrees/sec).");
             SmoothTime = Config.Bind("Camera", "SmoothTime", 0.25f, "Movement smoothing time for free-fly, orbit and security.");
-            TeleportDetectionDistance = Config.Bind("Camera", "TeleportDetectionDistance", 50f, "Distance delta in one frame that triggers a drone snap on target teleport.");
+            TeleportDetectionDistance = Config.Bind("Camera", "TeleportDetectionDistance", 50f, "Distance delta that triggers portal follow detection.");
             ScrollSensitivity = Config.Bind("Camera", "ScrollSensitivity", 0.5f, "Mouse wheel sensitivity for distance/radius adjustment.");
+            SelectPlayerConeAngle = Config.Bind("Camera", "SelectPlayerConeAngle", 5f, "Half-angle of the cone in degrees when selecting a player with Left Click.");
+            SelectEnemyConeAngle = Config.Bind("Camera", "SelectEnemyConeAngle", 3f, "Half-angle of the cone in degrees when targeting an enemy with T.");
 
             RegisterConsoleCommands();
             _harmony.PatchAll();
@@ -102,6 +106,9 @@ namespace DroneCam
     internal static class Btn
     {
         public const string Toggle = "DroneCam_Toggle";
+        public const string FreeFlyToggle = "DroneCam_FreeFlyToggle";
+        public const string SelectPlayer = "DroneCam_SelectPlayer";
+        public const string SelectEnemy = "DroneCam_SelectEnemy";
         public const string Fast = "DroneCam_Fast";
         public const string Forward = "DroneCam_Forward";
         public const string Back = "DroneCam_Back";
@@ -131,6 +138,9 @@ namespace DroneCam
         static void Postfix(ZInput __instance)
         {
             __instance.AddButton(Btn.Toggle, "<Keyboard>/f8");
+            __instance.AddButton(Btn.FreeFlyToggle, "<Keyboard>/f7");
+            __instance.AddButton(Btn.SelectPlayer, "<Mouse>/leftButton");
+            __instance.AddButton(Btn.SelectEnemy, "<Keyboard>/t");
             __instance.AddButton(Btn.Fast, "<Keyboard>/leftShift");
             __instance.AddButton(Btn.Forward, "<Keyboard>/w");
             __instance.AddButton(Btn.Back, "<Keyboard>/s");
@@ -180,8 +190,8 @@ namespace DroneCam
         private Vector3 _anchorLastPos = Vector3.zero;
         private Vector3 _anchorLastKnownPos = Vector3.zero;
         private Vector3 _anchorLastRelOffset = Vector3.zero;
-        private bool _anchorWaiting = false;
         private Vector3 _anchorLastInfoPos = Vector3.zero;
+        private bool _anchorWaiting = false;
 
         // focal offset - ctrl+wheel slides look target up/down
         private float _focalOffsetY = 0f;
@@ -192,8 +202,22 @@ namespace DroneCam
         // last safe ground position for F8 emergency exit
         private Vector3 _lastSafeGroundPosition = Vector3.zero;
 
-        // teleport state - waiting for TeleportTo to complete
+        // teleport state
         private bool _waitingForTeleport = false;
+        public bool WaitingForTeleport => _waitingForTeleport;
+
+        // ── last tracking state for F7 free-fly toggle ────────────────────────
+        private DroneCamMode _lastTrackingMode = DroneCamMode.Disabled;
+        private string _lastTrackingTarget = null;
+        private float _lastFollowDistance = 5f;
+        private float _lastFollowHeight = 2f;
+        private float _lastFollowSmooth = 0.1f;
+        private float _lastOrbitRadius = 10f;
+        private float _lastOrbitSpeed = 30f;
+        private float _lastOrbitHeight = 4f;
+
+        // select player by pointing
+        private string _selectCandidateName = null;
 
         // ── follow params ─────────────────────────────────────────────────────
         private float _followDistance = 5f;
@@ -220,7 +244,6 @@ namespace DroneCam
         private GameObject _fakeAttachPoint;
         private bool _broadcastRealPosition = false;
         public bool BroadcastRealPosition => _broadcastRealPosition;
-
         private bool _targetWasSleeping = false;
 
         // ── hud state ─────────────────────────────────────────────────────────
@@ -251,6 +274,7 @@ namespace DroneCam
         {
             if (ZInput.instance == null) return;
 
+            // F8 - master toggle
             if (ZInput.GetButtonDown(Btn.Toggle))
             {
                 if (Mode == DroneCamMode.Disabled) EnterFreeSetup();
@@ -258,10 +282,54 @@ namespace DroneCam
                 return;
             }
 
+            // While teleporting let Valheim's UpdateTeleport run undisturbed
             if (_waitingForTeleport)
             {
-//                DroneCamPlugin.Log.LogInfo($"[XDC-DBG] Update: waiting for teleport, IsTeleporting={Player.m_localPlayer?.IsTeleporting()}");
+                if (Player.m_localPlayer != null &&
+                    Player.m_localPlayer.m_nview != null &&
+                    Player.m_localPlayer.m_nview.IsValid())
+                {
+                    Player.m_localPlayer.SetVisible(false);
+                    Player.m_localPlayer.m_body.position = transform.position;
+                }
                 PollTeleportComplete();
+                return;
+            }
+
+            // F7 - toggle between free-fly and last tracking mode
+            if (ZInput.GetButtonDown(Btn.FreeFlyToggle) && Mode != DroneCamMode.Disabled)
+            {
+                if (Mode == DroneCamMode.FreeSetup)
+                {
+                    if (_lastTrackingMode != DroneCamMode.Disabled && _lastTrackingTarget != null)
+                    {
+                        switch (_lastTrackingMode)
+                        {
+                            case DroneCamMode.Follow:
+                                SetFollow(_lastTrackingTarget, _lastFollowDistance, _lastFollowHeight, _lastFollowSmooth);
+                                break;
+                            case DroneCamMode.Orbit:
+                                SetOrbitPlayer(_lastTrackingTarget, _lastOrbitRadius, _lastOrbitSpeed, _lastOrbitHeight);
+                                break;
+                            case DroneCamMode.Security:
+                                SetSecurityPlayer(_lastTrackingTarget);
+                                break;
+                        }
+                    }
+                    else
+                    {
+                        Notify("No previous tracking mode to return to.");
+                    }
+                }
+                else
+                {
+                    SaveTrackingState();
+                    _dronePos = transform.position;
+                    _droneRot = transform.rotation;
+                    _smoothVelocity = Vector3.zero;
+                    Mode = DroneCamMode.FreeSetup;
+                    Notify("Free-fly - press F7 to return to tracking.");
+                }
                 return;
             }
 
@@ -277,6 +345,8 @@ namespace DroneCam
             {
                 HandleScrollWheel();
                 HandlePlayerCycle();
+                HandleSelectPlayer();
+                HandleSelectEnemy();
                 PollTargetSleepState();
             }
 
@@ -312,6 +382,23 @@ namespace DroneCam
             _streamCamera.Render();
         }
 
+        // ── tracking state save/restore ───────────────────────────────────────
+        private void SaveTrackingState()
+        {
+            if (Mode != DroneCamMode.Follow &&
+                Mode != DroneCamMode.Orbit &&
+                Mode != DroneCamMode.Security) return;
+
+            _lastTrackingMode = Mode;
+            _lastTrackingTarget = _anchor?.Name;
+            _lastFollowDistance = _followDistance;
+            _lastFollowHeight = _followHeightOffset.y;
+            _lastFollowSmooth = _followSmoothTime;
+            _lastOrbitRadius = _orbitRadius;
+            _lastOrbitSpeed = _orbitSpeed;
+            _lastOrbitHeight = _orbitHeight;
+        }
+
         // ── mode entry / exit ─────────────────────────────────────────────────
         public void EnterFreeSetup()
         {
@@ -345,7 +432,7 @@ namespace DroneCam
                     : Player.m_localPlayer.transform.position;
 
                 Player.m_localPlayer.m_body.position = safePos;
-                Player.m_localPlayer.m_body.linearVelocity = Vector3.zero;
+                Player.m_localPlayer.m_body.velocity = Vector3.zero;
                 Player.m_localPlayer.SetVisible(true);
                 ZNet.instance.SetReferencePosition(safePos);
             }
@@ -360,70 +447,27 @@ namespace DroneCam
             Notify(_hudHidden ? "HUD hidden." : "HUD visible.");
         }
 
-        // ── finders ───────────────────────────────────────────────────────────────
-        private static PlayerInfo FindPlayerInfo(string name)
-        {
-            foreach (PlayerInfo pi in ZNet.instance.m_players)
-                if (string.Equals(pi.m_name?.Trim(), name.Trim(), StringComparison.OrdinalIgnoreCase))
-                    return pi;
-            return default;
-        }
-
-        private static bool IsValidPlayerInfo(PlayerInfo pi)
-            => !string.IsNullOrEmpty(pi.m_name) && !pi.m_characterID.IsNone();
-
-        private static ZDO FindPlayerZdo(PlayerInfo pi)
-        {
-            if (pi.m_characterID.IsNone()) return null;
-            return ZDOMan.instance.GetZDO(pi.m_characterID);
-        }
-
-        private Vector3 GetPlayerRealtimePosition(PlayerInfo pi)
-        {
-            ZDO localZdo = Player.m_localPlayer?.m_nview?.GetZDO();
-            ZDO zdo = FindPlayerZdo(pi);
-
-            // Try Transform first - most accurate, updates every frame
-            Player p = FindPlayerByZdo(zdo);
-            if (p != null && p != Player.m_localPlayer)
-                return p.transform.position;
-
-            // Try ZDO - only if not local player's ZDO
-            if (zdo != null && zdo != localZdo)
-                return zdo.GetPosition();
-
-            // Fall back to periodic PlayerInfo position
-            if (pi.m_publicPosition && pi.m_position != Vector3.zero)
-                return pi.m_position;
-
-            // Last resort - last position drone was tracking
-            if (_anchorLastKnownPos != Vector3.zero)
-                return _anchorLastKnownPos;
-
-            return Vector3.zero;
-        }
-
-        private Vector3 GetPlayerInfoPosition(PlayerInfo pi)
-        {
-            ZDO localZdo = Player.m_localPlayer?.m_nview?.GetZDO();
-
-            // Periodic server-broadcast position - reliable at any distance
-            if (pi.m_publicPosition && pi.m_position != Vector3.zero)
-                return pi.m_position;
-
-            // ZDO fallback - only if not local player's ZDO
-            ZDO zdo = FindPlayerZdo(pi);
-            if (zdo != null && zdo != localZdo)
-                return zdo.GetPosition();
-
-            // Last resort - last position drone was tracking
-            if (_anchorLastKnownPos != Vector3.zero)
-                return _anchorLastKnownPos;
-
-            return Vector3.zero;
-        }
-
         // ── teleport handling ─────────────────────────────────────────────────
+        private void TravelToPosition(Vector3 targetPos)
+        {
+            if (Player.m_localPlayer == null) return;
+            DroneCamPlugin.Log.LogInfo($"[DroneCam] TravelToPosition: {targetPos}");
+            bool started = Player.m_localPlayer.TeleportTo(
+                targetPos, Player.m_localPlayer.transform.rotation, true);
+            if (started)
+            {
+                _waitingForTeleport = true;
+                Notify("Teleporting...");
+            }
+            else
+            {
+                DroneCamPlugin.Log.LogInfo("[DroneCam] TeleportTo on cooldown - snapping directly.");
+                SnapDroneTo(targetPos);
+                _anchorLastRelOffset = targetPos - _anchorLastKnownPos;
+                _anchorWaiting = false;
+            }
+        }
+
         private void TravelToPlayer(string playerName, Vector3 targetPos)
         {
             if (Player.m_localPlayer == null) return;
@@ -446,31 +490,12 @@ namespace DroneCam
                 _anchorWaiting = false;
             }
         }
-        private void TravelToPosition(Vector3 targetPos)
-        {
-            if (Player.m_localPlayer == null) return;
-            DroneCamPlugin.Log.LogInfo($"[DroneCam] TravelToPosition: {targetPos}");
-            bool started = Player.m_localPlayer.TeleportTo(
-                targetPos, Player.m_localPlayer.transform.rotation, true);
-            if (started)
-            {
-                _waitingForTeleport = true;
-                Notify("Teleporting...");
-            }
-            else
-            {
-                DroneCamPlugin.Log.LogInfo("[DroneCam] TeleportTo on cooldown - snapping directly.");
-                SnapDroneTo(targetPos);
-                _anchorLastRelOffset = targetPos - _anchorLastKnownPos;
-                _anchorWaiting = false;
-            }
-        }
+
         private void PollTeleportComplete()
         {
             if (Player.m_localPlayer == null) return;
             if (Player.m_localPlayer.IsTeleporting()) return;
 
-            // Immediately hide before any rendering
             Player.m_localPlayer.SetVisible(false);
             Player.m_localPlayer.m_body.position = transform.position;
 
@@ -479,15 +504,6 @@ namespace DroneCam
 
             if (_anchor == null) return;
 
-            // Drone landed at the pre-calculated offset position
-            // No lerp needed - we're already in the right place
-            Vector3 landedPos = Player.m_localPlayer.transform.position;
-            transform.position = landedPos;
-            _dronePos = landedPos;
-            _smoothVelocity = Vector3.zero;
-            _smoothVelRef = Vector3.zero;
-            Player.m_localPlayer.m_body.position = landedPos;
-
             PlayerInfo pi = FindPlayerInfo(_anchor.Name);
             Vector3 infoPos = GetPlayerInfoPosition(pi);
             Vector3 realtimePos = GetPlayerRealtimePosition(pi);
@@ -495,6 +511,13 @@ namespace DroneCam
 
             if (pos != Vector3.zero)
             {
+                Vector3 landedPos = Player.m_localPlayer.transform.position;
+                transform.position = landedPos;
+                _dronePos = landedPos;
+                _smoothVelocity = Vector3.zero;
+                _smoothVelRef = Vector3.zero;
+                Player.m_localPlayer.m_body.position = landedPos;
+
                 _anchorLastKnownPos = pos;
                 _anchorLastPos = pos;
                 _anchorLastInfoPos = infoPos != Vector3.zero ? infoPos : pos;
@@ -568,14 +591,16 @@ namespace DroneCam
             Notify("Awake - drone resumed.");
         }
 
-        public void PollTargetSleepState()
+        private void PollTargetSleepState()
         {
             if (_anchor == null || _anchor.Type != TargetType.Player) return;
+
             PlayerInfo pi = FindPlayerInfo(_anchor.Name);
             ZDO zdo = FindPlayerZdo(pi);
             if (zdo == null) return;
 
             bool isSleeping = zdo.GetBool(ZDOVars.s_inBed);
+
             if (isSleeping && !_targetWasSleeping)
             {
                 _targetWasSleeping = true;
@@ -625,7 +650,6 @@ namespace DroneCam
             bool modHeight = ZInput.GetButton(Btn.ModHeight);
             bool modSpeed = ZInput.GetButton(Btn.ModSpeed);
 
-            // alt+ctrl+wheel - orbit speed
             if (modHeight && modSpeed)
             {
                 if (Mode == DroneCamMode.Orbit)
@@ -633,7 +657,6 @@ namespace DroneCam
                 return;
             }
 
-            // ctrl+wheel - slide focal point up/down
             if (modSpeed)
             {
                 _focalOffsetY += delta;
@@ -685,6 +708,156 @@ namespace DroneCam
                 case DroneCamMode.Orbit: SetOrbitPlayer(nextName, _orbitRadius, _orbitSpeed, _orbitHeight); break;
                 case DroneCamMode.Security: SetSecurityPlayer(nextName); break;
             }
+        }
+
+        // ── select player by pointing ─────────────────────────────────────────
+        private void HandleSelectPlayer()
+        {
+            if (Chat.instance != null && Chat.instance.HasFocus()) return;
+            if (!ZInput.GetButtonDown(Btn.SelectPlayer)) return;
+            if (Mode == DroneCamMode.Disabled) return;
+
+            _selectCandidateName = null;
+            Player target = FindPlayerInLookDirection();
+
+            string name = target != null ? target.GetPlayerName() : _selectCandidateName;
+
+            if (string.IsNullOrEmpty(name))
+            {
+                Notify("No player found in look direction.");
+                return;
+            }
+
+            DroneCamPlugin.Log.LogInfo($"[DroneCam] SelectPlayer: targeting '{name}'");
+
+            DroneCamMode modeToUse = _lastTrackingMode != DroneCamMode.Disabled
+                ? _lastTrackingMode
+                : DroneCamMode.Orbit;
+
+            switch (modeToUse)
+            {
+                case DroneCamMode.Follow:
+                    SetFollow(name, _lastFollowDistance, _lastFollowHeight, _lastFollowSmooth);
+                    break;
+                case DroneCamMode.Orbit:
+                    SetOrbitPlayer(name, _lastOrbitRadius, _lastOrbitSpeed, _lastOrbitHeight);
+                    break;
+                case DroneCamMode.Security:
+                    SetSecurityPlayer(name);
+                    break;
+                default:
+                    SetOrbitPlayer(name, _lastOrbitRadius, _lastOrbitSpeed, _lastOrbitHeight);
+                    break;
+            }
+        }
+
+        private Player FindPlayerInLookDirection()
+        {
+            Player best = null;
+            float bestScore = float.MaxValue;
+            Vector3 camPos = transform.position;
+            Vector3 camFwd = transform.forward;
+            float maxAngle = DroneCamPlugin.SelectPlayerConeAngle.Value;
+            string localName = Player.m_localPlayer?.GetPlayerName();
+
+            foreach (PlayerInfo pi in ZNet.instance.m_players)
+            {
+                if (string.IsNullOrEmpty(pi.m_name)) continue;
+                if (string.Equals(pi.m_name, localName, StringComparison.OrdinalIgnoreCase)) continue;
+
+                Vector3 playerPos = GetPlayerRealtimePosition(pi);
+                if (playerPos == Vector3.zero) playerPos = GetPlayerInfoPosition(pi);
+                if (playerPos == Vector3.zero) continue;
+
+                Vector3 toPlayer = playerPos - camPos;
+                float dist = toPlayer.magnitude;
+                if (dist < 0.1f) continue;
+
+                float dot = Vector3.Dot(camFwd, toPlayer.normalized);
+                float angle = Mathf.Acos(Mathf.Clamp(dot, -1f, 1f)) * Mathf.Rad2Deg;
+
+                if (angle > maxAngle) continue;
+
+                float score = angle + dist * 0.01f;
+                if (score >= bestScore) continue;
+
+                bestScore = score;
+
+                ZDO zdo = FindPlayerZdo(pi);
+                Player p = FindPlayerByZdo(zdo);
+                if (p != null)
+                    best = p;
+                else
+                {
+                    best = null;
+                    _selectCandidateName = pi.m_name;
+                }
+            }
+
+            return best;
+        }
+
+        // ── select enemy by pointing ──────────────────────────────────────────
+        private void HandleSelectEnemy()
+        {
+            if (Chat.instance != null && Chat.instance.HasFocus()) return;
+            if (!ZInput.GetButtonDown(Btn.SelectEnemy)) return;
+            if (Mode == DroneCamMode.Disabled) return;
+
+            Character c = FindEnemyInLookDirection();
+
+            if (c == null)
+            {
+                if (_lookTarget != null)
+                    ClearEnemyTarget();
+                else
+                    Notify("No enemy found in look direction.");
+                return;
+            }
+
+            // Toggle off if already targeting this enemy
+            if (_lookTarget != null &&
+                string.Equals(_lookTarget.Name, c.GetHoverName(), StringComparison.OrdinalIgnoreCase) &&
+                _lookTarget.Transform == c.transform)
+            {
+                ClearEnemyTarget();
+                return;
+            }
+
+            _lookTarget = DroneCamTarget.ForEnemy(c);
+            Notify($"Enemy target: {c.GetHoverName()}");
+        }
+
+        private Character FindEnemyInLookDirection()
+        {
+            Character best = null;
+            float bestScore = float.MaxValue;
+            Vector3 camPos = transform.position;
+            Vector3 camFwd = transform.forward;
+            float maxAngle = DroneCamPlugin.SelectEnemyConeAngle.Value;
+
+            foreach (Character c in Character.GetAllCharacters())
+            {
+                if (c is Player) continue;
+                if (c.IsDead()) continue;
+
+                Vector3 toEnemy = c.transform.position - camPos;
+                float dist = toEnemy.magnitude;
+                if (dist < 0.1f) continue;
+
+                float dot = Vector3.Dot(camFwd, toEnemy.normalized);
+                float angle = Mathf.Acos(Mathf.Clamp(dot, -1f, 1f)) * Mathf.Rad2Deg;
+
+                if (angle > maxAngle) continue;
+
+                float score = angle + dist * 0.01f;
+                if (score >= bestScore) continue;
+
+                bestScore = score;
+                best = c;
+            }
+
+            return best;
         }
 
         // ── free-fly ──────────────────────────────────────────────────────────
@@ -750,17 +923,11 @@ namespace DroneCam
 
             Vector3 forward;
             if (_anchor.Transform != null)
-            {
                 forward = _anchor.Transform.forward;
-            }
             else
             {
-                // No Transform yet - derive forward from drone-to-target direction
-                // so desiredPos is always sensibly behind the target from the camera's perspective
                 Vector3 toTarget = targetPos - transform.position;
-                forward = toTarget.sqrMagnitude > 0.01f
-                    ? toTarget.normalized
-                    : Vector3.forward;
+                forward = toTarget.sqrMagnitude > 0.01f ? toTarget.normalized : Vector3.forward;
             }
 
             Vector3 desiredPos = targetPos + (-forward * _followDistance) + _followHeightOffset;
@@ -770,7 +937,7 @@ namespace DroneCam
 
             LookSmoothAt(GetLookTarget());
         }
-        
+
         // ── orbit ─────────────────────────────────────────────────────────────
         private void UpdateOrbit()
         {
@@ -804,6 +971,8 @@ namespace DroneCam
             transform.position = _securityPos;
             LookSmoothAt(GetLookTarget(), lerpSpeed: 3f);
         }
+
+        // ── target management ─────────────────────────────────────────────────
         private void RefreshTarget()
         {
             if (_anchor == null || _anchor.Type == TargetType.Position) return;
@@ -811,37 +980,23 @@ namespace DroneCam
             if (_anchor.Type == TargetType.Player)
             {
                 PlayerInfo pi = FindPlayerInfo(_anchor.Name);
-                if (!IsValidPlayerInfo(pi))
-                {
-                    DroneCamPlugin.Log.LogInfo($"[DroneCam] RefreshTarget: invalid PlayerInfo for '{_anchor.Name}'");
-                    return;
-                }
+                if (!IsValidPlayerInfo(pi)) return;
 
                 Vector3 infoPos = GetPlayerInfoPosition(pi);
                 Vector3 realtimePos = GetPlayerRealtimePosition(pi);
-                Vector3 actualPos = realtimePos != Vector3.zero ? realtimePos : infoPos;
+                Vector3 pos = realtimePos != Vector3.zero ? realtimePos : infoPos;
 
-//                DroneCamPlugin.Log.LogInfo($"[DroneCam] RefreshTarget: infoPos={infoPos} realtimePos={realtimePos} pos={actualPos} lastKnown={_anchorLastKnownPos} lastInfo={_anchorLastInfoPos}");
+                if (pos == Vector3.zero) return;
 
-                if (actualPos == Vector3.zero)
-                {
-                    DroneCamPlugin.Log.LogInfo("[DroneCam] RefreshTarget: pos is zero - skipping update");
-                    return;
-                }
-
-                // Use infoPos for the distance check - it reliably updates after portals
                 if (infoPos != Vector3.zero)
                 {
                     float dist = _anchorLastInfoPos != Vector3.zero
                         ? Vector3.Distance(infoPos, _anchorLastInfoPos)
                         : 0f;
 
-                    //                    DroneCamPlugin.Log.LogInfo($"[DroneCam] RefreshTarget: infoPos={infoPos} realtimePos={realtimePos} dist={dist}");
-
                     if (dist > DroneCamPlugin.TeleportDetectionDistance.Value)
                     {
                         DroneCamPlugin.Log.LogInfo($"[DroneCam] Portal detected - dist={dist}");
-
                         Vector3 droneDest = infoPos + _anchorLastRelOffset;
 
                         if (ZNetScene.instance.IsAreaReady(droneDest))
@@ -853,27 +1008,24 @@ namespace DroneCam
                         {
                             TravelToPosition(droneDest);
                         }
+
                         _anchorLastInfoPos = infoPos;
                         _anchorLastKnownPos = infoPos;
                         _anchorLastPos = infoPos;
                         return;
                     }
+
                     _anchorLastInfoPos = infoPos;
                 }
 
-                // Use realtimePos for smooth tracking
-                Vector3 pos = realtimePos != Vector3.zero ? realtimePos : infoPos;
-                if (pos == Vector3.zero) return;
-
-                // Update Transform for forward direction
                 ZDO zdo = FindPlayerZdo(pi);
                 Player p = FindPlayerByZdo(zdo);
                 if (p != null) _anchor.Transform = p.transform;
 
-                _anchorLastKnownPos = actualPos;
-                _anchorLastPos = actualPos;
+                _anchorLastKnownPos = pos;
+                _anchorLastPos = pos;
                 _anchorWaiting = false;
-                _anchorLastRelOffset = transform.position - actualPos;
+                _anchorLastRelOffset = transform.position - pos;
                 return;
             }
 
@@ -881,9 +1033,11 @@ namespace DroneCam
             if (_anchor.IsValid)
             {
                 Vector3 pos = _anchor.GetPosition();
+
                 if (_anchorLastPos != Vector3.zero &&
                     Vector3.Distance(pos, _anchorLastPos) > DroneCamPlugin.TeleportDetectionDistance.Value)
                     SnapRelativeToTarget(pos);
+
                 _anchorLastPos = pos;
                 _anchorLastKnownPos = pos;
                 _anchorLastRelOffset = transform.position - pos;
@@ -908,7 +1062,6 @@ namespace DroneCam
             SnapRelativeToTarget(c.transform.position);
             DroneCamPlugin.Log.LogInfo("[DroneCam] Enemy anchor reacquired.");
         }
-        private Vector3 _anchorRefPosCache = Vector3.zero;
 
         private Vector3 GetTargetCenter()
         {
@@ -916,16 +1069,9 @@ namespace DroneCam
 
             Vector3 base_;
             if (_anchor.Type == TargetType.Player)
-            {
-                if (_anchorWaiting && _anchorRefPosCache != Vector3.zero)
-                    base_ = _anchorRefPosCache;
-                else
-                    base_ = _anchorLastKnownPos != Vector3.zero
-                        ? _anchorLastKnownPos
-                        : transform.position;
-            }
+                base_ = _anchorLastKnownPos != Vector3.zero ? _anchorLastKnownPos : transform.position;
             else if (_anchor.IsValid)
-                base_ = _anchor.GetPosition(); // ← no longer writes _anchorLastKnownPos
+                base_ = _anchor.GetPosition();
             else
                 base_ = _anchorLastKnownPos;
 
@@ -1011,41 +1157,22 @@ namespace DroneCam
         }
 
         // ── finders ───────────────────────────────────────────────────────────
-        private static ZNetPeer FindPeerByName(string name)
+        private static PlayerInfo FindPlayerInfo(string name)
         {
-            if (string.IsNullOrEmpty(name)) return null;
-            string trimmed = name.Trim();
-            foreach (ZNetPeer peer in ZNet.instance.GetPeers())
-                if (string.Equals(peer.m_playerName?.Trim(), trimmed, StringComparison.OrdinalIgnoreCase))
-                    return peer;
-            return null;
+            if (string.IsNullOrEmpty(name)) return default;
+            foreach (PlayerInfo pi in ZNet.instance.m_players)
+                if (string.Equals(pi.m_name?.Trim(), name.Trim(), StringComparison.OrdinalIgnoreCase))
+                    return pi;
+            return default;
         }
 
-        private static ZDO FindPlayerZdoByName(string name)
+        private static bool IsValidPlayerInfo(PlayerInfo pi)
+            => !string.IsNullOrEmpty(pi.m_name) && !pi.m_characterID.IsNone();
+
+        private static ZDO FindPlayerZdo(PlayerInfo pi)
         {
-            ZNetPeer peer = FindPeerByName(name);
-            if (peer == null) return null;
-
-            // Primary path - use characterID if valid
-            if (!peer.m_characterID.IsNone())
-            {
-                ZDO zdo = ZDOMan.instance.GetZDO(peer.m_characterID);
-                if (zdo != null) return zdo;
-            }
-
-            // Fallback - scan all ZDOs for matching player name
-            // Used when m_characterID is temporarily None (portal transit, loading)
-            foreach (ZDO zdo in ZDOMan.instance.m_objectsByID.Values)
-            {
-                string zdoName = zdo.GetString(ZDOVars.s_playerName);
-                if (string.IsNullOrEmpty(zdoName)) continue;
-                if (string.Equals(zdoName.Trim(), name.Trim(), StringComparison.OrdinalIgnoreCase))
-                {
-                    return zdo;
-                }
-            }
-
-            return null;
+            if (pi.m_characterID.IsNone()) return null;
+            return ZDOMan.instance.GetZDO(pi.m_characterID);
         }
 
         private static Player FindPlayerByZdo(ZDO zdo)
@@ -1058,6 +1185,43 @@ namespace DroneCam
                     return p;
             }
             return null;
+        }
+
+        private Vector3 GetPlayerRealtimePosition(PlayerInfo pi)
+        {
+            ZDO localZdo = Player.m_localPlayer?.m_nview?.GetZDO();
+            ZDO zdo = FindPlayerZdo(pi);
+
+            Player p = FindPlayerByZdo(zdo);
+            if (p != null && p != Player.m_localPlayer)
+                return p.transform.position;
+
+            if (zdo != null && zdo != localZdo)
+                return zdo.GetPosition();
+
+            if (pi.m_publicPosition && pi.m_position != Vector3.zero)
+                return pi.m_position;
+
+            if (_anchorLastKnownPos != Vector3.zero)
+                return _anchorLastKnownPos;
+
+            return Vector3.zero;
+        }
+
+        private Vector3 GetPlayerInfoPosition(PlayerInfo pi)
+        {
+            if (pi.m_publicPosition && pi.m_position != Vector3.zero)
+                return pi.m_position;
+
+            ZDO localZdo = Player.m_localPlayer?.m_nview?.GetZDO();
+            ZDO zdo = FindPlayerZdo(pi);
+            if (zdo != null && zdo != localZdo)
+                return zdo.GetPosition();
+
+            if (_anchorLastKnownPos != Vector3.zero)
+                return _anchorLastKnownPos;
+
+            return Vector3.zero;
         }
 
         private static Character FindNearestCharacter(string name, Vector3 near)
@@ -1102,6 +1266,7 @@ namespace DroneCam
 
         public void SetFollow(string playerName, float distance, float heightOffset, float smoothTime)
         {
+            SaveTrackingState();
             PlayerInfo pi = FindPlayerInfo(playerName);
             if (!IsValidPlayerInfo(pi)) { Notify(PlayerNotFoundReason(playerName)); return; }
 
@@ -1149,16 +1314,12 @@ namespace DroneCam
 
         public void SetOrbitPlayer(string playerName, float radius, float speed, float height)
         {
+            SaveTrackingState();
             PlayerInfo pi = FindPlayerInfo(playerName);
             if (!IsValidPlayerInfo(pi)) { Notify(PlayerNotFoundReason(playerName)); return; }
 
-            // Use infoPos for the travel distance check - it's the authoritative
-            // server-broadcast position and won't be stale like a cached ZDO
             Vector3 infoPos = GetPlayerInfoPosition(pi);
             Vector3 realtimePos = GetPlayerRealtimePosition(pi);
-
-            // For travel decision, always use infoPos as it reflects true current location
-            // For initial camera placement, prefer realtimePos for accuracy
             Vector3 travelPos = infoPos != Vector3.zero ? infoPos : realtimePos;
             Vector3 pos = realtimePos != Vector3.zero ? realtimePos : infoPos;
 
@@ -1179,14 +1340,11 @@ namespace DroneCam
             EnterDroneMode();
             SetGameCameraEnabled(false);
 
-            // Use infoPos for the distance check so we never use a stale ZDO position
-            // to incorrectly conclude the player is nearby
             if (Vector3.Distance(transform.position, travelPos) > DroneCamPlugin.TeleportDetectionDistance.Value)
                 TravelToPlayer(playerName, travelPos);
             else
                 Notify($"Orbiting {playerName}");
         }
-
 
         public void SetOrbitEnemy(string enemyName, float radius, float speed, float height)
         {
@@ -1220,6 +1378,7 @@ namespace DroneCam
 
         public void SetSecurityPlayer(string playerName)
         {
+            SaveTrackingState();
             PlayerInfo pi = FindPlayerInfo(playerName);
             if (!IsValidPlayerInfo(pi)) { Notify(PlayerNotFoundReason(playerName)); return; }
 
@@ -1247,7 +1406,7 @@ namespace DroneCam
             else
                 Notify($"Security cam tracking {playerName}");
         }
-         
+
         public void SetSecurityPosition(Vector3 pos)
         {
             ResetTargetState();
@@ -1294,13 +1453,15 @@ namespace DroneCam
             PlayerInfo pi = FindPlayerInfo(_anchor.Name);
             if (!IsValidPlayerInfo(pi)) { Notify(PlayerNotFoundReason(_anchor.Name)); return; }
 
-            Vector3 realtimePos = GetPlayerRealtimePosition(pi);
             Vector3 infoPos = GetPlayerInfoPosition(pi);
+            Vector3 realtimePos = GetPlayerRealtimePosition(pi);
             Vector3 pos = realtimePos != Vector3.zero ? realtimePos : infoPos;
-            if (pos == Vector3.zero) { Notify($"Player '{_anchor.Name}' position unavailable."); return; }
+            Vector3 travelPos = infoPos != Vector3.zero ? infoPos : pos;
 
-            if (Vector3.Distance(transform.position, pos) > DroneCamPlugin.TeleportDetectionDistance.Value)
-                TravelToPlayer(_anchor.Name, pos);
+            if (travelPos == Vector3.zero) { Notify($"Player '{_anchor.Name}' position unavailable."); return; }
+
+            if (Vector3.Distance(transform.position, travelPos) > DroneCamPlugin.TeleportDetectionDistance.Value)
+                TravelToPlayer(_anchor.Name, travelPos);
             else
             {
                 SnapDroneTo(pos + _anchorLastRelOffset);
@@ -1324,12 +1485,11 @@ namespace DroneCam
 
         public static IEnumerable<string> GetPlayerNames()
         {
+            string localName = Player.m_localPlayer?.GetPlayerName();
             foreach (PlayerInfo pi in ZNet.instance.m_players)
             {
                 if (string.IsNullOrEmpty(pi.m_name)) continue;
-                // Skip local player
-//                if (pi.m_name.ToLower() == Player.m_localPlayer.m_name.ToLower()) continue;
-                if (pi.m_characterID == Player.m_localPlayer.GetZDOID()) continue;
+                if (string.Equals(pi.m_name.Trim(), localName, StringComparison.OrdinalIgnoreCase)) continue;
                 yield return pi.m_name.Trim();
             }
         }
@@ -1346,15 +1506,8 @@ namespace DroneCam
 
             SetupStreamCamera(protocol);
 
-            bool senderAttached = protocol == StreamProtocol.Spout
-                ? _spoutSender != null
-                : _ndiSender != null;
-
-            if (!senderAttached)
-            {
-                Notify($"Stream setup failed - Klak{protocol} not found. See log.");
-                return;
-            }
+            bool senderAttached = protocol == StreamProtocol.Spout ? _spoutSender != null : _ndiSender != null;
+            if (!senderAttached) { Notify($"Stream setup failed - Klak{protocol} not found. See log."); return; }
 
             _streamActive = true;
             Notify($"Streaming via {protocol} 'DroneCam' - {width}x{height}");
@@ -1400,10 +1553,8 @@ namespace DroneCam
             _streamTexture.Create();
             _streamCamera.targetTexture = _streamTexture;
 
-            if (protocol == StreamProtocol.Spout)
-                TryAttachSpoutSender(go);
-            else
-                TryAttachNdiSender(go);
+            if (protocol == StreamProtocol.Spout) TryAttachSpoutSender(go);
+            else TryAttachNdiSender(go);
         }
 
         private void TryAttachSpoutSender(GameObject go)
@@ -1414,31 +1565,19 @@ namespace DroneCam
                 if (senderType == null)
                 {
                     DroneCamPlugin.Log.LogWarning(
-                        "[DroneCam] KlakSpout not found - Spout streaming unavailable. " +
-                        "Place Klak.Spout.Runtime.dll and KlakSpout.dll in BepInEx/plugins/DroneCam/");
+                        "[DroneCam] KlakSpout not found. Place Klak.Spout.Runtime.dll and KlakSpout.dll in BepInEx/plugins/DroneCam/");
                     return;
                 }
-
                 _spoutSender = (Component)go.AddComponent(senderType);
-
                 foreach (var prop in senderType.GetProperties())
                     DroneCamPlugin.Log.LogInfo($"[DroneCam] SpoutSender.{prop.Name} ({prop.PropertyType.Name})");
-
                 senderType.GetProperty("spoutName")?.SetValue(_spoutSender, "DroneCam");
-
-                var captureTypeProp = senderType.GetProperty("captureType");
-                if (captureTypeProp != null)
-                    captureTypeProp.SetValue(_spoutSender,
-                        Enum.Parse(captureTypeProp.PropertyType, "Texture"));
-
+                var cap = senderType.GetProperty("captureType");
+                if (cap != null) cap.SetValue(_spoutSender, Enum.Parse(cap.PropertyType, "Texture"));
                 senderType.GetProperty("sourceTexture")?.SetValue(_spoutSender, _streamTexture);
-
                 DroneCamPlugin.Log.LogInfo("[DroneCam] Spout sender attached.");
             }
-            catch (Exception e)
-            {
-                DroneCamPlugin.Log.LogError($"[DroneCam] Spout sender setup failed: {e}");
-            }
+            catch (Exception e) { DroneCamPlugin.Log.LogError($"[DroneCam] Spout setup failed: {e}"); }
         }
 
         private void TryAttachNdiSender(GameObject go)
@@ -1449,32 +1588,19 @@ namespace DroneCam
                 if (senderType == null)
                 {
                     DroneCamPlugin.Log.LogWarning(
-                        "[DroneCam] KlakNDI not found - NDI streaming unavailable. " +
-                        "Place Klak.Ndi.Runtime.dll and KlakNDI.dll in BepInEx/plugins/DroneCam/ " +
-                        "and install NDI Tools from ndi.video");
+                        "[DroneCam] KlakNDI not found. Place Klak.Ndi.Runtime.dll and KlakNDI.dll in BepInEx/plugins/DroneCam/ and install NDI Tools from ndi.video");
                     return;
                 }
-
                 _ndiSender = (Component)go.AddComponent(senderType);
-
                 foreach (var prop in senderType.GetProperties())
                     DroneCamPlugin.Log.LogInfo($"[DroneCam] NdiSender.{prop.Name} ({prop.PropertyType.Name})");
-
                 senderType.GetProperty("ndiName")?.SetValue(_ndiSender, "DroneCam");
-
-                var captureTypeProp = senderType.GetProperty("captureType");
-                if (captureTypeProp != null)
-                    captureTypeProp.SetValue(_ndiSender,
-                        Enum.Parse(captureTypeProp.PropertyType, "Texture"));
-
+                var cap = senderType.GetProperty("captureType");
+                if (cap != null) cap.SetValue(_ndiSender, Enum.Parse(cap.PropertyType, "Texture"));
                 senderType.GetProperty("sourceTexture")?.SetValue(_ndiSender, _streamTexture);
-
                 DroneCamPlugin.Log.LogInfo("[DroneCam] NDI sender attached.");
             }
-            catch (Exception e)
-            {
-                DroneCamPlugin.Log.LogError($"[DroneCam] NDI sender setup failed: {e}");
-            }
+            catch (Exception e) { DroneCamPlugin.Log.LogError($"[DroneCam] NDI setup failed: {e}"); }
         }
 
         private void TeardownStreamCamera()
@@ -1558,8 +1684,9 @@ namespace DroneCam
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Harmony – broadcast offset position to other clients while drone is
-    // active. During sleep, broadcast real position so server ZDO stays loaded.
+    // Harmony – broadcast offset position while drone is active.
+    // During sleep, broadcast real position so server ZDO stays loaded.
+    // During teleport, broadcast real position so zones load correctly.
     // ─────────────────────────────────────────────────────────────────────────
     [HarmonyPatch(typeof(ZSyncTransform), "GetPosition")]
     public static class ZSyncTransform_GetPosition_Patch
@@ -1572,14 +1699,33 @@ namespace DroneCam
             if (__instance.gameObject != Player.m_localPlayer.gameObject) return true;
             if (DroneCamController.Instance.BroadcastRealPosition) return true;
 
-            // Offset XZ by 101 units - outside the 100m difficulty scaling radius.
-            // Y offset intentionally omitted - a large Y offset previously caused
-            // the server to stop streaming ZDOs to this client. Since we now use
-            // ZNet.m_players for position tracking instead of ZDOs, a small XZ
-            // offset is sufficient and safe.
+            if (DroneCamController.Instance.WaitingForTeleport)
+            {
+                __result = Player.m_localPlayer.m_body.position;
+                return false;
+            }
+
             Vector3 realPos = Player.m_localPlayer.m_body.position;
-            __result = new Vector3(realPos.x + 101f, realPos.y, realPos.z + 101f);
+            __result = new Vector3(realPos.x + 101f, realPos.y, realPos.z);
             return false;
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Harmony – prevent local player becoming visible while drone is active.
+    // CustomFixedUpdate calls SetVisible(true) every frame based on ZDO
+    // ownership which fights our visibility suppression.
+    // ─────────────────────────────────────────────────────────────────────────
+    [HarmonyPatch(typeof(Character), "SetVisible")]
+    public static class Character_SetVisible_Patch
+    {
+        static bool Prefix(Character __instance, ref bool visible)
+        {
+            if (__instance != Player.m_localPlayer) return true;
+            if (DroneCamController.Instance == null) return true;
+            if (DroneCamController.Instance.Mode == DroneCamMode.Disabled) return true;
+            visible = false;
+            return true;
         }
     }
 
@@ -1609,7 +1755,6 @@ namespace DroneCam
         {
             if (DroneCamController.Instance == null) return;
             if (__instance != Player.m_localPlayer) return;
-
             if (sleep) DroneCamController.Instance.OnPlayerSleep();
             else DroneCamController.Instance.OnPlayerWake();
         }
@@ -1632,7 +1777,6 @@ namespace DroneCam
                 string.Equals(text, "/dc", StringComparison.OrdinalIgnoreCase);
 
             if (!isDroneCamCmd) return true;
-
             DroneCamCommands.HandleChat(text);
             return false;
         }
@@ -1664,11 +1808,12 @@ namespace DroneCam
             "  te - target nearest enemy for look-at\n" +
             "  te (name) - target named enemy for look-at\n" +
             "  te c - clear enemy look-at target\n" +
-            "  stream on [spout|ndi] [w] [h] - start stream (default spout 1920x1080)\n" +
+            "  stream on [spout|ndi] [w] [h] - start stream\n" +
             "  stream off - stop stream\n" +
             "  stream res (w) (h) - change stream resolution\n" +
-            "Wheel - dist/radius / Alt+wheel - height / Ctrl+wheel - focal offset / Alt+Ctrl+wheel - orbit speed\n" +
-            ". / , - cycle players / F8 - toggle\n" +
+            "F8 toggle / F7 free-fly / Left Click select player / T target enemy\n" +
+            "Wheel dist / Alt+wheel height / Ctrl+wheel focal / Alt+Ctrl+wheel orbit speed\n" +
+            ". , cycle players\n" +
             "Names with spaces: use quotes e.g. follow p \"Big Viking\"";
 
         private delegate void CmdHandler(string[] args);
@@ -1691,12 +1836,10 @@ namespace DroneCam
             { "stream",      HandleStream },      { "st", HandleStream },
         };
 
-        // Entry point from console
         public static void Handle(string[] args)
         {
             if (Ctrl == null) { Msg("[XDC] Controller not ready."); return; }
             if (args == null || args.Length == 0) { Msg(Help); return; }
-
             string sub = args[0];
             if (Commands.TryGetValue(sub, out CmdHandler handler))
                 handler(args);
@@ -1704,7 +1847,6 @@ namespace DroneCam
                 Msg($"[XDC] Unknown command '{sub}'. Type 'dc help'.");
         }
 
-        // Entry point from chat - strips /dc or /dronecam prefix
         public static void HandleChat(string raw)
         {
             if (Ctrl == null) { Msg("[XDC] Controller not ready."); return; }
@@ -1712,8 +1854,6 @@ namespace DroneCam
             Handle(CollapseQuotedArgs(t.Skip(1).ToArray()));
         }
 
-        // Collapse tokens that were split out of a quoted string.
-        // e.g. ["follow", "p", "\"The", "Viking\""] -> ["follow", "p", "The Viking"]
         public static string[] CollapseQuotedArgs(string[] args)
         {
             var result = new List<string>();
@@ -1724,8 +1864,8 @@ namespace DroneCam
                 if (arg.StartsWith("\""))
                 {
                     var sb = new StringBuilder();
-                    sb.Append(arg.Substring(1)); // strip leading quote
                     bool closed = arg.Length > 1 && arg.EndsWith("\"");
+                    sb.Append(arg.Substring(1));
                     while (!closed && i + 1 < args.Length)
                     {
                         i++;
@@ -1735,20 +1875,14 @@ namespace DroneCam
                         closed = arg.EndsWith("\"");
                     }
                     string val = sb.ToString();
-                    if (val.EndsWith("\""))
-                        val = val.Substring(0, val.Length - 1);
+                    if (val.EndsWith("\"")) val = val.Substring(0, val.Length - 1);
                     result.Add(val);
                 }
-                else
-                {
-                    result.Add(arg);
-                }
+                else result.Add(arg);
                 i++;
             }
             return result.ToArray();
         }
-
-        // ── sub-command handlers ──────────────────────────────────────────────
 
         private static void HandleFollow(string[] args)
         {
@@ -1862,8 +1996,6 @@ namespace DroneCam
                     break;
             }
         }
-
-        // ── helpers ───────────────────────────────────────────────────────────
 
         private static float F(string[] args, int i, float fallback)
             => args.Length > i && float.TryParse(args[i], NumberStyles.Float,

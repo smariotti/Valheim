@@ -1,6 +1,8 @@
 # Xpert's Drone Cam
 
-A spectator camera mod for Valheim that lets you detach from your character and fly a free camera around the world, follow and orbit other players, set up security-style tracking shots, and target enemies for cinematic look-at shots. Designed for use during multiplayer sessions to capture footage or spectate other players.
+The DroneCam allows you to join a multiplayer game as a drone, flying around, following, orbiting, and tracking a player or enemy. It works with un-modded, vanilla servers and MP games as well as modded ones. You simply join the game, enable the drone cam and then become an omnipotent spectator. Handy for tracking the Valheim action from a completely independent vantage point.
+
+Built for Xpert Malfunction and shared to the community.
 
 ---
 
@@ -25,8 +27,8 @@ If the player you are targeting goes through a portal to a distant part of the m
 
 Commands can be entered in two ways:
 
-- **In-game console** — type `dc` followed by a subcommand, e.g. `dc follow player Xmal`
-- **Chat window** — type `/dc` followed by the same subcommand, e.g. `/dc follow player Xmal`
+- **In-game console**  type `dc` followed by a subcommand, e.g. `dc follow player Xmal`
+- **Chat window**  type `/dc` followed by the same subcommand, e.g. `/dc follow player Xmal`
 
 Player names that contain spaces must be wrapped in quotes in both the console and chat, e.g. `dc follow player "Big Viking"`.
 
@@ -37,6 +39,9 @@ Player names that contain spaces must be wrapped in quotes in both the console a
 | Key | Action |
 |---|---|
 | F8 | Toggle drone cam on and off |
+| F7 | Toggle between free-fly and the last tracking mode (follow, orbit, or security) |
+| Left Click | Point at a player and select them as the tracking target, using the last mode and settings |
+| T | Point at an enemy to set it as the look-at target. Press again on the same enemy to release. Press while pointing at empty space to clear the current enemy target |
 | W | Fly forward |
 | S | Fly backward |
 | A | Strafe left |
@@ -125,6 +130,8 @@ Every command and subcommand has a short alias for faster typing.
 dc f p Xmal
 dc o e Troll 15 45 6
 dc te
+dc te Troll
+dc te c
 dc st on ndi 1920 1080
 ```
 
@@ -134,7 +141,7 @@ dc st on ndi 1920 1080
 
 ### on / freefly / ff
 
-Activates the drone cam in free-fly mode. Your character is hidden from other players and the camera detaches from your character and floats in place where it was. Use WASD/QE to move, hold Shift to move faster, and hold Right Mouse Button to look around.
+Activates the drone cam in free-fly mode. Your character is hidden from other players and the camera detaches and floats in place. Use WASD/QE to move, hold Shift to move faster, and hold Right Mouse Button to look around.
 
 ```
 dc on
@@ -166,7 +173,7 @@ dc hud
 
 ### snap
 
-When following or orbiting a player, instantly moves the drone to the correct relative position near that player. Useful if the drone has drifted or you want to quickly reframe after issuing a new follow or orbit command. If the player is far away, the drone will teleport to them.
+When following or orbiting a player, instantly moves the drone to the correct relative position near that player. Useful if the drone has drifted or you want to quickly reframe after issuing a new follow or orbit command. If the player is far away the drone will teleport to them.
 
 ```
 dc snap
@@ -176,7 +183,7 @@ dc snap
 
 ### players
 
-Lists all players currently connected to the server in the chat window. Players shown with *(distant)* next to their name are in an area of the map that is not currently loaded on your client — the drone will automatically teleport to them if you target them.
+Lists all players currently connected to the server in the chat window. Players shown with *(distant)* next to their name are in an area of the map that is not currently loaded on your client ? the drone will automatically teleport to them if you target them.
 
 ```
 dc players
@@ -276,7 +283,7 @@ dc o s 60
 
 ### security player
 
-Locks the drone in place at its current position and continuously rotates to track a named player as they move around. The camera does not follow the player — it stays fixed and only rotates, like a security camera mounted on a wall.
+Locks the drone in place at its current position and continuously rotates to track a named player as they move around. The camera does not follow the player ? it stays fixed and only rotates, like a security camera mounted on a wall.
 
 ```
 dc security player Xmal
@@ -287,7 +294,7 @@ dc s p "Big Viking"
 
 ### security pos
 
-Locks the drone in place and tracks the point in the world you are currently looking at. The camera rotates to keep that point in frame as the drone's own position stays fixed.
+Locks the drone in place and tracks the point in the world you are currently looking at. The camera rotates to keep that point in frame as the drone stays fixed.
 
 ```
 dc security pos
@@ -313,6 +320,30 @@ If used with no name, targets the nearest enemy. Use `clear` or `c` to release t
 
 ---
 
+### Targeting enemies by pointing
+
+Press **T** while the drone is active to target the enemy in the center of your view and lock the camera look-at onto them. This works independently of the anchor target ? you can orbit a player while the camera constantly looks toward a nearby enemy.
+
+Press **T** again while pointing at the same enemy to release the look-at lock. Press **T** while pointing at a different enemy to switch targets. Press **T** while not pointing at any enemy to clear the current target.
+
+The selection cone angle can be adjusted in the config file with `SelectEnemyConeAngle`. The default of 3 degrees works well for enemies at typical combat range. Increase it if you have trouble targeting enemies at distance.
+
+---
+
+### Selecting players by pointing
+
+Press **Left Click** while the drone is active to target the player in the center of your view. The drone will immediately apply the last tracking mode you used (follow, orbit, or security) at the last settings used, targeting the player you are pointing at. This makes it easy to fly between players and lock the camera on each one in turn.
+
+If no player is within the selection cone, nothing happens. The selection cone angle can be adjusted with `SelectPlayerConeAngle` in the config file.
+
+---
+
+### F7 - free-fly toggle
+
+Press **F7** while tracking a player to instantly switch into free-fly mode without losing your tracking settings. Press **F7** again to return to the same player, same mode, and same parameters you were using before. This is useful for repositioning the drone without losing your current target.
+
+---
+
 ### stream on
 
 Starts broadcasting the drone camera view as a video stream that can be captured in OBS or other software. Requires KlakSpout (for Spout) or KlakNDI (for NDI) to be installed alongside the mod. See the [Streaming](#streaming) section for setup instructions.
@@ -328,7 +359,7 @@ dc st on ndi 3840 2160
 
 | Parameter | Description | Default |
 |---|---|---|
-| protocol | `spout` or `ndi` — which streaming protocol to use | spout |
+| protocol | `spout` or `ndi` ? which streaming protocol to use | spout |
 | width | Stream width in pixels | 1920 |
 | height | Stream height in pixels | 1080 |
 
@@ -384,12 +415,14 @@ A configuration file is created at `BepInEx/config/com.oathorse.xdc.cfg` after t
 
 | Setting | Default | Description |
 |---|---|---|
-| FlySpeed | 10 | Normal free-fly movement speed (world units per second) |
+| FlySpeed | 10 | Normal free-fly movement speed in world units per second |
 | FlySpeedFast | 40 | Fast free-fly movement speed when holding Shift |
 | RotationSpeed | 90 | Keyboard rotation speed in degrees per second |
 | SmoothTime | 0.25 | Movement smoothing for orbit and security modes |
 | TeleportDetectionDistance | 50 | Distance in world units that triggers portal follow detection |
 | ScrollSensitivity | 0.5 | How much each mouse wheel tick adjusts distance or radius |
+| SelectPlayerConeAngle | 5 | Half-angle of the selection cone in degrees when pressing Left Click to select a player. Increase if you have trouble selecting players at long range |
+| SelectEnemyConeAngle | 3 | Half-angle of the selection cone in degrees when pressing T to target an enemy. Increase if you have trouble targeting enemies at long range |
 
 ---
 
@@ -402,8 +435,13 @@ A configuration file is created at `BepInEx/config/com.oathorse.xdc.cfg` after t
 - Portals in the world cannot teleport the drone. Only the drone's own targeting system can initiate teleports.
 - The drone camera can target players anywhere on the map, even in areas that are not currently loaded. It will automatically teleport to reach them.
 - Player names are not case-sensitive in commands.
+- Enemy names in commands use the same display name shown when you hover over the enemy in the game, not the internal creature name.
+
 
 # Version History
+
+v0.2.0
+ - Added "track the thing I'm pointing at" functionality for swapping and out of free fly more easily.
 
 v0.1.28
  - Fixed bug where drone player was visible to target player shortly after teleporting to be with him
