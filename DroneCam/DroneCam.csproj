@@ -77,6 +77,12 @@
     <Reference Include="gui_framework_publicized">
       <HintPath>..\Libs\gui_framework_publicized.dll</HintPath>
     </Reference>
+    <Reference Include="jp.keijiro.klak.spout.Runtime">
+      <HintPath>Package\plugins\jp.keijiro.klak.spout.Runtime.dll</HintPath>
+    </Reference>
+    <Reference Include="Klak.Ndi">
+      <HintPath>Package\plugins\Klak.Ndi.dll</HintPath>
+    </Reference>
     <Reference Include="OpenGL.Net, Version=0.8.4.0, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>..\packages\OpenGL.Net.0.8.4\lib\net461\OpenGL.Net.dll</HintPath>
     </Reference>
@@ -113,6 +119,10 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\Libs\UnityEngine.dll</HintPath>
     </Reference>
+    <Reference Include="UnityEngine.AssetBundleModule, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\Libs\UnityEngine.AssetBundleModule.dll</HintPath>
+    </Reference>
     <Reference Include="UnityEngine.AudioModule, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\Libs\UnityEngine.AudioModule.dll</HintPath>
@@ -147,15 +157,20 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="Package\icon.png" />
+    <Content Include="Package\plugins\jp.keijiro.klak.spout.Runtime.dll" />
+    <Content Include="Package\plugins\Klak.Ndi.dll" />
+    <Content Include="Package\plugins\KlakNDI.dll" />
+    <Content Include="Package\plugins\KlakSpout.dll" />
+    <Content Include="Package\plugins\Processing.NDI.Lib.x64.dll" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
     <None Include="Package\manifest.json" />
+    <None Include="Package\plugins\Bundles\klak_ndi" />
+    <None Include="Package\plugins\Bundles\klak_spout" />
     <None Include="Package\README.md" />
   </ItemGroup>
-  <ItemGroup>
-    <Folder Include="Package\plugins\" />
-  </ItemGroup>
+  <ItemGroup />
   <ItemGroup>
     <WCFMetadata Include="Connected Services\" />
   </ItemGroup>
@@ -166,7 +181,11 @@ echo $(TargetPath)
 echo $(TargetFileName)
 xcopy /F /Y "$(TargetDir)\$(TargetFileName)" "$(ProjectDir)\Package\plugins"
 xcopy /F /Y "$(TargetDir)\$(TargetFileName)" "$(ValheimPath)\BepInEx\Plugins"
-xcopy /F /Y "$(TargetDir)\$(TargetFileName).mdb" "$(ValheimPath)\BepInEx\Plugins"</PostBuildEvent>
+xcopy /F /Y "$(TargetDir)\$(TargetFileName).mdb" "$(ValheimPath)\BepInEx\Plugins"
+xcopy /F /Y "$(ProjectDir)\Package\plugins\*"  "$(ValheimPath)\BepInEx\Plugins"
+xcopy /F /Y /I "$(ProjectDir)\Package\plugins\Bundles\*"  "$(ValheimPath)\BepInEx\Plugins\Bundles"
+
+</PostBuildEvent>
   </PropertyGroup>
   <Import Project="..\packages\Baseclass.Contrib.Nuget.Output.2.4.3\build\Baseclass.Contrib.Nuget.Output.targets" Condition="Exists('..\packages\Baseclass.Contrib.Nuget.Output.2.4.3\build\Baseclass.Contrib.Nuget.Output.targets')" />
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">

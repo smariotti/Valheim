@@ -1,7 +1,7 @@
 ﻿{
     "name": "XpertsDroneCam",
     "description": "The DroneCam allows you to join any multiplayer game as a drone, flying around, following, orbiting, and tracking a player or enemy. You simply join the game, enable the drone cam and then become an omnipotent spectator.",
-    "version_number": "0.2.0",
+    "version_number": "0.2.3",
     "website_url": "https://github.com/smariotti/",
     "dependencies": [
         "denikson-BepInExPack_Valheim-5.4.2202"
