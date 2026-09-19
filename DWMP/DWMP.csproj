@@ -9,7 +9,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>DWMP</RootNamespace>
     <AssemblyName>DWMP</AssemblyName>
-    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
   </PropertyGroup>
@@ -38,7 +38,7 @@
     <Reference Include="assembly_valheim">
       <HintPath>..\Libs\assembly_valheim.dll</HintPath>
     </Reference>
-    <Reference Include="BepInEx, Version=5.4.23.3, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="BepInEx, Version=5.4.23.5, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\Libs\BepInEx.dll</HintPath>
     </Reference>
