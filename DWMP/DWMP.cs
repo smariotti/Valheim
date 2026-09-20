@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading.Tasks;
@@ -197,8 +198,17 @@ namespace DWMP
                 {
                     if (CreatePinOnTeleport.Value)
                     {
- //                       Debug.LogWarning($"TeleportWorld.Teleport(): name: {__instance.GetText()} Pos: {__instance.transform.position}");
+                        //                       Debug.LogWarning($"TeleportWorld.Teleport(): name: {__instance.GetText()} Pos: {__instance.transform.position}");
+                        // Rename source portal
                         RenamePortalPin(__instance.transform.position, __instance.GetText());
+                        // Rename target portal
+                        ZNetView nview = (ZNetView)AccessTools.Field(typeof(TeleportWorld), "m_nview").GetValue(__instance);
+                        ZDO zDO = ZDOMan.instance.GetZDO(nview.GetZDO().GetConnectionZDOID(ZDOExtraData.ConnectionType.Portal));
+                        if (zDO != null)
+                        {
+                            string targetText = zDO.GetString(ZDOVars.s_tag);
+                            RenamePortalPin(zDO.GetPosition(), targetText);
+                        }
                     }
                 }
             }
