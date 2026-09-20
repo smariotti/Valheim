@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 
 using BepInEx;
+using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
 using static System.Net.Mime.MediaTypeNames;
@@ -23,30 +24,34 @@ namespace DWMP
 
         List<Minimap.PinData> __m_pins = new List<Minimap.PinData>();
 
-        static public bool __m_createPinOnTeleport = false;
+        static public ConfigEntry<bool> CreatePinOnTeleport;
 
         public void Awake()
         {
+
+            CreatePinOnTeleport = Config.Bind("General", "Create Pin On Teleport", false, "Add/update a portal pin to the minimap for each portal you pass through");
+
             // Patch with Harmony
             harmony.PatchAll();
 
             AddConsoleCommands();
+
         }
 
         static public void AddConsoleCommands()
         {
-            ConsoleCommand createPinOnTeleport = new ConsoleCommand("createpinonteleport", "Add a portal pin to the minimap for each portal you pass through", delegate (ConsoleEventArgs args)
+            new ConsoleCommand("createpinonteleport", "Add a portal pin to the minimap for each portal you pass through", delegate (ConsoleEventArgs args)
             {
                 if (!Game.instance)
                 {
                     return true;
                 }
 
-                __m_createPinOnTeleport = !__m_createPinOnTeleport;
+                CreatePinOnTeleport.Value = !CreatePinOnTeleport.Value;
 
                 if (Chat.instance)
                 {
-                    if (__m_createPinOnTeleport)
+                    if (CreatePinOnTeleport.Value)
                     {
                         Chat.instance.AddString("CreatePinOnTeleport ENABLED!");
                     }
@@ -141,7 +146,7 @@ namespace DWMP
             AddPortalPin(pos, text);
         }
 
-        [HarmonyPatch(typeof(Player), nameof(Player.PlacePiece), new[] { typeof(Piece), typeof(Vector3), typeof(Quaternion), typeof(bool) })]
+        [HarmonyPatch(typeof(Player), nameof(Player.PlacePiece), new[] { typeof(Piece), typeof(Vector3), typeof(Quaternion), typeof(bool), typeof(bool) })]
         public static class Player_PlacePiece_Patch
         {
             public static void Postfix(Player __instance, Piece piece, Vector3 pos, Quaternion rot, bool doAttack)
@@ -190,7 +195,7 @@ namespace DWMP
             {
                 if (__instance != null)
                 {
-                    if (__m_createPinOnTeleport)
+                    if (CreatePinOnTeleport.Value)
                     {
  //                       Debug.LogWarning($"TeleportWorld.Teleport(): name: {__instance.GetText()} Pos: {__instance.transform.position}");
                         RenamePortalPin(__instance.transform.position, __instance.GetText());
