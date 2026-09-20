@@ -25,12 +25,13 @@ namespace DWMP
 
         List<Minimap.PinData> __m_pins = new List<Minimap.PinData>();
 
+        static public ConfigEntry<bool> Enabled;
         static public ConfigEntry<bool> CreatePinOnTeleport;
 
         public void Awake()
         {
-
-            CreatePinOnTeleport = Config.Bind("General", "Create Pin On Teleport", false, "Add/update a portal pin to the minimap for each portal you pass through");
+            Enabled = Config.Bind("General", "Enabled", true, "Enable the mod, adding/updating pins for placed, removed or renamed portals");
+            CreatePinOnTeleport = Config.Bind("General", "Create Pin On Teleport", false, "Also add/update a portal pin to the minimap for each portal you pass through");
 
             // Patch with Harmony
             harmony.PatchAll();
@@ -152,6 +153,7 @@ namespace DWMP
         {
             public static void Postfix(Player __instance, Piece piece, Vector3 pos, Quaternion rot, bool doAttack)
             {
+                if (!Enabled.Value) return;
                 if (piece != null && (piece.name == "portal_wood" || piece.name == "portal_stone"))
                 {
 //                    Debug.LogWarning($"Placed Portal name: {piece.name} Pos: {pos}");
@@ -166,6 +168,7 @@ namespace DWMP
         {
             public static void Postfix(Piece __instance)
             {
+                if (!Enabled.Value) return;
                 Vector3 pos = __instance.transform.position;
                 TeleportWorld tpWorld = __instance.GetComponent<TeleportWorld>();
                 if (tpWorld != null)
@@ -181,7 +184,7 @@ namespace DWMP
         {
             public static void Postfix(TeleportWorld __instance, string text)
             {
-                if (__instance != null)
+                if (__instance != null && Enabled.Value)
                 {
 //                    Debug.LogWarning($"TeleportWorld.SetText(): name: {__instance.name} Pos: {__instance.transform.position} text: '{text}' ");
                     RenamePortalPin(__instance.transform.position, text);
@@ -194,22 +197,17 @@ namespace DWMP
         {
             public static void Postfix(TeleportWorld __instance, Player player)
             {
-                if (__instance != null)
+                if (__instance == null || !Enabled.Value || !CreatePinOnTeleport.Value) return;
+                //Debug.LogWarning($"TeleportWorld.Teleport(): name: {__instance.GetText()} Pos: {__instance.transform.position}");
+                // Rename source portal
+                RenamePortalPin(__instance.transform.position, __instance.GetText());
+                // Rename target portal
+                ZNetView nview = (ZNetView)AccessTools.Field(typeof(TeleportWorld), "m_nview").GetValue(__instance);
+                ZDO zDO = ZDOMan.instance.GetZDO(nview.GetZDO().GetConnectionZDOID(ZDOExtraData.ConnectionType.Portal));
+                if (zDO != null)
                 {
-                    if (CreatePinOnTeleport.Value)
-                    {
-                        //                       Debug.LogWarning($"TeleportWorld.Teleport(): name: {__instance.GetText()} Pos: {__instance.transform.position}");
-                        // Rename source portal
-                        RenamePortalPin(__instance.transform.position, __instance.GetText());
-                        // Rename target portal
-                        ZNetView nview = (ZNetView)AccessTools.Field(typeof(TeleportWorld), "m_nview").GetValue(__instance);
-                        ZDO zDO = ZDOMan.instance.GetZDO(nview.GetZDO().GetConnectionZDOID(ZDOExtraData.ConnectionType.Portal));
-                        if (zDO != null)
-                        {
-                            string targetText = zDO.GetString(ZDOVars.s_tag);
-                            RenamePortalPin(zDO.GetPosition(), targetText);
-                        }
-                    }
+                    string targetText = zDO.GetString(ZDOVars.s_tag);
+                    RenamePortalPin(zDO.GetPosition(), targetText);
                 }
             }
         }
