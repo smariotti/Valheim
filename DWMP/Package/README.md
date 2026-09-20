@@ -23,6 +23,11 @@ Optionally, if you toggle `CreatePinOnTeleport` on, DWMP will create a pin for y
 That's really all this thing does.
 
 ## Change Log
+v0.2.0
+- Update for Valheim 1.0
+- Add config
+- Tag both portals when traveling through them
+
 v0.1.3
 - Updated to work with Valheim post Patch 0.220.3
 
