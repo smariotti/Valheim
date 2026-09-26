@@ -195,15 +195,15 @@ namespace DWMP
         [HarmonyPatch(typeof(TeleportWorld), nameof(TeleportWorld.Teleport))]
         public static class TeleportWorld_Teleport_Patch
         {
-            public static void Postfix(TeleportWorld __instance, Player player)
+            public static void Postfix(TeleportWorld __instance, Player player, ZNetView ___m_nview)
             {
                 if (__instance == null || !Enabled.Value || !CreatePinOnTeleport.Value) return;
                 //Debug.LogWarning($"TeleportWorld.Teleport(): name: {__instance.GetText()} Pos: {__instance.transform.position}");
                 // Rename source portal
                 RenamePortalPin(__instance.transform.position, __instance.GetText());
+
                 // Rename target portal
-                ZNetView nview = (ZNetView)AccessTools.Field(typeof(TeleportWorld), "m_nview").GetValue(__instance);
-                ZDO zDO = ZDOMan.instance.GetZDO(nview.GetZDO().GetConnectionZDOID(ZDOExtraData.ConnectionType.Portal));
+                ZDO zDO = ZDOMan.instance.GetZDO(___m_nview.GetZDO().GetConnectionZDOID(ZDOExtraData.ConnectionType.Portal));
                 if (zDO != null)
                 {
                     string targetText = zDO.GetString(ZDOVars.s_tag);
