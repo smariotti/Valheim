@@ -139,7 +139,15 @@ namespace DWMP
 
         static void RemovePortalPin(Vector3 pos)
         {
-            Minimap.instance.RemovePin(pos, 0.1f);
+            // Fix for removing pin not visible on minimap
+            Minimap.PinData pin = Minimap.instance.GetClosestPin(pos, 0.1f, false);  // private
+            if (pin != null)
+            {
+                Minimap.instance.RemovePin(pin);
+                // Debug.Log($"Removing pin: {pos} , removed: true");
+            }
+            // else
+            //     Debug.Log($"Removing pin: {pos} , removed: false");
         }
 
         static void RenamePortalPin(Vector3 pos, string text)
@@ -198,7 +206,8 @@ namespace DWMP
             public static void Postfix(TeleportWorld __instance, Player player, ZNetView ___m_nview)
             {
                 if (__instance == null || !Enabled.Value || !CreatePinOnTeleport.Value) return;
-                //Debug.LogWarning($"TeleportWorld.Teleport(): name: {__instance.GetText()} Pos: {__instance.transform.position}");
+                // Debug.Log($"Rename portal pin: Name = {__instance.GetText()} , Pos = {__instance.transform.position}");
+
                 // Rename source portal
                 RenamePortalPin(__instance.transform.position, __instance.GetText());
 
@@ -207,7 +216,9 @@ namespace DWMP
                 if (zDO != null)
                 {
                     string targetText = zDO.GetString(ZDOVars.s_tag);
-                    RenamePortalPin(zDO.GetPosition(), targetText);
+                    Vector3 targetPos = zDO.GetPosition();
+                    // Debug.Log($"Rename target portal pin: Name = {targetText} , Pos = {targetPos}");
+                    RenamePortalPin(targetPos, targetText);
                 }
             }
         }
