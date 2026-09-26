@@ -20,7 +20,7 @@ namespace DWMP
     {
         public const string PluginGUID = "com.oathorse.DWMP";
         public const string PluginName = "Dude, Where's My Portal";
-        public const string PluginVersion = "0.2";
+        public const string PluginVersion = "0.2.1";
         private readonly Harmony harmony = new Harmony(PluginGUID);
 
         List<Minimap.PinData> __m_pins = new List<Minimap.PinData>();
