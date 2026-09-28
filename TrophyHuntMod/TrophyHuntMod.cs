@@ -517,23 +517,26 @@ namespace TrophyHuntMod
         static public List<PlayerEventLog> __m_playerEventLog = new List<PlayerEventLog>();
         static public bool __m_refreshLogsAndStandings = false;
 
-        public struct DropInfo
+        public struct THMDropInfo
         {
-            public DropInfo()
+            const int MAX_STAR_LEVELS = 16;
+            public THMDropInfo()
             {
                 m_numKilled = 0;
-                m_trophies = 0;
+                m_trophiesDropped = 0;
+                m_dropCounters.AddRange(Enumerable.Repeat(-1, MAX_STAR_LEVELS));
             }
 
             public int m_numKilled = 0;
-            public int m_trophies = 0;
+            public int m_trophiesDropped = 0;
+            public List<int> m_dropCounters = new List<int>();
         }
 
         // ALL the killed enemies and trophy drops that happen in the game
-        static Dictionary<string, DropInfo> __m_allTrophyDropInfo = new Dictionary<string, DropInfo>();
+        static Dictionary<string, THMDropInfo> __m_allTrophyDropInfo = new Dictionary<string, THMDropInfo>();
 
         // Just the killed enemies and trophies dropped and picked up by the player
-        static Dictionary<string, DropInfo> __m_playerTrophyDropInfo = new Dictionary<string, DropInfo>();
+        static Dictionary<string, THMDropInfo> __m_playerTrophyDropInfo = new Dictionary<string, THMDropInfo>();
 
         // Trophy Counts for Farmer
         static Dictionary<string, int> __m_farmerTrophyCounts = new Dictionary<string, int>();
@@ -588,7 +591,7 @@ namespace TrophyHuntMod
             public class THMSaveDataDropInfo
             {
                 public string m_name;
-                public DropInfo m_dropInfo;
+                public THMDropInfo m_dropInfo;
             }
 
             public class THMSaveDataSpecialSagaDropCount
@@ -685,7 +688,7 @@ namespace TrophyHuntMod
             // Extract dictionary to serializable list for player trophy drop data
             //
             saveData.m_playerTrophyDropInfos = new List<THMSaveDataDropInfo>();
-            foreach (KeyValuePair<string, DropInfo> dictEntry in __m_playerTrophyDropInfo)
+            foreach (KeyValuePair<string, THMDropInfo> dictEntry in __m_playerTrophyDropInfo)
             {
                 THMSaveDataDropInfo savedDropInfo = new THMSaveDataDropInfo();
                 savedDropInfo.m_name = dictEntry.Key;
@@ -697,7 +700,7 @@ namespace TrophyHuntMod
             // Extract dictionary to serializable list for ALL trophy drop data
             //
             saveData.m_allTrophyDropInfos = new List<THMSaveDataDropInfo>();
-            foreach (KeyValuePair<string, DropInfo> dictEntry in __m_allTrophyDropInfo)
+            foreach (KeyValuePair<string, THMDropInfo> dictEntry in __m_allTrophyDropInfo)
             {
                 THMSaveDataDropInfo savedDropInfo = new THMSaveDataDropInfo();
                 savedDropInfo.m_name = dictEntry.Key;
@@ -886,7 +889,7 @@ namespace TrophyHuntMod
             {
                 if (__m_playerTrophyDropInfo.ContainsKey(saveDropInfo.m_name))
                 {
-                    DropInfo dropInfo = saveDropInfo.m_dropInfo;
+                    THMDropInfo dropInfo = saveDropInfo.m_dropInfo;
                     __m_playerTrophyDropInfo[saveDropInfo.m_name] = dropInfo;
                 }
             }
@@ -894,7 +897,7 @@ namespace TrophyHuntMod
             {
                 if (__m_allTrophyDropInfo.ContainsKey(saveDropInfo.m_name))
                 {
-                    DropInfo dropInfo = saveDropInfo.m_dropInfo;
+                    THMDropInfo dropInfo = saveDropInfo.m_dropInfo;
                     __m_allTrophyDropInfo[saveDropInfo.m_name] = dropInfo;
                 }
             }
@@ -996,8 +999,8 @@ namespace TrophyHuntMod
             __m_playerTrophyDropInfo.Clear();
             foreach (TrophyHuntData td in __m_trophyHuntData)
             {
-                __m_allTrophyDropInfo.Add(td.m_name, new DropInfo());
-                __m_playerTrophyDropInfo.Add(td.m_name, new DropInfo());
+                __m_allTrophyDropInfo.Add(td.m_name, new THMDropInfo());
+                __m_playerTrophyDropInfo.Add(td.m_name, new THMDropInfo());
             }
             __m_completedBiomeBonuses.Clear();
         }
@@ -3771,9 +3774,9 @@ namespace TrophyHuntMod
             float unluckiestRatio = 0f;
 
             // Compute Luck
-            foreach (KeyValuePair<string, DropInfo> entry in __m_allTrophyDropInfo)
+            foreach (KeyValuePair<string, THMDropInfo> entry in __m_allTrophyDropInfo)
             {
-                DropInfo di = entry.Value;
+                THMDropInfo di = entry.Value;
                 if (di.m_numKilled == 0)
                 {
                     continue;
@@ -3789,13 +3792,13 @@ namespace TrophyHuntMod
                 }
 
                 // Ignore if you haven't killed enough to get a drop
-                if (di.m_trophies == 0 ||
+                if (di.m_trophiesDropped == 0 ||
                     di.m_numKilled < (100 / data.m_dropPercent))
                 {
                     continue;
                 }
 
-                float actualDropPercent = 100.0f * (float)di.m_trophies / (float)di.m_numKilled;
+                float actualDropPercent = 100.0f * (float)di.m_trophiesDropped / (float)di.m_numKilled;
                 float wikiDropPercent = data.m_dropPercent;
 
                 float dropRatio = actualDropPercent / wikiDropPercent;
@@ -4162,7 +4165,7 @@ namespace TrophyHuntMod
             trigger.triggers.Add(entryExit);
         }
 
-        public static void CalculateDropPercentAndRating(TrophyHuntData trophyHuntData, DropInfo dropInfo, out string dropPercentStr, out string dropRatingStr)
+        public static void CalculateDropPercentAndRating(TrophyHuntData trophyHuntData, THMDropInfo dropInfo, out string dropPercentStr, out string dropRatingStr)
         {
             dropPercentStr = "0";
             dropRatingStr = "<n/a>";
@@ -4172,13 +4175,13 @@ namespace TrophyHuntMod
                 float dropPercent = 0.0f;
                 float expectedDropPercent = trophyHuntData.m_dropPercent;
 
-                dropPercent = (100.0f * ((float)dropInfo.m_trophies / (float)dropInfo.m_numKilled));
+                dropPercent = (100.0f * ((float)dropInfo.m_trophiesDropped / (float)dropInfo.m_numKilled));
                 dropPercentStr = dropPercent.ToString("0.0");
 
                 // Don't compute for 100% drop enemies
                 if (trophyHuntData.m_dropPercent < 100)
                 {
-                    if (dropInfo.m_trophies > 0 &&
+                    if (dropInfo.m_trophiesDropped > 0 &&
                         dropInfo.m_numKilled >= (100 / expectedDropPercent))
                     {
                         float ratingPercent = 100 * (dropPercent / expectedDropPercent);
@@ -4220,8 +4223,8 @@ namespace TrophyHuntMod
 
             TrophyHuntData trophyHuntData = Array.Find(__m_trophyHuntData, element => element.m_name == trophyName);
 
-            DropInfo allTrophyDropInfo = __m_allTrophyDropInfo[trophyName];
-            DropInfo playerDropInfo = __m_playerTrophyDropInfo[trophyName];
+            THMDropInfo allTrophyDropInfo = __m_allTrophyDropInfo[trophyName];
+            THMDropInfo playerDropInfo = __m_playerTrophyDropInfo[trophyName];
 
             //                Debug.LogWarning($"dropped: {dropInfo.m_trophiesDropped} killed: {dropInfo.m_numKilled} percent:{trophyHuntData.m_dropPercent}");
 
@@ -4241,7 +4244,7 @@ namespace TrophyHuntMod
                 $"<size=16><b><color=#FFB75B>{trophyHuntData.m_prettyName}</color><b></size>\n" +
                 $"<color=white>Point Value: </color><color=green>{trophyHuntData.GetCurGameModeTrophyScoreValue()}</color>\n" +
                 $"<color=white>Player Kills: </color><color=orange>{playerDropInfo.m_numKilled}</color>\n" +
-                $"<color=white>Trophies Picked Up: </color><color=orange>{playerDropInfo.m_trophies}</color>\n" +
+                $"<color=white>Trophies Picked Up: </color><color=orange>{playerDropInfo.m_trophiesDropped}</color>\n" +
                 $"<color=white>Kill/Pickup Rate: </color><color=orange>{playerDropPercentStr}%</color>\n" +
                 $"<color=white>Wiki Trophy Drop Rate: (<color=orange>{dropWikiPercentStr}%)</color>\n" +
                 $"<color=white>Player Luck Rating: <color=yellow>{playerDropRatingStr}</color>\n";
@@ -4250,7 +4253,7 @@ namespace TrophyHuntMod
             {
                 text = text +
                 $"<color=white>Actual Kills: </color><color=orange>{allTrophyDropInfo.m_numKilled}</color>\n" +
-                $"<color=white>Actual Trophies: </color><color=orange>{allTrophyDropInfo.m_trophies}</color>\n" +
+                $"<color=white>Actual Trophies: </color><color=orange>{allTrophyDropInfo.m_trophiesDropped}</color>\n" +
                 $"<color=white>Actual Drop Rate: </color><color=orange>{allTrophyDropPercentStr}%</color> (<color=yellow>{dropWikiPercentStr}%)</color>\n" +
                 $"<color=white>Actual Luck Rating: <color=yellow>{allTrophyDropRatingStr}</color>\n";
 
@@ -4315,9 +4318,12 @@ namespace TrophyHuntMod
 
         public static void RecordDroppedTrophy(string characterName, string trophyName)
         {
-            DropInfo drop = __m_allTrophyDropInfo[trophyName];
-            drop.m_trophies++;
+            THMDropInfo drop = __m_allTrophyDropInfo[trophyName];
+            drop.m_trophiesDropped++;
             __m_allTrophyDropInfo[trophyName] = drop;
+
+            Debug.LogError($"RecordDroppedTrophy: {characterName} dropped Trophy");
+
         }
 
         public static string EnemyNameToTrophyName(string enemyName)
@@ -4332,8 +4338,8 @@ namespace TrophyHuntMod
         {
             if (__m_playerTrophyDropInfo.ContainsKey(trophyName))
             {
-                DropInfo drop = __m_playerTrophyDropInfo[trophyName];
-                drop.m_trophies++;
+                THMDropInfo drop = __m_playerTrophyDropInfo[trophyName];
+                drop.m_trophiesDropped++;
                 __m_playerTrophyDropInfo[trophyName] = drop;
 
                 return true;
@@ -4342,7 +4348,7 @@ namespace TrophyHuntMod
             return false;
         }
 
-        public static void RecordTrophyCapableKill(string characterName, bool killedByPlayer)
+        public static void RecordTrophyCapableKill(string characterName, bool killedByPlayer, out THMDropInfo allDrop)
         {
             string trophyName = EnemyNameToTrophyName(characterName);
 
@@ -4350,21 +4356,18 @@ namespace TrophyHuntMod
             {
                 //                    Debug.Log($"{characterName} killed by Player");
 
-                DropInfo drop = __m_playerTrophyDropInfo[trophyName];
+                THMDropInfo drop = __m_playerTrophyDropInfo[trophyName];
                 drop.m_numKilled++;
 
                 __m_playerTrophyDropInfo[trophyName] = drop;
 
             }
-            else
-            {
-                //                    Debug.Log($"{characterName} killed not by Player");
+            //                    Debug.Log($"{characterName} killed not by Player");
 
-                DropInfo drop = __m_allTrophyDropInfo[trophyName];
-                drop.m_numKilled++;
+            allDrop = __m_allTrophyDropInfo[trophyName];
+            allDrop.m_numKilled++;
 
-                __m_allTrophyDropInfo[trophyName] = drop;
-            }
+            __m_allTrophyDropInfo[trophyName] = allDrop;
         }
 
         public struct SpecialSagaDrop
@@ -4670,6 +4673,17 @@ namespace TrophyHuntMod
             return hasDropped;
         }
 
+        static void SetTrophyDropCounter(ref THMDropInfo dropInfo, int starLevel, float dropPercentage)
+        {
+            float dropChance = dropPercentage / 100.0f;
+            int totalDeathsForDrop = (int)Mathf.Round(2.0f / dropChance);
+            int dropRoll = UnityEngine.Random.Range(0, totalDeathsForDrop);
+
+            dropInfo.m_dropCounters[starLevel] = dropRoll;
+
+            Debug.LogError($"SetTrophyDropCounter: Star level {starLevel} counter set to {dropRoll}");
+
+        }
 
         // Watch character drops and see what characters drop what items (actual dropped items)
         //
@@ -4690,93 +4704,102 @@ namespace TrophyHuntMod
                     //
                     if (CharacterCanDropTrophies(characterName))
                     {
+                        THMDropInfo trophyDropStats;
+                        RecordTrophyCapableKill(characterName, false, out trophyDropStats);
 
-                        //                              Debug.Log($"Trophy-capable character {characterName} has dropped items:");
-
-                        RecordTrophyCapableKill(characterName, false);
-
-                        bool droppedTrophy = false;
-
-                        // Check if there are any dropped items
+                        // Strip any Trophies from the list, we'll override below
                         if (__result != null)
                         {
                             foreach (KeyValuePair<GameObject, int> droppedItem in __result)
                             {
                                 // Get the item's name
-                                string itemName = droppedItem.Key.name;
-
-                                // Log or process the dropped item
-                                //                                    Debug.Log($"Dropped item: {itemName} count: {droppedItem.Value}");
-
-                                if (itemName.Contains("Trophy"))
+                                if (droppedItem.Key.name.Contains("Trophy"))
                                 {
-                                    //                                        Debug.Log($"Trophy {itemName} Dropped by {characterName}");
-
-                                    RecordDroppedTrophy(characterName, itemName);
-
-                                    droppedTrophy = true;
+                                    // A trophy dropped using Valheim's system, remove it and handle it ourselves below
+                                    __result.Remove(droppedItem);
+                                    Debug.LogError($"CharacterDrop_GenerateDropList_Patch: Removed trophy drop for {characterName}");
                                     break;
                                 }
                             }
                         }
-                        else
+
+                        // Which trophy is associated with this character?
+                        string trophyName = EnemyNameToTrophyName(characterName);
+
+                        // Find the trophy drop in the character's potential drop list
+                        List<Drop> dropList = __instance.m_drops;
+                        Drop trophyDrop = dropList.Find(theDrop => theDrop.m_prefab.name == trophyName);
+                        if (trophyDrop == null)
+                            return;
+
+                        float dropPercentage = trophyDrop.m_chance * 100f;
+
+                        // 100% drop for some game modes
+                        if (GetGameMode() == TrophyGameMode.TrophyRush ||
+                               GetGameMode() == TrophyGameMode.TrophyBlitz ||
+                               GetGameMode() == TrophyGameMode.TrophyTrailblazer ||
+                               GetGameMode() == TrophyGameMode.TrophyPacifist ||
+                               (IsSagaMode() && GetGameMode() != TrophyGameMode.CasualSaga))
                         {
-                            Debug.Log($"Trophy-capable character {characterName} had null drop list");
+                            // only drop if we don't have one, or it's a deer trophy
+                            if (!__m_trophyCache.Contains(trophyName) || trophyName == "TrophyDeer")
+                            {
+                                dropPercentage = 100f;
+                            }
                         }
 
-                        if (!droppedTrophy)
+                        // Fix for Valheim 1.0 drop rate bug
+                        if (dropPercentage < 30.0f)
                         {
-                            float dropPercentage = 0f;
 
-                            if (GetGameMode() == TrophyGameMode.TrophyRush ||
-                                GetGameMode() == TrophyGameMode.TrophyBlitz ||
-                                GetGameMode() == TrophyGameMode.TrophyTrailblazer ||
-                                GetGameMode() == TrophyGameMode.TrophyPacifist ||
-                                (IsSagaMode() && GetGameMode() != TrophyGameMode.CasualSaga))
+                            int starLevel = character.GetLevel();
+                            Debug.LogError($"CharacterDrop_GenerateDropList_Patch: Possible rare ({(int)dropPercentage}) trophy drop for {starLevel} Star {characterName}: {trophyName}");
+
+                            if (trophyDropStats.m_dropCounters[starLevel] == -1)
                             {
-                                string trophyName = EnemyNameToTrophyName(characterName);
-                                if (!__m_trophyCache.Contains(trophyName) || trophyName == "TrophyDeer")
-                                {
-                                    dropPercentage = 100f;
-                                }
+                                SetTrophyDropCounter(ref trophyDropStats, starLevel, dropPercentage);
                             }
-                            //else if (GetGameMode() == TrophyGameMode.TrophySaga)
-                            //{
-                            //    int index = Array.FindIndex(__m_trophyHuntData, element => element.m_enemies.Contains(characterName));
-                            //    if (index >= 0)
-                            //    {
-                            //        float wikiDropPercent = __m_trophyHuntData[index].m_dropPercent;
 
-                            //        // Cap at 50% drop rate
-                            //        dropPercentage = Math.Min(wikiDropPercent * TROPHY_SAGA_TROPHY_DROP_MULTIPLIER, 50f);
-                            //    }
-                            //}
+                            // Count the death
+                            trophyDropStats.m_dropCounters[starLevel] -= 1;
 
+                            Debug.LogError($"CharacterDrop_GenerateDropList_Patch: Decrement {starLevel} Star {characterName} drop counter to {trophyDropStats.m_dropCounters[starLevel]}");
+
+                            // Drop if we hit the counter
+                            if (trophyDropStats.m_dropCounters[starLevel] < 0)
+                            {
+                                // Reset the counter
+                                SetTrophyDropCounter(ref trophyDropStats, starLevel, dropPercentage);
+
+                                // Create the trophy
+                                KeyValuePair<GameObject, int> newDropItem = new KeyValuePair<GameObject, int>(trophyDrop.m_prefab, 1);
+                                if (__result == null)
+                                {
+                                    __result = new List<KeyValuePair<GameObject, int>>();
+                                }
+                                __result.Add(newDropItem);
+
+                                RecordDroppedTrophy(characterName, trophyName);
+                            }
+                        }
+                        else
+                        {
+                            // Drop percent >= 30%, roll for it
                             // Roll the dice
                             System.Random randomizer = new System.Random();
-                            float randValue = (float)randomizer.NextDouble() * 100f;
+                            float randValue = (float)UnityEngine.Random.Range(0.0f, 99.0f);
 
                             // If we rolled below drop percentage, drop a trophy
                             if (randValue < dropPercentage)
                             {
-                                string trophyName = EnemyNameToTrophyName(characterName);
-
-                                List<Drop> dropList = __instance.m_drops;
-
-                                Drop trophyDrop = dropList.Find(theDrop => theDrop.m_prefab.name == trophyName);
-
-                                if (trophyDrop != null)
+                                KeyValuePair<GameObject, int> newDropItem = new KeyValuePair<GameObject, int>(trophyDrop.m_prefab, 1);
+                                if (__result == null)
                                 {
-                                    KeyValuePair<GameObject, int> newDropItem = new KeyValuePair<GameObject, int>(trophyDrop.m_prefab, 1);
-
-                                    if (__result == null)
-                                    {
-                                        __result = new List<KeyValuePair<GameObject, int>>();
-                                    }
-                                    __result.Add(newDropItem);
-
-                                    RecordDroppedTrophy(characterName, trophyName);
+                                    __result = new List<KeyValuePair<GameObject, int>>();
                                 }
+                                __result.Add(newDropItem);
+
+                                RecordDroppedTrophy(characterName, trophyName);
                             }
                         }
                     }
@@ -4909,7 +4932,8 @@ namespace TrophyHuntMod
                     {
                         //                            Debug.Log($"Trophy-capable character {characterName} was killed by Player.");
 
-                        RecordTrophyCapableKill(characterName, true);
+                        THMDropInfo allDrop;
+                        RecordTrophyCapableKill(characterName, true, out allDrop);
                     }
                 }
 
@@ -6523,7 +6547,7 @@ namespace TrophyHuntMod
                 if (firstKd) { sb.Append("|kd:"); firstKd = false; }
                 else sb.Append(',');
                 string name = kvp.Key.StartsWith("Trophy") ? kvp.Key.Substring(6) : kvp.Key;
-                sb.Append(name).Append(':').Append(kvp.Value.m_numKilled).Append('/').Append(kvp.Value.m_trophies);
+                sb.Append(name).Append(':').Append(kvp.Value.m_numKilled).Append('/').Append(kvp.Value.m_trophiesDropped);
             }
 
             return sb.ToString();
