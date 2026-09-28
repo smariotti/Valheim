@@ -4768,7 +4768,7 @@ namespace TrophyHuntMod
 //                        Debug.LogError($"CharacterDrop_GenerateDropList_Patch: {enemyLevel-1} Star {characterName} drop {(int)dropPercentage}%");
 
                         // Fix for Valheim 1.0 drop rate bug
-                        if (dropPercentage < 30.0f)
+                        if (dropPercentage <= 30.0f)
                         {
 
 //                            Debug.LogError($"CharacterDrop_GenerateDropList_Patch: Possible rare ({(int)dropPercentage}) trophy drop for {enemyLevel-1} Star {characterName}: {trophyName}");
