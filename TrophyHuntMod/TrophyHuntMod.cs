@@ -4084,7 +4084,7 @@ namespace TrophyHuntMod
         static GameObject __m_trophyTooltipObject = null;
         static GameObject __m_trophyTooltipBackground = null;
         static TextMeshProUGUI __m_trophyTooltip;
-        static Vector2 __m_trophyTooltipWindowSize = new Vector2(240, 125);
+        static Vector2 __m_trophyTooltipWindowSize = new Vector2(240, 135);
         static Vector2 __m_trophyTooltipTextOffset = new Vector2(5, 2);
         static Vector2 __m_trophyTooltipAllTrophyStatsWindowSize = new Vector2(240, 195);
 
@@ -4257,11 +4257,19 @@ namespace TrophyHuntMod
 
             if (__m_showAllTrophyStats)
             {
+                string s1 = allTrophyDropInfo.m_dropCounters[0] == -1 ? "?" : allTrophyDropInfo.m_dropCounters[0].ToString();
+                string s2 = allTrophyDropInfo.m_dropCounters[1] == -1 ? "?" : allTrophyDropInfo.m_dropCounters[1].ToString();
+                string s3 = allTrophyDropInfo.m_dropCounters[2] == -1 ? "?" : allTrophyDropInfo.m_dropCounters[2].ToString();
+
+                string dropCountersStr = $"({s1}/{s2}/{s3})";
+
+
                 text = text +
                 $"<color=white>Actual Kills: </color><color=orange>{allTrophyDropInfo.m_numKilled}</color>\n" +
                 $"<color=white>Actual Trophies: </color><color=orange>{allTrophyDropInfo.m_trophiesDropped}</color>\n" +
                 $"<color=white>Actual Drop Rate: </color><color=orange>{allTrophyDropPercentStr}%</color> (<color=yellow>{dropWikiPercentStr}%)</color>\n" +
-                $"<color=white>Actual Luck Rating: <color=yellow>{allTrophyDropRatingStr}</color>\n";
+                $"<color=white>Actual Luck Rating: <color=yellow>{allTrophyDropRatingStr}</color>\n" + 
+                $"<color=white>Kills Until Drop: <color=yellow>{dropCountersStr}</color>\n";
 
             }
             return text;
