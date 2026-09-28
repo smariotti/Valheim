@@ -276,7 +276,15 @@ You can find the github at: https://github.com/smariotti/Valheim/tree/master/Tro
 
 ## Change Log
 
-v0.12.1
+v0.12.2
+- Fixed Trophy Drops to behave as Irongate intended for Rare drops in 1.0 in game modes that have Default trophy drop rates (Trophy Hunt, Trophy Farmer, Casual Saga)
+  - Rare drops (<30% drop rate) use the counter system based on enemy star level
+  - Drop counters are unique for each star level for each enemy type
+  - Drop counters persist across sessions and are saved per player per world in the player save data
+  - With `/showalltrophystats` enabled, "Kills Until Next Drop" added to the Luck-O-Meter tooltip for each trophy to show how many more kills are needed until the next drop for that trophy.
+- Fixed a bug with stat collection that was giving inaccurate Luck-O-Meter tallies that's probably been in there forever. Luck-O-Meter should be accurate now.
+
+- v0.12.1
 - Updated to work with Valheim 1.0
 - Depends on BepInEx 5.4.2351 or later
 
