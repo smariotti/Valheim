@@ -19,6 +19,7 @@ using System.Xml.Serialization;
 using BepInEx.Configuration;
 using Newtonsoft.Json;
 using System.Net.Http;
+using System.Xml.Linq;
 
 namespace TrophyHuntMod
 {
@@ -29,7 +30,7 @@ namespace TrophyHuntMod
         public const string PluginName = "TrophyHuntMod";
 
 
-        public const string PluginVersion = "0.10.29";
+        public const string PluginVersion = "0.12.1";
         private readonly Harmony harmony = new Harmony(PluginGUID);
 
         // Configuration variables
@@ -137,6 +138,9 @@ namespace TrophyHuntMod
         const int TROPHY_TRAILBLAZER_DEATH_PENALTY = -20;
         const int TROPHY_TRAILBLAZER_LOGOUT_PENALTY = -10;
 
+        const int TROPHY_FARMER_DEATH_PENALTY = -20;
+        const int TROPHY_FARMER_LOGOUT_PENALTY = -10;
+
         const int TROPHY_PACIFIST_DEATH_PENALTY = -20;
         const int TROPHY_PACIFIST_LOGOUT_PENALTY = -10;
         const float CHARMED_ENEMY_SPEED_MULTIPLIER = 3.5f;
@@ -152,6 +156,9 @@ namespace TrophyHuntMod
 
         static float __m_trailblazerSailingSpeedMultiplier = 10.0f;
         static float __m_trailblazerPaddlingSpeedMultiplier = 8.0f;
+
+        static float __m_farmerSailingSpeedMultiplier = 3.5f;
+        static float __m_farmerPaddlingSpeedMultiplier = 3.0f;
 
         const float TROPHY_SAGA_TROPHY_DROP_MULTIPLIER = 2f;
         const float TROPHY_SAGA_BASE_SKILL_LEVEL = 20.0f;
@@ -337,6 +344,7 @@ namespace TrophyHuntMod
 
         // Trophy Icons
         static List<GameObject> __m_iconList = null;
+        static List<GameObject> __m_trophyCountList = null;
 
         // Trophy Sprite
         static Sprite __m_trophySprite = null;
@@ -408,6 +416,7 @@ namespace TrophyHuntMod
             TrophySaga,
             TrophyBlitz,
             TrophyTrailblazer,
+            TrophyFarmer,
             TrophyPacifist,
             CulinarySaga,
             CasualSaga,
@@ -446,6 +455,7 @@ namespace TrophyHuntMod
                         "<color=#D00000>z</color>";
                     break;
                 case TrophyGameMode.TrophyTrailblazer: modeString = "<color=#D080FF>Trailblazer!</color>"; break;
+                case TrophyGameMode.TrophyFarmer: modeString = "<color=#20FF20>Trophy Farmer!</color>"; break;
                 case TrophyGameMode.TrophyPacifist: modeString = "<color=#F387C5>Trophy Pacifist</color>"; break;
                 case TrophyGameMode.CulinarySaga: modeString = "<color=#8080FF>Culinary Saga</color>"; break;
                 case TrophyGameMode.CasualSaga: modeString = "<color=yellow>Casual Saga</color>"; break;
@@ -486,10 +496,8 @@ namespace TrophyHuntMod
 
         static bool __m_introMessageDisplayed = false;
 
-        // Used by TrophySaga, true if all ores turn into bars when entering inventory
-        // also treats all ore weights as their bar weights across the game
-        //
-        static bool __m_instaSmelt = true;
+        // Do insta-smelt for any game mode, not just saga
+        static bool __m_instaSmelt = false;
 
         // If enabled, Elder power
         static bool __m_elderPowerCutsAllTrees = false;
@@ -526,6 +534,9 @@ namespace TrophyHuntMod
 
         // Just the killed enemies and trophies dropped and picked up by the player
         static Dictionary<string, DropInfo> __m_playerTrophyDropInfo = new Dictionary<string, DropInfo>();
+
+        // Trophy Counts for Farmer
+        static Dictionary<string, int> __m_farmerTrophyCounts = new Dictionary<string, int>();
 
         // Biomes we've completed 
         static List<Biome> __m_completedBiomeBonuses = new List<Biome>();
@@ -566,7 +577,7 @@ namespace TrophyHuntMod
             }
         }
 
-        static public string __m_saveDataVersionNumber = "7";
+        static public string __m_saveDataVersionNumber = "8";
 
         // WARNING!
         //
@@ -598,6 +609,12 @@ namespace TrophyHuntMod
                 public Character.Faction m_originalFaction;
                 public float m_swimSpeed;
                 public int m_charmLevel;
+            }
+
+            public class THMTrophyCount
+            {
+                public string m_name;
+                public int m_count;
             }
 
             public List<THMSaveDataDropInfo> m_playerTrophyDropInfos = null;
@@ -633,6 +650,7 @@ namespace TrophyHuntMod
             public List<string> m_cookedFoods = null;
 
             public List<PlayerEventLog> m_playerEventLog = null;
+            public List<THMTrophyCount> m_trophyCounts = null;
         }
 
         // Format per event: "<tag>=<secs>@<x>,<y>,<z>|<extra>;"
@@ -752,6 +770,17 @@ namespace TrophyHuntMod
 
             saveData.m_playerEventLog = __m_playerEventLog;
 
+            saveData.m_trophyCounts = new List<THMTrophyCount>();
+            foreach (KeyValuePair<string, int> dictEntry in __m_farmerTrophyCounts)
+            {
+                THMTrophyCount trophyCount = new THMTrophyCount();
+                trophyCount.m_name = dictEntry.Key;
+                trophyCount.m_count = dictEntry.Value;
+
+                saveData.m_trophyCounts.Add(trophyCount);
+            }
+
+
             XmlSerializer xmlSerializer = new XmlSerializer(typeof(THMSaveData));
             StringWriter stream = new StringWriter();
             xmlSerializer.Serialize(stream, saveData);
@@ -781,6 +810,7 @@ namespace TrophyHuntMod
             StringReader stream = new StringReader(data);
 
             THMSaveData saveData = xmlSerializer.Deserialize(stream) as THMSaveData;
+
 
             if (saveData.m_pendingEvents != null && saveData.m_pendingEvents.Count > __m_pendingEvents.Count)
                 __m_pendingEvents = saveData.m_pendingEvents;
@@ -843,6 +873,12 @@ namespace TrophyHuntMod
             __m_cookedFoods = saveData.m_cookedFoods;
 
             __m_playerEventLog = saveData.m_playerEventLog;
+
+            __m_farmerTrophyCounts.Clear();
+            foreach (THMTrophyCount tc in saveData.m_trophyCounts)
+            {
+               __m_farmerTrophyCounts[tc.m_name] = tc.m_count;
+            }
 
             // Unpack dropinfos and update the Dictionary
             //
@@ -964,6 +1000,15 @@ namespace TrophyHuntMod
                 __m_playerTrophyDropInfo.Add(td.m_name, new DropInfo());
             }
             __m_completedBiomeBonuses.Clear();
+        }
+
+        public static void InitializeTrophyCountInfo()
+        {
+            __m_farmerTrophyCounts.Clear();
+            foreach (TrophyHuntData td in __m_trophyHuntData)
+            {
+                __m_farmerTrophyCounts[td.m_name] = 0;
+            }
         }
 
         public static bool __m_showingTrophies = true;
@@ -1104,6 +1149,9 @@ namespace TrophyHuntMod
                 case TrophyGameMode.TrophyTrailblazer:
                     gameModeText = "Trailblazer";
                     break;
+                case TrophyGameMode.TrophyFarmer:
+                    gameModeText = "Trophy Farmer";
+                    break;
                 case TrophyGameMode.TrophyPacifist:
                     gameModeText = "Pacifist";
                     break;
@@ -1176,6 +1224,15 @@ namespace TrophyHuntMod
                     dropRate = "100%";
                     hasBiomeBonuses = true;
                     timeLimit = "3 Hours";
+                    break;
+                case TrophyGameMode.TrophyFarmer:
+                    text += $"<align=\"left\"><size=14><color=red>                EXPERIMENTAL!</color></size>";
+                    text += $"<align=\"center\"><size=12>\n  <color=yellow>NOTE:</color> To use existing world, change World Modifiers manually!</size>\n";
+                    resourceMultiplier = 2.0f;
+                    combatDifficulty = "Normal";
+                    dropRate = "Normal";
+                    hasBiomeBonuses = false;
+                    timeLimit = "4 Hours";
                     break;
                 case TrophyGameMode.TrophyPacifist:
                     text += $"<align=\"left\"><size=14><color=red>                EXPERIMENTAL!</color></size>";
@@ -1266,6 +1323,13 @@ namespace TrophyHuntMod
                     text += $"<align=\"left\">      * Automatic Portal map pins\n";
                     text += $"<align=\"left\">      * <color=orange>CheatDeath(tm)</color> within 3 sec.\n";
                 }
+                if (GetGameMode() == TrophyGameMode.TrophyFarmer)
+                {
+                    text += $"<align=\"left\">      * Additional trophies count for points!\n";
+                    text += $"<align=\"left\">      * Fast Fermenters and Plantings\n";
+                    text += $"<align=\"left\">      * Fast boats\n";
+                    text += $"<align=\"left\">      * Ores <color=orange>Insta-smelt</color> on pickup\n";
+                }
                 if (IsPacifist())
                 {
                     text += $"<align=\"left\">      * You <color=orange>can't attack</color> enemies!\n";
@@ -1351,6 +1415,12 @@ namespace TrophyHuntMod
                     return;
                 }
 
+                __m_instaSmelt = false;
+                if (IsSagaMode() || GetGameMode() == TrophyGameMode.TrophyFarmer)
+                {
+                    __m_instaSmelt = true;
+                }
+
                 //                Debug.LogWarning("Local Player is Spawned!");
 
                 // Sort the trophies by biome, score and name
@@ -1386,7 +1456,7 @@ namespace TrophyHuntMod
                     GetGameMode() == TrophyGameMode.CulinarySaga ||
                     GetGameMode() == TrophyGameMode.CasualSaga ||
                      Game.instance.GetPlayerProfile().m_usedCheats == true ||
-                     Game.instance.GetPlayerProfile().m_playerStats[PlayerStatType.Cheats] > 0)
+                     Game.instance.GetPlayerProfile().m_playerStats[0].m_stats[PlayerStatType.Cheats] > 0)
                 {
                     __m_invalidForTournamentPlay = true;
 
@@ -1672,6 +1742,7 @@ namespace TrophyHuntMod
 
             // Clear the dropped trophies tracking data
             InitializeTrophyDropInfo();
+            InitializeTrophyCountInfo();
 
             __m_completedAllBiomeBonuses = false;
             __m_completedBiomeBonuses.Clear();
@@ -1701,6 +1772,7 @@ namespace TrophyHuntMod
                 case TrophyGameMode.TrophySaga: minutes = (int)NUM_SECONDS_IN_FOUR_HOURS / 60; break;
                 case TrophyGameMode.TrophyBlitz: minutes = (int)NUM_SECONDS_IN_TWO_HOURS / 60; break;
                 case TrophyGameMode.TrophyTrailblazer: minutes = (int)NUM_SECONDS_IN_THREE_HOURS / 60; break;
+                case TrophyGameMode.TrophyFarmer: minutes = (int)NUM_SECONDS_IN_FOUR_HOURS / 60; break;
                 case TrophyGameMode.TrophyPacifist: minutes = (int)NUM_SECONDS_IN_FOUR_HOURS / 60; break;
                 case TrophyGameMode.CasualSaga: minutes = 0; break;
                 case TrophyGameMode.CulinarySaga: minutes = (int)NUM_SECONDS_IN_FOUR_HOURS / 60; break;
@@ -1729,6 +1801,7 @@ namespace TrophyHuntMod
             return score;
         }
 
+        // Total trophy points
         public static int CalculateTrophyPoints(bool displayToLog = false)
         {
             int score = 0;
@@ -1738,9 +1811,9 @@ namespace TrophyHuntMod
                 {
                     if (displayToLog)
                     {
-                        PrintToConsole($"  {thData.m_name}: Score: {thData.GetCurGameModeTrophyScoreValue()} Biome: {thData.m_biome.ToString()}");
+//                        PrintToConsole($"  {thData.m_name}: Score: {thData.GetCurGameModeTrophyScoreValue()} Biome: {thData.m_biome.ToString()}");
                     }
-                    score += thData.GetCurGameModeTrophyScoreValue();
+                    score += thData.GetCurGameModeTrophyScoreValue(); 
                 }
             }
 
@@ -1761,6 +1834,8 @@ namespace TrophyHuntMod
                 deathCost = TROPHY_BLITZ_DEATH_PENALTY;
             else if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
                 deathCost = TROPHY_TRAILBLAZER_DEATH_PENALTY;
+            else if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
+                deathCost = TROPHY_FARMER_DEATH_PENALTY;
             else if (GetGameMode() == TrophyGameMode.TrophyPacifist)
                 deathCost = TROPHY_PACIFIST_DEATH_PENALTY;
 
@@ -1800,6 +1875,8 @@ namespace TrophyHuntMod
                 logoutCost = TROPHY_BLITZ_LOGOUT_PENALTY;
             else if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
                 logoutCost = TROPHY_TRAILBLAZER_LOGOUT_PENALTY;
+            else if (GetGameMode() == TrophyGameMode.TrophyFarmer)
+                logoutCost = TROPHY_FARMER_LOGOUT_PENALTY;
             else if (GetGameMode() == TrophyGameMode.TrophyPacifist)
                 logoutCost = TROPHY_PACIFIST_LOGOUT_PENALTY;
             return logoutCost;
@@ -1854,6 +1931,7 @@ namespace TrophyHuntMod
                 }
 
                 __m_iconList = new List<GameObject>();
+                __m_trophyCountList = new List<GameObject>();
 
                 if (GetGameMode() != TrophyGameMode.CasualSaga)
                 {
@@ -1880,7 +1958,7 @@ namespace TrophyHuntMod
                     }
                     else
                     {
-                        CreateTrophyIconElements(healthPanelTransform, __m_trophyHuntData, __m_iconList);
+                        CreateTrophyIconElements(healthPanelTransform, __m_trophyHuntData, __m_iconList, __m_trophyCountList);
 
                         // Create the hover text object
                         CreateTrophyTooltip();
@@ -2303,7 +2381,7 @@ namespace TrophyHuntMod
             //            UpdateModUI(Player.m_localPlayer);
         }
 
-        static GameObject CreateTrophyIconElement(Transform parentTransform, Sprite iconSprite, string iconName, Biome iconBiome, int index)
+        static GameObject CreateTrophyIconElement(Transform parentTransform, Sprite iconSprite, string iconName, Biome iconBiome, int index, out GameObject countObject)
         {
 
             int iconSize = 33;
@@ -2354,6 +2432,27 @@ namespace TrophyHuntMod
 
             AddTooltipTriggersToTrophyIcon(iconElement);
 
+            countObject = new GameObject(iconName);
+            countObject.transform.SetParent(iconElement.transform);
+            RectTransform countRectTransform = countObject.AddComponent<RectTransform>();
+            countRectTransform.sizeDelta = new Vector2(iconSize, iconSize); // Set size
+            countRectTransform.anchoredPosition = new Vector2(0,0); // Set position
+            countRectTransform.localScale = new Vector3(1, 1, 1);
+            countRectTransform.SetAsLastSibling();
+
+            TMPro.TextMeshProUGUI tmText = AddTextMeshProComponent(countObject);
+
+            tmText.text = $"";
+            tmText.fontSize = 14;
+            tmText.color = Color.yellow;
+            tmText.alignment = TextAlignmentOptions.BottomJustified;
+            tmText.horizontalAlignment = HorizontalAlignmentOptions.Center;
+            tmText.raycastTarget = false;
+            tmText.fontMaterial.EnableKeyword("OUTLINE_ON");
+            tmText.outlineColor = Color.black;
+            tmText.fontStyle = FontStyles.Bold;
+            tmText.outlineWidth = 0.125f; // Adjust the thickness
+
             return iconElement;
         }
 
@@ -2363,11 +2462,10 @@ namespace TrophyHuntMod
             {
                 GameObject.Destroy(trophyIconObject);
             }
-
             iconList.Clear();
         }
 
-        public static void CreateTrophyIconElements(Transform parentTransform, TrophyHuntData[] trophies, List<GameObject> iconList)
+        public static void CreateTrophyIconElements(Transform parentTransform, TrophyHuntData[] trophies, List<GameObject> iconList, List<GameObject> countList)
         {
             foreach (TrophyHuntData trophy in trophies)
             {
@@ -2379,10 +2477,11 @@ namespace TrophyHuntMod
                     continue;
                 }
 
-                GameObject iconElement = CreateTrophyIconElement(parentTransform, trophySprite, trophy.m_name, trophy.m_biome, iconList.Count);
+                GameObject iconElement = CreateTrophyIconElement(parentTransform, trophySprite, trophy.m_name, trophy.m_biome, iconList.Count, out GameObject countObject);
                 iconElement.name = trophy.m_name;
 
                 iconList.Add(iconElement);
+                countList.Add(countObject);
             }
 
             if (GetGameMode() == TrophyGameMode.TrophyFiesta)
@@ -2529,7 +2628,12 @@ namespace TrophyHuntMod
                 if (trophyHuntData.m_name == trophyName)
                 {
                     // Add the value to our score
-                    score += trophyHuntData.GetCurGameModeTrophyScoreValue();
+                    int trophyScore = trophyHuntData.GetCurGameModeTrophyScoreValue();
+                    if (GetGameMode() == TrophyGameMode.TrophyFarmer)
+                    {
+                        trophyScore *= __m_farmerTrophyCounts[trophyHuntData.m_name];
+                    }
+                    score += trophyScore;
                 }
             }
 
@@ -2661,7 +2765,7 @@ namespace TrophyHuntMod
             PlayerProfile profile = Game.instance?.GetPlayerProfile();
             if (profile?.m_playerStats != null)
             {
-                __m_deaths = (int)profile.m_playerStats[PlayerStatType.Deaths];
+                __m_deaths = (int)profile.m_playerStats[0].m_stats[PlayerStatType.Deaths];
                 score += CalculateDeathPenalty();
             }
 
@@ -2745,10 +2849,27 @@ namespace TrophyHuntMod
                 else
                     HideThrallsWindow();
             }
+
+            if (GetGameMode() == TrophyGameMode.TrophyFarmer)
+            {
+                foreach (GameObject go in __m_trophyCountList)
+                {
+                    int count = __m_farmerTrophyCounts[go.name];
+
+                    TMPro.TextMeshProUGUI tmText = go.GetComponent<TMPro.TextMeshProUGUI>();
+                    if (count > 0)
+                        tmText.text = $"{count}";
+                    else
+                       tmText.text = "";
+                }
+            }
         }
 
-        static IEnumerator FlashImage(UnityEngine.UI.Image targetImage, RectTransform imageRect)
+        static List<string> __m_flashingTrophies = new List<string>();
+        static IEnumerator FlashImage(string trophyName, UnityEngine.UI.Image targetImage, RectTransform imageRect)
         {
+            __m_flashingTrophies.Add(trophyName);
+
             float flashDuration = 0.809f;
             int numFlashes = 6;
 
@@ -2784,6 +2905,8 @@ namespace TrophyHuntMod
             targetImage.color = Color.white;
             imageRect.localScale = originalScale;
             imageRect.anchoredPosition = originalAnchoredPosition;
+
+            __m_flashingTrophies.Remove(trophyName);
         }
 
         static IEnumerator FlashImage2(UnityEngine.UI.Image targetImage, RectTransform imageRect)
@@ -2945,6 +3068,11 @@ namespace TrophyHuntMod
 
         static void FlashTrophy(string trophyName)
         {
+            if (__m_flashingTrophies.Contains(trophyName))
+            {
+                return;
+            }
+
             GameObject iconGameObject = __m_iconList.Find(gameObject => gameObject.name == trophyName);
 
             if (iconGameObject != null)
@@ -2957,7 +3085,7 @@ namespace TrophyHuntMod
                     if (imageRect != null)
                     {
                         // Flash it with a CoRoutine
-                        __m_trophyHuntMod.StartCoroutine(FlashImage(image, imageRect));
+                        __m_trophyHuntMod.StartCoroutine(FlashImage(trophyName, image, imageRect));
                         //                        __m_trophyHuntMod.StartCoroutine(DoFlashScore());
                     }
                 }
@@ -3087,16 +3215,6 @@ namespace TrophyHuntMod
                         AddPlayerEvent(PlayerEventType.Trophy, name, player.transform.position, compositeBonusCode);
 
                         AddTrophyPin(player.transform.position, name);
-
-                        if (MessageHud.instance)
-                        {
-                            Sprite trophyIcon = GetTrophySprite(name);
-                            if (trophyIcon != null)
-                            {
-                                TrophyHuntData data = Array.Find(__m_trophyHuntData, element => element.m_name == name);
-                                //MessageHud.instance.QueueUnlockMsg(trophyIcon, "Trophy Get!", data.m_prettyName + " Trophy");
-                            }
-                        }
                     }
                 }
             }
@@ -3234,7 +3352,7 @@ namespace TrophyHuntMod
             PlayerProfile profile = game.GetPlayerProfile();
             if (profile != null)
             {
-                PlayerProfile.PlayerStats stats = profile.m_playerStats;
+                PlayerProfile.PlayerStats stats = profile.m_playerStats[0];
                 if (stats != null)
                 {
                     float onFootDistance = stats[PlayerStatType.DistanceWalk] + stats[PlayerStatType.DistanceRun];
@@ -3312,6 +3430,7 @@ namespace TrophyHuntMod
                 { TrophyGameMode.TrophyRush, new Vector2(290, 400) },
                 { TrophyGameMode.TrophyBlitz, new Vector2(290, 400) },
                 { TrophyGameMode.TrophyTrailblazer, new Vector2(290, 400) },
+                { TrophyGameMode.TrophyFarmer, new Vector2(240, 215) },
                 { TrophyGameMode.TrophyPacifist, new Vector2(290, 400) },
                 { TrophyGameMode.CasualSaga, new Vector2(300, 170) },
                 { TrophyGameMode.TrophySaga, new Vector2(290, 215) },
@@ -3385,7 +3504,7 @@ namespace TrophyHuntMod
             entryExit.callback.AddListener((eventData) => HideScoreTooltip());
             trigger.triggers.Add(entryExit);
         }
-
+         
         public static string BuildScoreTooltipText(GameObject uiObject)
         {
             string text = "<n/a>";
@@ -4837,7 +4956,7 @@ namespace TrophyHuntMod
 
         public static void ConvertMetal(ref ItemDrop.ItemData itemData)
         {
-            if (!IsSagaMode() || !__m_instaSmelt)
+            if (!IsSagaMode() && !__m_instaSmelt)
                 return;
 
             if (itemData == null)
@@ -4881,7 +5000,7 @@ namespace TrophyHuntMod
         {
             static bool Prefix(ItemDrop.ItemData __instance, ref float __result)
             {
-                if (!IsSagaMode())
+                if (!IsSagaMode() && !__m_instaSmelt)
                 {
                     return true;
                 }
@@ -4916,7 +5035,7 @@ namespace TrophyHuntMod
         {
             static bool Prefix(ItemDrop.ItemData __instance, ref float __result)
             {
-                if (!IsSagaMode())
+                if (!IsSagaMode() && !__m_instaSmelt)
                 {
                     return true;
                 }
@@ -4948,13 +5067,10 @@ namespace TrophyHuntMod
 
         public static void ConvertMetalOresIfNecessary(ref ItemDrop.ItemData item)
         {
-            if (IsSagaMode())
+            if (IsSagaMode() || __m_instaSmelt)
             {
                 // Item successfully added to inventory
-                if (__m_instaSmelt)
-                {
-                    ConvertMetal(ref item);
-                }
+                ConvertMetal(ref item);
 
                 if (GetGameMode() == TrophyGameMode.CulinarySaga)
                 {
@@ -4996,7 +5112,7 @@ namespace TrophyHuntMod
             static void Prefix(Inventory __instance, ref ItemDrop.ItemData item, bool __result)
             {
                 //            Debug.LogWarning($"Inventory.AddItem() {item.m_dropPrefab.name}");
-                if (IsSagaMode() && __m_instaSmelt)
+                if (IsSagaMode() || __m_instaSmelt)
                 {
                     if (__instance != null && Player.m_localPlayer != null
                         && __instance == Player.m_localPlayer.GetInventory())
@@ -5008,10 +5124,10 @@ namespace TrophyHuntMod
         }
 
         // this is called when dropped into an inventory slot with the mouse
-        [HarmonyPatch(typeof(Inventory), nameof(Inventory.AddItem), new[] { typeof(ItemDrop.ItemData), typeof(int), typeof(int), typeof(int) })]
+        [HarmonyPatch(typeof(Inventory), nameof(Inventory.AddItem), new[] { typeof(ItemDrop.ItemData), typeof(int), typeof(int), typeof(int), typeof(bool) })]
         public class Inventory_AddItem_4_Patch
         {
-            static void Postfix(Inventory __instance, ItemDrop.ItemData item, int amount, int x, int y, bool __result)
+            static void Postfix(Inventory __instance, ItemDrop.ItemData item, int amount, int x, int y, bool skipValidPositionCheck, bool __result)
             {
                 //               Debug.LogWarning($"Inventory.AddItem4() Postfix {amount} {x} {y}");
 
@@ -5029,11 +5145,11 @@ namespace TrophyHuntMod
             }
 
 
-            static bool Prefix(Inventory __instance, ItemDrop.ItemData item, int amount, int x, int y, ref bool __result)
+            static bool Prefix(Inventory __instance, ItemDrop.ItemData item, int amount, int x, int y, bool skipValidPositionCheck, ref bool __result)
             {
                 //                Debug.LogWarning($"Inventory.AddItem() Prefix {item.m_dropPrefab.name} stack={amount}, pos=({x},{y})");
 
-                if (!IsSagaMode())
+                if (!IsSagaMode() && !__m_instaSmelt)
                 {
                     // Run original function with no modifications
                     return true;
@@ -5162,10 +5278,12 @@ namespace TrophyHuntMod
             */
         }
         // This is called when items are upgraded, so need to log upgrades as well as pickups
-        [HarmonyPatch(typeof(Inventory), nameof(Inventory.AddItem), new[] { typeof(string), typeof(int), typeof(int), typeof(int), typeof(long), typeof(string), typeof(Vector2i), typeof(bool) })]
+        //    public extern ItemDrop.ItemData AddItem(string name, int stack, int quality, int variant, long crafterID, string crafterName, Vector2i position, bool cheated, bool pickedUp = false, bool dropIfFullInv = true);
+
+        [HarmonyPatch(typeof(Inventory), nameof(Inventory.AddItem), new[] { typeof(string), typeof(int), typeof(int), typeof(int), typeof(long), typeof(string), typeof(Vector2i), typeof(bool), typeof(bool), typeof(bool) })]
         public class Inventory_AddItem_2_Patch
         {
-            static void Postfix(Inventory __instance, string name, int stack, int quality, int variant, long crafterID, string crafterName, Vector2i position, bool pickedUp)
+            static void Postfix(Inventory __instance, string name, int stack, int quality, int variant, long crafterID, string crafterName, Vector2i position, bool cheated, bool pickedUp, bool dropIfFullInv)
             {
 
                 //                Debug.LogWarning($"Inventory.AddItem2() {name}");
@@ -5196,28 +5314,24 @@ namespace TrophyHuntMod
                 {
                     //                    Debug.LogWarning($"Inventory.CanAddItem() {item.m_dropPrefab.name}");
 
-                    if (IsSagaMode())
+                    if (IsSagaMode() || __m_instaSmelt)
                     {
-                        // Item successfully added to inventory
-                        if (__m_instaSmelt)
+                        if (item != null && item.m_dropPrefab != null)
                         {
-                            if (item != null && item.m_dropPrefab != null)
+                            string prefabName = item.m_dropPrefab.name;
+                            string itemName;
+                            if (__m_oreNameToBarItemName.TryGetValue(prefabName, out itemName))
                             {
-                                string prefabName = item.m_dropPrefab.name;
-                                string itemName;
-                                if (__m_oreNameToBarItemName.TryGetValue(prefabName, out itemName))
+                                if (stack <= 0)
                                 {
-                                    if (stack <= 0)
-                                    {
-                                        stack = item.m_stack;
-                                    }
-
-                                    __result = __instance.FindFreeStackSpace(itemName, 0) + (__instance.m_width * __instance.m_height - __instance.m_inventory.Count) * item.m_shared.m_maxStackSize >= stack;
-
-                                    //                                        Debug.LogWarning($"CanAddItem {prefabName} result {__result} : {itemName}");
-
-                                    return false;
+                                    stack = item.m_stack;
                                 }
+
+                                __result = __instance.FindFreeStackSpace(itemName, 0) + (__instance.m_width * __instance.m_height - __instance.m_inventory.Count) * item.m_shared.m_maxStackSize >= stack;
+
+                                //                                        Debug.LogWarning($"CanAddItem {prefabName} result {__result} : {itemName}");
+
+                                return false;
                             }
                         }
                     }
@@ -5243,47 +5357,78 @@ namespace TrophyHuntMod
                 ItemDrop itemDrop = go.GetComponent<ItemDrop>();
                 if (itemDrop != null)
                 {
-                    if (IsSagaMode())
+                    if (IsSagaMode() || __m_instaSmelt)
                     {
-                        if (__m_instaSmelt)
-                        {
-                            ConvertMetal(ref itemDrop.m_itemData);
-                        }
+                        ConvertMetal(ref itemDrop.m_itemData);
 
-                        // Check to see if we picked up something that's a SpecialSagaDrop
-                        if (itemDrop.m_itemData != null && itemDrop.m_itemData.m_dropPrefab != null)
+                        if (GetGameMode() != TrophyGameMode.TrophyFarmer)
                         {
-                            string itemName = itemDrop.m_itemData.m_dropPrefab.name;
-
-                            foreach (KeyValuePair<string, List<SpecialSagaDrop>> specialDrops in __m_specialSagaDrops)
+                            // Check to see if we picked up something that's a SpecialSagaDrop
+                            if (itemDrop.m_itemData != null && itemDrop.m_itemData.m_dropPrefab != null)
                             {
-                                string merbName = specialDrops.Key;
+                                string itemName = itemDrop.m_itemData.m_dropPrefab.name;
 
-                                List<SpecialSagaDrop> merbDrop = __m_specialSagaDrops[merbName];
-
-                                for (int i = 0; i < merbDrop.Count; i++)
+                                foreach (KeyValuePair<string, List<SpecialSagaDrop>> specialDrops in __m_specialSagaDrops)
                                 {
-                                    SpecialSagaDrop sagaDrop = merbDrop[i];
-                                    if (sagaDrop.m_itemName == itemName && sagaDrop.m_stopDroppingOnPickup)
+                                    string merbName = specialDrops.Key;
+
+                                    List<SpecialSagaDrop> merbDrop = __m_specialSagaDrops[merbName];
+
+                                    for (int i = 0; i < merbDrop.Count; i++)
                                     {
-                                        //                                        Debug.LogError($"Humanoid.Pickup() SpecialSagaDrop for {itemName} found in list for {merbName}");
+                                        SpecialSagaDrop sagaDrop = merbDrop[i];
+                                        if (sagaDrop.m_itemName == itemName && sagaDrop.m_stopDroppingOnPickup)
+                                        {
+                                            //                                        Debug.LogError($"Humanoid.Pickup() SpecialSagaDrop for {itemName} found in list for {merbName}");
 
-                                        //                                        Debug.LogError($"Player has picked up {sagaDrop.m_numPickedUp} {itemName}");
+                                            //                                        Debug.LogError($"Player has picked up {sagaDrop.m_numPickedUp} {itemName}");
 
-                                        sagaDrop.m_numPickedUp++;
+                                            sagaDrop.m_numPickedUp++;
+                                        }
+
+                                        merbDrop[i] = sagaDrop;
                                     }
 
-                                    merbDrop[i] = sagaDrop;
-                                }
+                                    List<SpecialSagaDrop> verifyList = __m_specialSagaDrops[merbName];
 
-                                List<SpecialSagaDrop> verifyList = __m_specialSagaDrops[merbName];
-
-                                foreach (SpecialSagaDrop sd in verifyList)
-                                {
-                                    if (sd.m_itemName == itemName && sd.m_stopDroppingOnPickup)
+                                    foreach (SpecialSagaDrop sd in verifyList)
                                     {
-                                        //                                        Debug.LogError($"{merbName} m_numPickedUp for {sd.m_itemName} is {sd.m_numPickedUp}");
+                                        if (sd.m_itemName == itemName && sd.m_stopDroppingOnPickup)
+                                        {
+                                            //                                        Debug.LogError($"{merbName} m_numPickedUp for {sd.m_itemName} is {sd.m_numPickedUp}");
 
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        else
+                        {
+                            if (GetGameMode() == TrophyGameMode.TrophyFarmer)
+                            {
+                                Debug.LogError($"Picked up GO {go.name} itemDrop {itemDrop.name} itemDropZDO UID {itemDrop.m_nview.m_zdo.m_uid}");
+
+                                if (!itemDrop.m_itemData.m_customData.ContainsKey("Farmed"))
+                                {
+                                    string itemName = itemDrop?.m_itemData?.m_dropPrefab?.name;
+                                    if (Array.Exists(__m_trophyHuntData, element => element.m_name == itemName))
+                                    {
+                                        TrophyHuntData data = Array.Find(__m_trophyHuntData, element => element.m_name == itemName);
+
+                                        __m_farmerTrophyCounts[itemName] = __m_farmerTrophyCounts[itemName] + 1;
+
+                                        if (MessageHud.instance && __m_farmerTrophyCounts[itemName] > 1)
+                                        {
+                                            Sprite trophyIcon = GetTrophySprite(itemName);
+                                            if (trophyIcon != null)
+                                            {
+                                                MessageHud.instance.QueueUnlockMsg(trophyIcon, "Farmer Get!", data.m_prettyName + " Trophy #" + __m_farmerTrophyCounts[itemName]);
+                                                FlashTrophy(itemName);
+                                            }
+                                        }
+                                        UpdateModUI(Player.m_localPlayer);
+
+                                        itemDrop.m_itemData.m_customData.Add("Farmed", "true");
                                     }
                                 }
                             }
@@ -6591,7 +6736,7 @@ namespace TrophyHuntMod
             // For local saves the files sit next to the .db in worlds_local/.
             // For cloud saves GetDBPath() may point elsewhere; if the files aren't
             // there we also check worlds/ and worlds_local/ under persistentDataPath.
-            string worldFileName = WorldGenerator.instance.m_world.m_fileName;
+            string worldFileName = WorldGenerator.instance.m_world.GetSaveFWLPath();
             string dbPath = WorldGenerator.instance.m_world.GetDBPath();
 
             string FindWorldBase()
@@ -6696,7 +6841,7 @@ namespace TrophyHuntMod
                 GameObject mainMenu = GameObject.Find("Menu");
                 if (mainMenu != null)
                 {
-                    GameObject topicObject = GameObject.Find("Topic");
+                    GameObject topicObject = GameObject.Find("modded_text");
                     TextMeshProUGUI topicText = topicObject?.GetComponent<TextMeshProUGUI>();
                     __m_globalFontObject = topicText.font;
 
@@ -6801,7 +6946,7 @@ namespace TrophyHuntMod
                         FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("enemyleveluprate 140");
                         FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("resourcerate 200");
                         FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("preset combat_veryhard:deathpenalty_default: resources_muchmore: raids_default: portals_default");
-                        FejdStartup.m_instance.m_world.SaveWorldMetaData(DateTime.Now);
+                        FejdStartup.m_instance.m_world.SaveWorldFWLData(DateTime.Now);
                         __instance.UpdateWorldList(centerSelection: true);
                     }
                     else if (IsSagaMode())
@@ -6822,7 +6967,7 @@ namespace TrophyHuntMod
                         //FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("eventrate 0");
                         //FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("preset combat_hard:deathpenalty_default: resources_muchmore: raids_none: portals_default");
 
-                        FejdStartup.m_instance.m_world.SaveWorldMetaData(DateTime.Now);
+                        FejdStartup.m_instance.m_world.SaveWorldFWLData(DateTime.Now);
                         __instance.UpdateWorldList(centerSelection: true);
                     }
                     else if (GetGameMode() == TrophyGameMode.TrophyFiesta)
@@ -6841,7 +6986,7 @@ namespace TrophyHuntMod
                         //FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("eventrate 0");
                         //FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("preset combat_hard:deathpenalty_default: resources_muchmore: raids_none: portals_default");
 
-                        FejdStartup.m_instance.m_world.SaveWorldMetaData(DateTime.Now);
+                        FejdStartup.m_instance.m_world.SaveWorldFWLData(DateTime.Now);
                         __instance.UpdateWorldList(centerSelection: true);
                     }
                     else if (GetGameMode() == TrophyGameMode.TrophyBlitz)
@@ -6855,7 +7000,7 @@ namespace TrophyHuntMod
                         FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("nobuildcost");
                         FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("preset combat_default:deathpenalty_casual: resources_muchmore: raids_none: portals_casual");
 
-                        FejdStartup.m_instance.m_world.SaveWorldMetaData(DateTime.Now);
+                        FejdStartup.m_instance.m_world.SaveWorldFWLData(DateTime.Now);
                         __instance.UpdateWorldList(centerSelection: true);
                     }
                     else if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
@@ -6869,14 +7014,23 @@ namespace TrophyHuntMod
                         FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("nobuildcost");
                         FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("preset combat_default:deathpenalty_casual: resources_muchmore: raids_none: portals_casual");
 
-                        FejdStartup.m_instance.m_world.SaveWorldMetaData(DateTime.Now);
+                        FejdStartup.m_instance.m_world.SaveWorldFWLData(DateTime.Now);
+                        __instance.UpdateWorldList(centerSelection: true);
+                    }
+                    else if (GetGameMode() == TrophyGameMode.TrophyFarmer)
+                    {
+                        FejdStartup.m_instance.m_world.m_startingGlobalKeys.Clear();
+                        FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("resourcerate 200");
+                        FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("preset combat_default:deathpenalty_casual: resources_muchmore: raids_none: portals_casual");
+
+                        FejdStartup.m_instance.m_world.SaveWorldFWLData(DateTime.Now);
                         __instance.UpdateWorldList(centerSelection: true);
                     }
                     else if (GetGameMode() == TrophyGameMode.TrophyPacifist)
                     {
                         FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("resourcerate 200");
-                        FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("preset combat_default:deathpenalty_default:resources_muchmore:raids_none:portals_default");
-                        FejdStartup.m_instance.m_world.SaveWorldMetaData(DateTime.Now);
+                        FejdStartup.m_instance.m_world.m_startingGlobalKeys.Add("preset combat_default:deathpenalty_default:resources_muchmore:raids_default:portals_default");
+                        FejdStartup.m_instance.m_world.SaveWorldFWLData(DateTime.Now);
                         __instance.UpdateWorldList(centerSelection: true);
                     }
                 }
@@ -6952,7 +7106,7 @@ namespace TrophyHuntMod
                         UpdateModUI(Player.m_localPlayer);
                     }
                     if (Game.instance.GetPlayerProfile().m_usedCheats == true ||
-                     Game.instance.GetPlayerProfile().m_playerStats[PlayerStatType.Cheats] > 0)
+                     Game.instance.GetPlayerProfile().m_playerStats[0].m_stats[PlayerStatType.Cheats] > 0)
                     {
                         Debug.LogError($"INVALID FOR TOURNAMENT PLAY!: cheats USED");
 
@@ -7001,6 +7155,10 @@ namespace TrophyHuntMod
                 {
                     __result *= __m_trailblazerSailingSpeedMultiplier;
                 }
+                else if (GetGameMode() == TrophyGameMode.TrophyFarmer)
+                {
+                    __result *= __m_farmerSailingSpeedMultiplier;
+                }
             }
         }
 
@@ -7020,6 +7178,10 @@ namespace TrophyHuntMod
                 else if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
                 {
                     __instance.m_backwardForce *= __m_trailblazerPaddlingSpeedMultiplier;
+                }
+                else if (GetGameMode() == TrophyGameMode.TrophyFarmer)
+                {
+                    __instance.m_backwardForce *= __m_farmerPaddlingSpeedMultiplier;
                 }
             }
         }
@@ -7072,7 +7234,7 @@ namespace TrophyHuntMod
         {
             static void Postfix(Fermenter __instance)
             {
-                if (__instance != null && (IsSagaMode() || GetGameMode() == TrophyGameMode.TrophyBlitz) || GetGameMode() == TrophyGameMode.TrophyTrailblazer)
+                if (__instance != null && (IsSagaMode() || GetGameMode() == TrophyGameMode.TrophyBlitz) || GetGameMode() == TrophyGameMode.TrophyTrailblazer || GetGameMode() == TrophyGameMode.TrophyFarmer)
                 {
                     __instance.m_fermentationDuration = 10;
                 }
@@ -7086,7 +7248,7 @@ namespace TrophyHuntMod
         {
             static void Prefix(Fermenter __instance)
             {
-                if (__instance != null && (IsSagaMode() || GetGameMode() == TrophyGameMode.TrophyBlitz) || GetGameMode() == TrophyGameMode.TrophyTrailblazer)
+                if (__instance != null && (IsSagaMode() || GetGameMode() == TrophyGameMode.TrophyBlitz) || GetGameMode() == TrophyGameMode.TrophyTrailblazer || GetGameMode() == TrophyGameMode.TrophyFarmer)
                 {
 
                     Fermenter.ItemConversion itemConversion = __instance.GetItemConversion(__instance.m_delayedTapItem);
@@ -7113,7 +7275,7 @@ namespace TrophyHuntMod
 
                         __result = (double)__instance.m_growTimeMax + 1;
                     }
-                    else if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
+                    else if (GetGameMode() == TrophyGameMode.TrophyTrailblazer || GetGameMode() == TrophyGameMode.TrophyFarmer)
                     {
                         __result = (double)__instance.m_growTimeMax + 1;
                     }
@@ -7629,10 +7791,12 @@ namespace TrophyHuntMod
             AddPortalPin(pos, text);
         }
 
-        [HarmonyPatch(typeof(Player), nameof(Player.PlacePiece), new[] { typeof(Piece), typeof(Vector3), typeof(Quaternion), typeof(bool) })]
+        //     public extern void PlacePiece(Piece piece, Vector3 pos, Quaternion rot, bool doAttack = true, bool cheated = false);
+
+        [HarmonyPatch(typeof(Player), nameof(Player.PlacePiece), new[] { typeof(Piece), typeof(Vector3), typeof(Quaternion), typeof(bool), typeof(bool) })]
         public static class Player_PlacePiece_Patch
         {
-            public static void Postfix(Player __instance, Piece piece, Vector3 pos, Quaternion rot, bool doAttack)
+            public static void Postfix(Player __instance, Piece piece, Vector3 pos, Quaternion rot, bool doAttack, bool cheated)
             {
                 if (GetGameMode() != TrophyGameMode.TrophyBlitz && GetGameMode() != TrophyGameMode.TrophyTrailblazer)
                 {

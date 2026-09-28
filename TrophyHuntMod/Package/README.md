@@ -1,4 +1,4 @@
-﻿# TrophyHuntMod
+# TrophyHuntMod
 
 This is a BepInEx mod for Valheim for the Valheim Trophy Hunt that displays discovered/undiscovered trophies at the bottom edge of the screen along with a computed score for the Trophy Hunt based on current scoring rules. 
 
@@ -275,6 +275,30 @@ You can find the github at: https://github.com/smariotti/Valheim/tree/master/Tro
 
 
 ## Change Log
+
+v0.12.1
+- Updated to work with Valheim 1.0
+- Depends on BepInEx 5.4.2351 or later
+
+v0.11.5
+- Trophy Farmer
+  - Fixed pickup/drop/pickup trophy cheese by making each trophy unique.
+
+v0.11.4
+- Trophy Farmer
+  - Fixed bug with Insta-Smelt where ores wouldn't auto-convert in most cases
+
+v0.11.3
+- Trophy Farmer
+  - Fixed bug with Insta-Smelt where ores wouldn't auto-convert in most cases
+
+v0.11.2
+- Added experimental "Trophy Farmer" game mode
+  - ALL trophies count as points
+  - Double Resources
+  - Insta-Smelt(tm)
+  - Fast Boats
+  - Fast Production buildings and Crops
 
 v0.10.19
 - New tracking endpoint — replaces bulk `/api/track/logs` with per-event `POST /api/track/log`; world position embedded as `@x,y,z` suffix in the `code` field

@@ -380,7 +380,8 @@ namespace TrophyHuntMod
                 }
 
                 DeleteTrophyIconElements(__m_iconList);
-                CreateTrophyIconElements(healthPanelTransform, __m_trophyHuntData, __m_iconList);
+                __m_trophyCountList.Clear();
+                CreateTrophyIconElements(healthPanelTransform, __m_trophyHuntData, __m_iconList, __m_trophyCountList);
                 EnableTrophyHuntIcons(player);
             });
 

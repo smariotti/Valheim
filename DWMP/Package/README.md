@@ -22,6 +22,8 @@ Optionally, if you toggle `CreatePinOnTeleport` on, DWMP will create a pin for y
 
 That's really all this thing does.
 
+## Special thanks to @ZashIn for fixing DWMP for Valheim 1.0 while I'm off making bread and playing flute.
+ 
 ## Change Log
 v0.2.1
 - Update for Valheim 1.0.16
