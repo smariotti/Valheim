@@ -275,6 +275,14 @@ You can find the github at: https://github.com/smariotti/Valheim/tree/master/Tro
 
 
 ## Change Log
+v0.12.3
+- Added all Deep North trophies plus Lava and Frost Blob Trophies
+- Deep North trophies are worth 60 points
+- Added second row on the trophy display for Deep North trophies and Ocean/Hildir trophies
+- Fixed Rare Drop counters to apply to 30% drop rates AND below, rather than just BELOW 30%. (changed < 30 to <= 30)
+- Added the reveal of Kall Fimbulbringer location in Blitz and Trailblazer modes when Fader is killed
+- Culinary Saga
+  - Added new cooked foods added in Valheim 1.0 anf adjusted HUD
 
 v0.12.2
 - Fixed Trophy Drops to behave as Irongate intended for Rare drops in 1.0 in game modes that have Default trophy drop rates (Trophy Hunt, Trophy Farmer, Casual Saga)
@@ -284,7 +292,7 @@ v0.12.2
   - With `/showalltrophystats` enabled, "Kills Until Next Drop" added to the Luck-O-Meter tooltip for each trophy to show how many more kills are needed until the next drop for that trophy.
 - Fixed a bug with stat collection that was giving inaccurate Luck-O-Meter tallies that's probably been in there forever. Luck-O-Meter should be accurate now.
 
-- v0.12.1
+v0.12.1
 - Updated to work with Valheim 1.0
 - Depends on BepInEx 5.4.2351 or later
 

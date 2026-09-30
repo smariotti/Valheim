@@ -20,6 +20,8 @@ using BepInEx.Configuration;
 using Newtonsoft.Json;
 using System.Net.Http;
 using System.Xml.Linq;
+using static TMPro.SpriteAssetUtilities.TexturePacker_JsonArray;
+using System.Threading;
 
 namespace TrophyHuntMod
 {
@@ -30,7 +32,7 @@ namespace TrophyHuntMod
         public const string PluginName = "TrophyHuntMod";
 
 
-        public const string PluginVersion = "0.12.2";
+        public const string PluginVersion = "0.12.3";
         private readonly Harmony harmony = new Harmony(PluginGUID);
 
         // Configuration variables
@@ -47,9 +49,10 @@ namespace TrophyHuntMod
             Plains = 4,
             Mistlands = 5,
             Ashlands = 6,
-            Ocean = 7,
-            Hildir = 8,
-            Bogwitch = 9,
+            DeepNorth = 7,
+            Ocean = 8,
+            Hildir = 9,
+            Bogwitch = 10,
         };
 
 
@@ -222,9 +225,24 @@ namespace TrophyHuntMod
             new TrophyHuntData("TrophyAbomination",             "Abomination",      Biome.Swamp,        20,     50,     new List<string> { "$enemy_abomination" }),
             new TrophyHuntData("TrophyAsksvin",                 "Asksvin",          Biome.Ashlands,     50,     50,     new List<string> { "$enemy_asksvin" }),
             new TrophyHuntData("TrophyBlob",                    "Blob",             Biome.Swamp,        20,     10,     new List<string> { "$enemy_blob",       "$enemy_blobelite" }),
+
+        new TrophyHuntData("TrophyBlob_Frost",              "Frost Blob",       Biome.Mountains,        30,     10,     new List<string> { "$enemy_blob_frost"}),
+        new TrophyHuntData("TrophyBlob_Lava",               "Lava Blob",       Biome.Ashlands,           50,     10,     new List<string> { "$enemy_blob_frost"}),
+
+        new TrophyHuntData("TrophyBlob_Morkhalla",          "Shapeless Pulp",       Biome.DeepNorth,    60,     10,     new List<string> { "$enemy_blobmork"}),
+        new TrophyHuntData("TrophyBarka",                   "Barka",                Biome.DeepNorth,    60,     10,     new List<string> { "$enemy_barka"}),
+//        new TrophyHuntData("TrophyDeerWhite",               "White Deer",           Biome.DeepNorth,    60,     10,     new List<string> { "$enemy_deerwhite"}),
+        new TrophyHuntData("TrophyElaking",                 "Elaking",              Biome.DeepNorth,    60,     10,     new List<string> { "$enemy_elaking"}),
+        new TrophyHuntData("TrophyJotunWarrior",            "Krigen",               Biome.DeepNorth,    60,     10,     new List<string> { "$enemy_jotunwarrior"}),
+        new TrophyHuntData("TrophyJotunWitch",              "Hexen",                Biome.DeepNorth,    60,     10,     new List<string> { "$enemy_jotunwitch"}),
+        new TrophyHuntData("TrophyMole",                    "Eyeless One",          Biome.DeepNorth,    60,     10,     new List<string> { "$enemy_elakingmole"}),
+        new TrophyHuntData("TrophyMoose",                   "M00se",                Biome.DeepNorth,    60,     10,     new List<string> { "$enemy_moose"}),  
+        new TrophyHuntData("TrophySeal",                    "Seal",                 Biome.DeepNorth,    60,     10,     new List<string> { "$enemy_seal"}),
+        new TrophyHuntData("TrophyWrithan",                 "Writhan",              Biome.DeepNorth,    60,     10,     new List<string> { "Writhan"}),
+
             new TrophyHuntData("TrophyBoar",                    "Boar",             Biome.Meadows,      10,     15,     new List<string> { "$enemy_boar" }),
-            new TrophyHuntData("TrophyBjorn",                   "Bear",             Biome.Forest,       20,     10,      new List<string>  { "$enemy_bjorn" }),
-            new TrophyHuntData("TrophyBjornUndead",             "Vile",             Biome.Plains,       30,     15,      new List<string>  { "$enemy_unbjorn" }),
+            new TrophyHuntData("TrophyBjorn",                   "Bear",             Biome.Forest,       20,     10,     new List<string>  { "$enemy_bjorn" }),
+            new TrophyHuntData("TrophyBjornUndead",             "Vile",             Biome.Plains,       30,     15,     new List<string>  { "$enemy_unbjorn" }),
             new TrophyHuntData("TrophyBonemass",                "Bonemass",         Biome.Swamp,        100,    100,    new List<string> { "$enemy_bonemass" }),
             new TrophyHuntData("TrophyBonemawSerpent",          "Bonemaw",          Biome.Ashlands,     50,     33,     new List<string> { "$enemy_bonemawserpent" }),
             new TrophyHuntData("TrophyCharredArcher",           "Charred Archer",   Biome.Ashlands,     50,     5,      new List<string> { "$enemy_charred_archer" }),
@@ -289,6 +307,7 @@ namespace TrophyHuntMod
             new Color(0.2f, 0.2f, 0.0f, 0.3f),  // Biome.Plains 
             new Color(0.2f, 0.1f, 0.2f, 0.3f),  // Biome.Mistlands
             new Color(0.2f, 0.0f, 0.0f, 0.3f),  // Biome.Ashlands 
+            new Color(0.2f, 0.2f, 0.5f, 0.3f),  // Biome.Ashlands 
             new Color(0.1f, 0.1f, 0.2f, 0.3f),  // Biome.Ocean    
             new Color(0.2f, 0.1f, 0.0f, 0.3f),  // Biome.Hildir
             new Color(0.2f, 0.1f, 0.0f, 0.3f),  // Biome.BogWitch
@@ -319,6 +338,7 @@ namespace TrophyHuntMod
             new BiomeBonus(Biome.Plains,    "Plains",         60,      new List<string> { "TrophyBjornUndead", "TrophyDeathsquito", "TrophyGoblin", "TrophyGoblinBrute", "TrophyGoblinShaman", "TrophyGrowth", "TrophyLox" }),
             new BiomeBonus(Biome.Mistlands, "Mistlands",      80,      new List<string> { "TrophyDvergr", "TrophyGjall", "TrophyHare", "TrophySeeker", "TrophySeekerBrute", "TrophyTick" }),
             new BiomeBonus(Biome.Ashlands,  "Ashlands",       100,     new List<string> { "TrophyAsksvin", "TrophyBonemawSerpent", "TrophyCharredArcher", "TrophyCharredMage", "TrophyCharredMelee", "TrophyFallenValkyrie", "TrophyMorgen", "TrophyVolture" }),
+            new BiomeBonus(Biome.DeepNorth, "Deep North",     120,     new List<string> { "TrophyBlob_Morkhalla", "TrophyBarka", "TrophyDeerWhite", "TrophyElaking", "TrophyJotunWarrior", "TrophyJotunWitch", "TrophyMole", "TrophyMoose", "TrophySeal", "TrophyWrithan" }),
         };
 
         // UI Elements
@@ -2394,9 +2414,9 @@ namespace TrophyHuntMod
         {
 
             int iconSize = 33;
-            int iconBorderSize = -1;
+            int iconBorderSize = 2;
             int xOffset = -20;
-            int yOffset = -140;
+            int yOffset = -135;
 
             int biomeIndex = (int)iconBiome;
             Color backgroundColor = __m_biomeColors[biomeIndex];
@@ -2408,7 +2428,21 @@ namespace TrophyHuntMod
             // Add RectTransform component for positioning Sprite
             RectTransform iconRectTransform = iconElement.AddComponent<RectTransform>();
             iconRectTransform.sizeDelta = new Vector2(iconSize, iconSize); // Set size
-            iconRectTransform.anchoredPosition = new Vector2(xOffset + index * (iconSize + iconBorderSize + __m_userTrophySpacing), yOffset); // Set position
+
+            int trophyXWrapIndex = 54;
+            int trophyXWrapXOffset = 70;
+            int trophyYWrapYOffset = 10;
+
+            float trophyX = xOffset + index % trophyXWrapIndex * (iconSize + iconBorderSize + __m_userTrophySpacing);
+            float trophyY = yOffset;// + index / trophyXWrapIndex * (iconSize + iconBorderSize + __m_userTrophySpacing);
+            if (index >= trophyXWrapIndex)
+            {
+                trophyY = yOffset + trophyYWrapYOffset + (index / trophyXWrapIndex) * (iconSize + iconBorderSize + __m_userTrophySpacing);
+                trophyX += trophyXWrapXOffset;
+            }
+//            iconRectTransform.anchoredPosition = new Vector2(xOffset + index * (iconSize + iconBorderSize + __m_userTrophySpacing), yOffset); // Set position
+            iconRectTransform.anchoredPosition = new Vector2(trophyX, trophyY); // Set position
+
             iconRectTransform.localScale = new Vector3(__m_baseTrophyScale, __m_baseTrophyScale, __m_baseTrophyScale) * __m_userIconScale;
 
             // Add an Image component for Sprite
@@ -2573,10 +2607,24 @@ namespace TrophyHuntMod
             GameObject iconElement = new GameObject(iconName);
             iconElement.transform.SetParent(parentTransform);
 
+            int trophyXWrapIndex = 60;
+            int trophyXWrapXOffset = 70;
+            int trophyYWrapYOffset = 10;
+
+            float trophyX = xOffset + index % trophyXWrapIndex * (iconSize + iconBorderSize + __m_userTrophySpacing);
+            float trophyY = yOffset;// + index / trophyXWrapIndex * (iconSize + iconBorderSize + __m_userTrophySpacing);
+            if (index >= trophyXWrapIndex)
+            {
+                trophyY = yOffset + trophyYWrapYOffset + (index / trophyXWrapIndex) * (iconSize + iconBorderSize + __m_userTrophySpacing);
+                trophyX += trophyXWrapXOffset;
+            }
+
+
             // Add RectTransform component for positioning Sprite
             RectTransform iconRectTransform = iconElement.AddComponent<RectTransform>();
             iconRectTransform.sizeDelta = new Vector2(iconSize, iconSize); // Set size
-            iconRectTransform.anchoredPosition = new Vector2(xOffset + index * (iconSize + iconBorderSize + __m_userTrophySpacing), yOffset); // Set position
+ //           iconRectTransform.anchoredPosition = new Vector2(xOffset + index * (iconSize + iconBorderSize + __m_userTrophySpacing), yOffset); // Set position
+            iconRectTransform.anchoredPosition = new Vector2(trophyX, trophyY); // Set position
             iconRectTransform.localScale = new Vector3(__m_baseTrophyScale, __m_baseTrophyScale, __m_baseTrophyScale) * __m_userIconScale;
 
             // Add an Image component for Sprite
@@ -4626,6 +4674,38 @@ namespace TrophyHuntMod
                                                 }
                 },
 
+                // Saga Deep North Drops
+                //{
+                //    "$enemy_gdking",            new List<SpecialSagaDrop>
+                //                                {
+                //                                    new SpecialSagaDrop("YmirRemains",     100,  10, 10, true),
+                //                                }
+                //},
+                //{
+                //    "$enemy_bonemass",            new List<SpecialSagaDrop>
+                //                                {
+                //                                    new SpecialSagaDrop("YmirRemains",     100,  10, 10, true),
+                //                                }
+                //},
+                //{
+                //    "$enemy_dragon",            new List<SpecialSagaDrop>
+                //                                {
+                //                                    new SpecialSagaDrop("YmirRemains",     100,  10, 10, true),
+                //                                }
+                //},
+                //{
+                //    "$enemy_seekerqueen",            new List<SpecialSagaDrop>
+                //                                {
+                //                                    new SpecialSagaDrop("YmirRemains",     100,  10, 10, true),
+                //                                }
+                //},
+                //{
+                //    "$enemy_fader",            new List<SpecialSagaDrop>
+                //                                {
+                //                                    new SpecialSagaDrop("YmirRemains",     100,  10, 10, true),
+                //                                }
+                //},
+
             };
 
         public static void InitializeSagaDrops()
@@ -5985,7 +6065,12 @@ namespace TrophyHuntMod
                 case "$enemy_seekerqueen":
                     RevealBoss("$enemy_fader");
                     if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
-                        RaiseAllPlayerSkills(80);
+                        RaiseAllPlayerSkills(70);
+                    break;
+                case "$enemy_fader":
+                    RevealBoss("$enemy_frozenking");
+                    if (GetGameMode() == TrophyGameMode.TrophyTrailblazer)
+                        RaiseAllPlayerSkills(90);
                     break;
 
                 default:
@@ -7807,6 +7892,38 @@ namespace TrophyHuntMod
                 new ConsumableData("SizzlingBerryBroth",       "$item_sizzlingberrybroth",      "Sizzling Berry Broth",           Biome.Ashlands,  60,   28,  14,  85,  4),
                 new ConsumableData("SparklingShroomshake",     "$item_sparklingshroomshake",    "Sparkling Shroomshake",          Biome.Ashlands,  60,   30,  15,  90,  4),
                 new ConsumableData("MarinatedGreens",          "$item_marinatedgreens",         "Marinated Greens",               Biome.Ashlands,  60,   32,  16,  95,  4),
+
+                new ConsumableData("CookedAsksvinMeat",        "$item_asksvin_meat_cooked",     "Cooked Asksvin Tail",            Biome.Ashlands,  60,   70,  24,  0,   6),
+                new ConsumableData("CookedVoltureMeat",        "$item_volture_meat_cooked",     "Cooked Volture Meat",            Biome.Ashlands,  60,   70,  24,  0,   6),
+                new ConsumableData("CookedBoneMawSerpentMeat", "$item_bonemawmeat_cooked",      "Cooked Bonemaw Meat",            Biome.Ashlands,  60,   90,  30,  0,   6),
+                new ConsumableData("FierySvinstew",            "$item_fierysvinstew",           "Fiery Svinstew",                 Biome.Ashlands,  60,   95,  32,  0,   6),
+                new ConsumableData("MashedMeat",               "$item_mashedmeat",              "Mashed Meat",                    Biome.Ashlands,  60,   100, 34,  0,   6),
+                new ConsumableData("PiquantPie",               "$item_piquantpie",              "Piquant Pie",                    Biome.Ashlands,  60,   105, 35,  0,   6),
+                new ConsumableData("SpicyMarmalade",           "$item_spicymarmalade",          "Spicy Marmalade",                Biome.Ashlands,  60,   30,  90,  0,   4),
+                new ConsumableData("ScorchingMedley",          "$item_scorchingmedley",         "Scorching Medley",               Biome.Ashlands,  60,   32,  95,  0,   4),
+                new ConsumableData("RoastedCrustPie",          "$item_roastedcrustpie",         "Roasted Crust Pie",              Biome.Ashlands,  60,   34,  100, 0,   4),
+                new ConsumableData("SizzlingBerryBroth",       "$item_sizzlingberrybroth",      "Sizzling Berry Broth",           Biome.Ashlands,  60,   28,  14,  85,  4),
+                new ConsumableData("SparklingShroomshake",     "$item_sparklingshroomshake",    "Sparkling Shroomshake",          Biome.Ashlands,  60,   30,  15,  90,  4),
+                new ConsumableData("MarinatedGreens",          "$item_marinatedgreens",         "Marinated Greens",               Biome.Ashlands,  60,   32,  16,  95,  4),
+
+                new ConsumableData("BakedPoteitr",             "$item_bakedpoteitr",            "Baked Poteitr",                  Biome.DeepNorth, 70,   00,  00,  00,  0),
+                new ConsumableData("CookedMooseMeat",          "$item_moose_meat_cooked",       "Cooked Moose Meat",              Biome.DeepNorth, 70,   00,  00,  00,  0),
+                new ConsumableData("CookedSealBlubber",        "$item_blubber_cooked",          "Cooked Seal Blubber",            Biome.DeepNorth, 70,   00,  00,  00,  0),
+                new ConsumableData("FishSoup",                 "$item_fishsoup",                "Fish Soup",                      Biome.DeepNorth, 70,   00,  00,  00,  0),
+                new ConsumableData("KaleChips",                "$item_kalechips",               "Kale Chips",                     Biome.DeepNorth, 70,   00,  00,  00,  0),
+                new ConsumableData("Lingondricka",             "$item_lingondricka",            "Lingonberry Juice",              Biome.DeepNorth, 70,   00,  00,  00,  0),
+                new ConsumableData("MooseKebab",               "$item_moosekebab",              "Meat In Bread",                  Biome.DeepNorth, 70,   00,  00,  00,  0),
+                new ConsumableData("MeatballsMashedPoteitr",   "$item_meatballsmashedpoteitr",  "Meatballs and Poteitr",          Biome.DeepNorth, 70,   00,  00,  00,  0),
+                new ConsumableData("OatMilk",                  "$item_oatmilk",                 "Oat Milk",                       Biome.DeepNorth, 70,   00,  00,  00,  0),
+                new ConsumableData("OatmealLingonberryJam",    "$item_oatmeallingonberryjam",   "Oatmeal",                        Biome.DeepNorth, 70,   00,  00,  00,  0),
+                new ConsumableData("OvenPancake",              "$item_ovenpancake",             "Oven Pancake",                   Biome.DeepNorth, 70,   00,  00,  00,  0),
+                new ConsumableData("Pancakes",                 "$item_pancakes",                "Pancakes",                       Biome.DeepNorth, 70,   00,  00,  00,  0),
+                new ConsumableData("PulledBear",               "$item_pulledbear",              "Pulled Bear",                    Biome.DeepNorth, 70,   00,  00,  00,  0),
+                new ConsumableData("SealSoup",                 "$item_sealsoup",                "Seal Meat Soup",                 Biome.DeepNorth, 70,   00,  00,  00,  0),
+                new ConsumableData("SmokedFish",               "$item_smokedfish",              "Smoked Fish",                    Biome.DeepNorth, 70,   00,  00,  00,  0),
+                new ConsumableData("SmokedMooseMeat",          "$item_smokedmoosemeat",         "Smoked Moose Meat",              Biome.DeepNorth, 70,   00,  00,  00,  0),
+
+
 
             //new ConsumableData("HealthUpgrade_Bonemass",   "Bonemass heart",                "Bonemass heart",                 Biome.Meadows,   0,   0,   0,   0,   0),
             //new ConsumableData("HealthUpgrade_GDKing",     "Elder heart",                   "Elder heart",                    Biome.Meadows,   0,   0,   0,   0,   0),
