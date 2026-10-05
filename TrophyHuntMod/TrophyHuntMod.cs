@@ -238,7 +238,7 @@ namespace TrophyHuntMod
         new TrophyHuntData("TrophyMole",                    "Eyeless One",          Biome.DeepNorth,    60,     10,     new List<string> { "$enemy_elakingmole"}),
         new TrophyHuntData("TrophyMoose",                   "M00se",                Biome.DeepNorth,    60,     10,     new List<string> { "$enemy_moose"}),  
         new TrophyHuntData("TrophySeal",                    "Seal",                 Biome.DeepNorth,    60,     10,     new List<string> { "$enemy_seal"}),
-        new TrophyHuntData("TrophyWrithan",                 "Writhan",              Biome.DeepNorth,    60,     10,     new List<string> { "Writhan"}),
+        new TrophyHuntData("TrophyWrithan",                 "Writhan",              Biome.Swamp,        20,     10,     new List<string> { "Writhan"}),
 
             new TrophyHuntData("TrophyBoar",                    "Boar",             Biome.Meadows,      10,     15,     new List<string> { "$enemy_boar" }),
             new TrophyHuntData("TrophyBjorn",                   "Bear",             Biome.Forest,       20,     10,     new List<string>  { "$enemy_bjorn" }),
@@ -333,12 +333,12 @@ namespace TrophyHuntMod
         {
             new BiomeBonus(Biome.Meadows,   "Meadows",        20,      new List<string> { "TrophyBoar", "TrophyDeer", "TrophyNeck" }),
             new BiomeBonus(Biome.Forest,    "Black Forest",   40,      new List<string> { "TrophyBjorn", "TrophyFrostTroll", "TrophyGhost", "TrophyGreydwarf", "TrophyGreydwarfBrute", "TrophyGreydwarfShaman", "TrophySkeleton", "TrophySkeletonPoison" }),
-            new BiomeBonus(Biome.Swamp,     "Swamp",          40,      new List<string> { "TrophyAbomination", "TrophyBlob", "TrophyDraugr", "TrophyDraugrElite", "TrophyLeech", "TrophySurtling", "TrophyWraith" }),
+            new BiomeBonus(Biome.Swamp,     "Swamp",          40,      new List<string> { "TrophyAbomination", "TrophyBlob", "TrophyDraugr", "TrophyDraugrElite", "TrophyLeech", "TrophySurtling", "TrophyWraith", "TrophyWrithan" }),
             new BiomeBonus(Biome.Mountains, "Mountains",      60,      new List<string> { "TrophyCultist", "TrophyFenring", "TrophyHatchling", "TrophySGolem", "TrophyUlv", "TrophyWolf" }),
             new BiomeBonus(Biome.Plains,    "Plains",         60,      new List<string> { "TrophyBjornUndead", "TrophyDeathsquito", "TrophyGoblin", "TrophyGoblinBrute", "TrophyGoblinShaman", "TrophyGrowth", "TrophyLox" }),
             new BiomeBonus(Biome.Mistlands, "Mistlands",      80,      new List<string> { "TrophyDvergr", "TrophyGjall", "TrophyHare", "TrophySeeker", "TrophySeekerBrute", "TrophyTick" }),
             new BiomeBonus(Biome.Ashlands,  "Ashlands",       100,     new List<string> { "TrophyAsksvin", "TrophyBonemawSerpent", "TrophyCharredArcher", "TrophyCharredMage", "TrophyCharredMelee", "TrophyFallenValkyrie", "TrophyMorgen", "TrophyVolture" }),
-            new BiomeBonus(Biome.DeepNorth, "Deep North",     120,     new List<string> { "TrophyBlob_Morkhalla", "TrophyBarka", "TrophyDeerWhite", "TrophyElaking", "TrophyJotunWarrior", "TrophyJotunWitch", "TrophyMole", "TrophyMoose", "TrophySeal", "TrophyWrithan" }),
+            new BiomeBonus(Biome.DeepNorth, "Deep North",     120,     new List<string> { "TrophyBlob_Morkhalla", "TrophyBarka", "TrophyElaking", "TrophyJotunWarrior", "TrophyJotunWitch", "TrophyMole", "TrophyMoose", "TrophySeal" }),
         };
 
         // UI Elements
