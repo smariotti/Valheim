@@ -275,6 +275,17 @@ You can find the github at: https://github.com/smariotti/Valheim/tree/master/Tro
 
 
 ## Change Log
+v0.12.6
+- Fixed Kall Fimbulbringer reveal in Blitz and Trailblazer
+- Fixed typo that caused Frost and Lava Blobs to not drop their trophies 100% in those game modes
+- Fixed tooltips not appearing over trophies when the mouse cursor is freed (now works in Pause Menu, Map, AND Inventory)
+
+v0.12.5
+- Fixed no-UI bug where intro cinematic was enabled.
+
+v0.12.4
+- Moved Writhan to swamp trophy set, corrected score and biome bonuses.
+
 v0.12.3
 - Added all Deep North trophies plus Lava and Frost Blob Trophies
 - Deep North trophies are worth 60 points

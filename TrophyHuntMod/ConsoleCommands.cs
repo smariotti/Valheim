@@ -429,6 +429,11 @@ namespace TrophyHuntMod
                 }
             });
 
+            ConsoleCommand showBosses = new ConsoleCommand("showbosses", "show all possible locations all bosses", delegate (ConsoleEventArgs args)
+            {
+               RevealAllBosses(Player.m_localPlayer);
+            });
+
             ConsoleCommand timerCommand = new ConsoleCommand("timer", "Control the Trophy Hunt Timer display (start/stop/reset/show/hide)", delegate (ConsoleEventArgs args)
             {
                 if (!Game.instance)

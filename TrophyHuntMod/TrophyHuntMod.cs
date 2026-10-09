@@ -32,7 +32,7 @@ namespace TrophyHuntMod
         public const string PluginName = "TrophyHuntMod";
 
 
-        public const string PluginVersion = "0.12.3";
+        public const string PluginVersion = "0.12.6";
         private readonly Harmony harmony = new Harmony(PluginGUID);
 
         // Configuration variables
@@ -226,8 +226,8 @@ namespace TrophyHuntMod
             new TrophyHuntData("TrophyAsksvin",                 "Asksvin",          Biome.Ashlands,     50,     50,     new List<string> { "$enemy_asksvin" }),
             new TrophyHuntData("TrophyBlob",                    "Blob",             Biome.Swamp,        20,     10,     new List<string> { "$enemy_blob",       "$enemy_blobelite" }),
 
-        new TrophyHuntData("TrophyBlob_Frost",              "Frost Blob",       Biome.Mountains,        30,     10,     new List<string> { "$enemy_blob_frost"}),
-        new TrophyHuntData("TrophyBlob_Lava",               "Lava Blob",       Biome.Ashlands,           50,     10,     new List<string> { "$enemy_blob_frost"}),
+        new TrophyHuntData("TrophyBlob_Frost",              "Frost Blob",       Biome.Mountains,        30,     10,     new List<string> { "$enemy_blobfrost"}),
+        new TrophyHuntData("TrophyBlob_Lava",               "Lava Blob",       Biome.Ashlands,           50,     10,     new List<string> { "$enemy_bloblava"}),
 
         new TrophyHuntData("TrophyBlob_Morkhalla",          "Shapeless Pulp",       Biome.DeepNorth,    60,     10,     new List<string> { "$enemy_blobmork"}),
         new TrophyHuntData("TrophyBarka",                   "Barka",                Biome.DeepNorth,    60,     10,     new List<string> { "$enemy_barka"}),
@@ -4195,29 +4195,96 @@ namespace TrophyHuntMod
             }
         }
 
-        public static void AddTooltipTriggersToTrophyIcon(GameObject trophyIconObject)
+        public class TrophyHoverDetector : MonoBehaviour
         {
-            // Add EventTrigger component if not already present
-            EventTrigger trigger = trophyIconObject.GetComponent<EventTrigger>();
-            if (trigger != null)
+            // Only one icon owns the tooltip at a time, so moving straight from
+            // icon A to icon B can't have A's "exit" hide B's tooltip.
+            private static TrophyHoverDetector s_current;
+
+            private RectTransform _rect;
+            private UnityEngine.Canvas _canvas;
+
+            void Awake()
             {
-                return;
+                _rect = (RectTransform)transform;
+                _canvas = GetComponentInParent<Canvas>();
             }
 
-            trigger = trophyIconObject.AddComponent<EventTrigger>();
+            void LateUpdate()
+            {
+                bool over = CursorIsFree() && IsMouseOver();
 
-            // Mouse Enter event (pointer enters the icon area)
-            EventTrigger.Entry entryEnter = new EventTrigger.Entry();
-            entryEnter.eventID = EventTriggerType.PointerEnter;
-            entryEnter.callback.AddListener((eventData) => ShowTrophyTooltip(trophyIconObject));
-            trigger.triggers.Add(entryEnter);
+                if (over && s_current != this)
+                {
+                    s_current = this;
+                    TrophyHuntMod.ShowTrophyTooltip(gameObject);
+                }
+                else if (!over && s_current == this)
+                {
+                    s_current = null;
+                    TrophyHuntMod.HideTrophyTooltip();
+                }
+            }
 
-            // Mouse Exit event (pointer exits the icon area)
-            EventTrigger.Entry entryExit = new EventTrigger.Entry();
-            entryExit.eventID = EventTriggerType.PointerExit;
-            entryExit.callback.AddListener((eventData) => HideTrophyTooltip());
-            trigger.triggers.Add(entryExit);
+            void OnDisable()
+            {
+                // Icon hidden or destroyed while hovered: don't leave a stale tooltip
+                if (s_current == this)
+                {
+                    s_current = null;
+                    TrophyHuntMod.HideTrophyTooltip();
+                }
+            }
+
+            private bool IsMouseOver()
+            {
+                if (_canvas == null) _canvas = GetComponentInParent<Canvas>();
+                Camera cam = (_canvas == null || _canvas.renderMode == RenderMode.ScreenSpaceOverlay)
+                    ? null
+                    : _canvas.worldCamera;
+                return RectTransformUtility.RectangleContainsScreenPoint(_rect, Input.mousePosition, cam);
+            }
+
+            // During normal play the cursor is locked to screen center, which could sit
+            // over an icon; only treat it as hovering when the player actually has a cursor.
+            private static bool CursorIsFree() => Cursor.lockState != CursorLockMode.Locked;
         }
+
+        public static void AddTooltipTriggersToTrophyIcon(GameObject trophyIconObject)
+        {
+            if (trophyIconObject.GetComponent<TrophyHoverDetector>() != null)
+                return;
+
+            // Remove any leftover EventTrigger so the old path can't double-fire
+            var oldTrigger = trophyIconObject.GetComponent<EventTrigger>();
+            if (oldTrigger != null) UnityEngine.Object.Destroy(oldTrigger);
+
+            trophyIconObject.AddComponent<TrophyHoverDetector>();
+        }
+
+        //public static void AddTooltipTriggersToTrophyIcon(GameObject trophyIconObject)
+        //{
+        //    // Add EventTrigger component if not already present
+        //    EventTrigger trigger = trophyIconObject.GetComponent<EventTrigger>();
+        //    if (trigger != null)
+        //    {
+        //        return;
+        //    }
+
+        //    trigger = trophyIconObject.AddComponent<EventTrigger>();
+
+        //    // Mouse Enter event (pointer enters the icon area)
+        //    EventTrigger.Entry entryEnter = new EventTrigger.Entry();
+        //    entryEnter.eventID = EventTriggerType.PointerEnter;
+        //    entryEnter.callback.AddListener((eventData) => ShowTrophyTooltip(trophyIconObject));
+        //    trigger.triggers.Add(entryEnter);
+
+        //    // Mouse Exit event (pointer exits the icon area)
+        //    EventTrigger.Entry entryExit = new EventTrigger.Entry();
+        //    entryExit.eventID = EventTriggerType.PointerExit;
+        //    entryExit.callback.AddListener((eventData) => HideTrophyTooltip());
+        //    trigger.triggers.Add(entryExit);
+        //}
 
         public static void CalculateDropPercentAndRating(TrophyHuntData trophyHuntData, THMDropInfo dropInfo, out string dropPercentStr, out string dropRatingStr)
         {
@@ -4792,12 +4859,14 @@ namespace TrophyHuntMod
 
                     string characterName = character.m_name;
 
-                    //                    Debug.LogError($"CharacterDrop_GenerateDropList_Patch: {characterName} has dropped items: {__result?.Count}");
+ //                   Debug.LogError($"CharacterDrop_GenerateDropList_Patch: {characterName} has dropped items: {__result?.Count}");
 
                     // See if this is a trophy-dropper and handle any special trophy rules for the various game modes
                     //
                     if (CharacterCanDropTrophies(characterName))
                     {
+ //                       Debug.LogError($"CharacterDrop_GenerateDropList_Patch: {characterName} can drop Trophies");
+
                         // Which trophy is associated with this character?
                         string trophyName = EnemyNameToTrophyName(characterName);
 
@@ -4815,7 +4884,6 @@ namespace TrophyHuntMod
                                 {
                                     // A trophy dropped using Valheim's system, remove it and handle it ourselves below
                                     __result.Remove(droppedItem);
-//                                    Debug.LogError($"CharacterDrop_GenerateDropList_Patch: Removed trophy drop for {characterName}");
                                     break;
                                 }
                             }
@@ -4827,6 +4895,8 @@ namespace TrophyHuntMod
                         Drop trophyDrop = dropList.Find(theDrop => theDrop.m_prefab.name == trophyName);
                         if (trophyDrop == null)
                             return;
+
+//                        Debug.LogError($"CharacterDrop_GenerateDropList_Patch: {characterName} trophyname: {trophyName} trophyDrop.m_prefab.name: {trophyDrop.m_prefab.name}");
 
                         float dropPercentage = trophyDrop.m_chance * 100f;
 
@@ -5981,7 +6051,8 @@ namespace TrophyHuntMod
                 new BossDetails("$enemy_dragon","Dragonqueen", "Moder"),
                 new BossDetails("$enemy_goblinking","GoblinKing", "Yagluth"),
                 new BossDetails("$enemy_seekerqueen","Mistlands_DvergrBossEntrance1", "The Queen"),
-                new BossDetails("$enemy_fader","FaderLocation", "Fader")
+                new BossDetails("$enemy_fader","FaderLocation", "Fader"),
+                new BossDetails("$enemy_frozenking","DN_Bossroom", "Kall")
         };
 
         private static void RevealByName(string locationName, string pinName, Minimap.PinType pinType, float distance)
@@ -6959,8 +7030,8 @@ namespace TrophyHuntMod
 
         /* ------------------------------------------ */
 
-        [HarmonyPatch(typeof(FejdStartup), nameof(FejdStartup.Start))]
-        public class FejdStartup_Start_Patch
+        [HarmonyPatch(typeof(FejdStartup), nameof(FejdStartup.SetupGui))]
+        public class FejdStartup_SetupGui_Patch
         {
             static void Postfix()
             {
