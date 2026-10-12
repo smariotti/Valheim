@@ -32,7 +32,7 @@ namespace TrophyHuntMod
         public const string PluginName = "TrophyHuntMod";
 
 
-        public const string PluginVersion = "0.12.6";
+        public const string PluginVersion = "0.12.7";
         private readonly Harmony harmony = new Harmony(PluginGUID);
 
         // Configuration variables
@@ -238,7 +238,7 @@ namespace TrophyHuntMod
         new TrophyHuntData("TrophyMole",                    "Eyeless One",          Biome.DeepNorth,    60,     10,     new List<string> { "$enemy_elakingmole"}),
         new TrophyHuntData("TrophyMoose",                   "M00se",                Biome.DeepNorth,    60,     10,     new List<string> { "$enemy_moose"}),  
         new TrophyHuntData("TrophySeal",                    "Seal",                 Biome.DeepNorth,    60,     10,     new List<string> { "$enemy_seal"}),
-        new TrophyHuntData("TrophyWrithan",                 "Writhan",              Biome.Swamp,        20,     10,     new List<string> { "Writhan"}),
+        new TrophyHuntData("TrophyWrithan",                 "Writhan",              Biome.Swamp,        20,     10,     new List<string> { "$enemy_writhan"}),
 
             new TrophyHuntData("TrophyBoar",                    "Boar",             Biome.Meadows,      10,     15,     new List<string> { "$enemy_boar" }),
             new TrophyHuntData("TrophyBjorn",                   "Bear",             Biome.Forest,       20,     10,     new List<string>  { "$enemy_bjorn" }),

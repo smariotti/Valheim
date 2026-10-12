@@ -275,6 +275,10 @@ You can find the github at: https://github.com/smariotti/Valheim/tree/master/Tro
 
 
 ## Change Log
+v0.12.7
+- Fixed: Writhan trophy ID was incorrect, Writhan trophy wasn't dropping properly in most modes.
+
+## Change Log
 v0.12.6
 - Fixed Kall Fimbulbringer reveal in Blitz and Trailblazer
 - Fixed typo that caused Frost and Lava Blobs to not drop their trophies 100% in those game modes
