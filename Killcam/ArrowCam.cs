@@ -1,4 +1,5 @@
-﻿using BepInEx;
+using System.Collections.Generic;
+using BepInEx;
 using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
@@ -73,6 +74,9 @@ namespace ArrowCamMod
     // ════════════════════════════════════════════════════════════════════════
     public class ArrowCamSession : MonoBehaviour
     {
+        // Live cameras only. OnHit must not scan the scene when nothing is in flight.
+        internal static readonly List<ArrowCamSession> Active = new List<ArrowCamSession>();
+
         // ── State machine ────────────────────────────────────────────────────
         private enum Phase { Riding, Lingering, FadingOut, Dead }
         private Phase _phase = Phase.Riding;
@@ -108,6 +112,7 @@ namespace ArrowCamMod
         public void Init(Transform projectileTf)
         {
             _projectile = projectileTf;
+            Active.Add(this);
             CreateRT();
             CreateCamera();
             CreateUI();
@@ -226,6 +231,7 @@ namespace ArrowCamMod
             if (_cleaned) return;
             _cleaned = true;
             _phase = Phase.Dead;
+            Active.Remove(this);
 
             // 1. Hide the UI canvas immediately — this makes the PiP vanish on
             //    screen regardless of where the alpha interpolation is right now.
@@ -372,12 +378,18 @@ namespace ArrowCamMod
     {
         static void Prefix(Projectile __instance)
         {
-            // Sessions live on their own GOs so we can't GetComponent on the
-            // projectile. FindObjectsOfType is acceptable here because it fires
-            // at most once per projectile-land event (not every frame).
-            foreach (var session in Object.FindObjectsOfType<ArrowCamSession>())
+            // Sessions live on their own GOs, so we can't GetComponent on the
+            // projectile. This still runs once per impact, not every frame.
+            // Only our own shots ever create a session, so an empty list means
+            // there is nothing to freeze. Walking the whole scene here hitchs
+            // creature bursts such as the Gammeltroll's eight logs.
+            if (ArrowCamSession.Active.Count == 0)
+                return;
+
+            for (int i = 0; i < ArrowCamSession.Active.Count; i++)
             {
-                if (session.IsTracking(__instance.transform))
+                var session = ArrowCamSession.Active[i];
+                if (session != null && session.IsTracking(__instance.transform))
                 {
                     session.FreezeAndLinger();
                     break;
